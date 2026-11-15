@@ -215,6 +215,12 @@ var _ = Describe("Install with an organization plan approval", func() {
 		err := install("git", "--non-interactive", "--expect-plan", digest, "--approval", approval)
 		Expect(err).To(MatchError(ContainSubstring("plan changed")))
 		Expect(installed).To(BeEmpty())
+		events := auditEvents()
+		Expect(events).To(HaveLen(1))
+		Expect(events[0].Status).To(Equal(state.OperationStatusFailed))
+		Expect(events[0].PlanID).To(Equal(digest))
+		Expect(events[0].Approver).To(Equal("it-security"))
+		Expect(events[0].Error).To(ContainSubstring("plan changed"))
 	})
 
 	It("generates keys without overwriting and verifies signed approvals", func() {

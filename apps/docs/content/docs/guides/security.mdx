@@ -491,8 +491,9 @@ DevEx refuses a rejected plan (showing the approver's reason), an expired
 approval, one valid for longer than `max_validity`, one issued in the future, an
 unknown approver or a bad signature. Because the digest binds the policy, any
 change to the plan or to `policy.yaml` invalidates the approval. Each installer
-checks the approval again before every application and shared package batch, so
-a run stops once its approval expires. Check a file with
+checks the approval again before every application and shared package batch
+starts, so once the approval expires no further application or batch starts (one
+already running finishes). Check a file with
 `devex approval verify approval.json`. Every decision is recorded in the audit
 log: `devex runs audit --event approval` lists the plan digest, the approver, the
 policy and the result.

@@ -154,6 +154,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 					return fmt.Errorf("check the confirmed plan: %w", err)
 				}
 				if snapshot.Digest != expectPlan {
+					recordPlanChangedApproval(settings.HomeDir, expectPlan, approvalFile)
 					return fmt.Errorf("%s (confirmed %s, now %s); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage, expectPlan, snapshot.Digest)
 				}
 				ctx, err = approvePlan(ctx, settings.HomeDir, snapshot.Digest, approvalFile)
@@ -303,6 +304,22 @@ func refuseUnapprovedInstall(ctx context.Context, homeDir string) error {
 	err = policy.CheckApproval(ctx)
 	state.RecordApprovalDecision("", "", approvalPolicyID(policy), err)
 	return err
+}
+
+// recordPlanChangedApproval audits a refused approved plan whose plan or
+// policy changed after it was confirmed.
+func recordPlanChangedApproval(homeDir, digest, approvalFile string) {
+	policy, err := security.LoadOrgPolicy(homeDir)
+	if err != nil || (approvalFile == "" && !policy.ApprovalRequired()) {
+		return
+	}
+	approver := ""
+	if approvalFile != "" {
+		if approval, loadErr := security.LoadPlanApproval(approvalFile); loadErr == nil {
+			approver = approval.Approver
+		}
+	}
+	state.RecordApprovalDecision(digest, approver, approvalPolicyID(policy), fmt.Errorf("%s; nothing was installed", agentapi.PlanChangedMessage))
 }
 
 func approvalPolicyID(policy *security.OrgPolicy) string {

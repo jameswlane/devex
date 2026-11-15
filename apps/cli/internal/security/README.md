@@ -237,7 +237,8 @@ decision, `max_validity`, clock skew, expiry), records an `approval` audit event
 and carries an `ApprovedPlan` in the context. `OrgPolicy.CheckApproval` then
 gates every install entry point: the plain installer, both TUI installers, shared
 package batches and template install/maintain plans. It re-checks expiry and the
-policy SHA-256 at each step. Unconfirmed `install` and `setup` runs are refused up
+policy SHA-256 before each application or batch starts; one already running
+finishes. Unconfirmed `install` and `setup` runs are refused up
 front. `devex approval keygen|sign|verify` manages keys and records.
 
 ## Migration Guide
