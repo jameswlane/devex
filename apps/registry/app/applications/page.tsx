@@ -54,6 +54,7 @@ export interface ApplicationsResponse {
 }
 
 // Import required dependencies for direct database access
+import { platformDocuments } from "@/lib/application-platforms";
 import { prisma } from "@/lib/prisma";
 import { createPaginatedResponse } from "@/lib/response-optimization";
 import { transformationService } from "@/lib/transformation-service";
@@ -124,8 +125,6 @@ async function fetchApplications(
 
 	// Transform applications to match the expected format for transformation service
 	const applicationsWithSupport = applications.map((app) => {
-		const platforms = app.platforms as any; // JSON field from database
-
 		return {
 			name: app.name,
 			description: app.description,
@@ -137,38 +136,7 @@ async function fetchApplications(
 			githubUrl: app.githubUrl,
 			githubPath: app.githubPath,
 			// Use new JSON platform structure
-			platforms: {
-				linux: platforms?.linux
-					? {
-							installMethod: platforms.linux.installMethod,
-							installCommand: platforms.linux.installCommand,
-							officialSupport: platforms.linux.officialSupport,
-							alternatives: Array.isArray(platforms.linux.alternatives)
-								? platforms.linux.alternatives
-								: [],
-						}
-					: null,
-				macos: platforms?.macos
-					? {
-							installMethod: platforms.macos.installMethod,
-							installCommand: platforms.macos.installCommand,
-							officialSupport: platforms.macos.officialSupport,
-							alternatives: Array.isArray(platforms.macos.alternatives)
-								? platforms.macos.alternatives
-								: [],
-						}
-					: null,
-				windows: platforms?.windows
-					? {
-							installMethod: platforms.windows.installMethod,
-							installCommand: platforms.windows.installCommand,
-							officialSupport: platforms.windows.officialSupport,
-							alternatives: Array.isArray(platforms.windows.alternatives)
-								? platforms.windows.alternatives
-								: [],
-						}
-					: null,
-			},
+			platforms: platformDocuments(app.platforms),
 		};
 	});
 

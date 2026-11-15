@@ -72,19 +72,19 @@ const mockApplication = {
 	desktopEnvironments: ["gnome"],
 	githubUrl: "https://github.com/test/app",
 	githubPath: "/path/to/app",
+	// Stored as the YAML catalog writes it (scripts/sync-database.ts)
 	platforms: {
 		linux: {
-			installMethod: "apt",
-			installCommand: "apt install test-app",
-			officialSupport: true,
-			supported: true,
-			alternatives: [],
+			install_method: "apt",
+			install_command: "test-app",
+			uninstall_command: "test-app",
+			official_support: true,
+			platform_requirements: [{ os: "debian" }],
+			alternatives: [{ install_method: "dnf", install_command: "test-app" }],
 		},
 		macos: {
-			supported: false,
-		},
-		windows: {
-			supported: false,
+			install_method: "brew",
+			install_command: "test-app",
 		},
 	},
 	createdAt: new Date(),
@@ -364,26 +364,24 @@ describe("/api/v1/applications", () => {
 					tags: ["test", "development"],
 					desktopEnvironments: ["gnome"],
 					githubPath: "/path/to/app",
-					platforms: expect.objectContaining({
-						linux: expect.objectContaining({
-							installMethod: "apt",
-							installCommand: "apt install test-app",
-							officialSupport: true,
-							alternatives: expect.any(Array),
-						}),
-						macos: expect.objectContaining({
-							installMethod: undefined,
-							installCommand: undefined,
-							officialSupport: undefined,
-							alternatives: expect.any(Array),
-						}),
-						windows: expect.objectContaining({
-							installMethod: undefined,
-							installCommand: undefined,
-							officialSupport: undefined,
-							alternatives: expect.any(Array),
-						}),
-					}),
+					platforms: {
+						linux: {
+							install_method: "apt",
+							install_command: "test-app",
+							uninstall_command: "test-app",
+							official_support: true,
+							platform_requirements: [{ os: "debian" }],
+							alternatives: [
+								{ install_method: "dnf", install_command: "test-app" },
+							],
+						},
+						macos: {
+							install_method: "brew",
+							install_command: "test-app",
+							alternatives: [],
+						},
+						windows: null,
+					},
 				}),
 			]);
 		});

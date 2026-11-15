@@ -320,7 +320,7 @@ export function ToolSearch() {
 										</span>
 									) : (
 										<span className="text-gray-600">
-											{tool.platforms[platforms[0]]?.installMethod ||
+											{tool.platforms[platforms[0]]?.install_method ||
 												"auto-detect"}
 										</span>
 									)}

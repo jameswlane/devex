@@ -26,9 +26,9 @@ const mockRegistryResponse = {
 				default: false,
 				platforms: {
 					linux: {
-						installMethod: "apt",
-						installCommand: "apt install test1",
-						officialSupport: true,
+						install_method: "apt",
+						install_command: "apt install test1",
+						official_support: true,
 					},
 					macos: null,
 					windows: null,
@@ -43,14 +43,14 @@ const mockRegistryResponse = {
 				default: true,
 				platforms: {
 					linux: {
-						installMethod: "apt",
-						installCommand: "apt install test2",
-						officialSupport: true,
+						install_method: "apt",
+						install_command: "apt install test2",
+						official_support: true,
 					},
 					macos: {
-						installMethod: "brew",
-						installCommand: "brew install test2",
-						officialSupport: true,
+						install_method: "brew",
+						install_command: "brew install test2",
+						official_support: true,
 					},
 					windows: null,
 				},
@@ -70,9 +70,9 @@ const mockRegistryResponse = {
 };
 
 const devexInstall = {
-	installMethod: "devex",
-	installCommand: "test-plugin-1",
-	officialSupport: true,
+	install_method: "devex",
+	install_command: "test-plugin-1",
+	official_support: true,
 };
 
 // Tools as the route transforms them from the registry payload
