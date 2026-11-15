@@ -222,12 +222,12 @@ func isPackageManager(name string) bool {
 // interface. Installation options are never applied to a read operation.
 func (a AppConfig) PackageQueryCommand() string {
 	if len(a.Packages) == 0 {
-		return a.InstallCommand
+		return a.WithBrewSelector(a.InstallCommand)
 	}
 	args := append([]string{}, a.Packages...)
 	if a.InstallMethod == "brew" {
 		for _, option := range a.Options {
-			if option == "--cask" {
+			if option == "--cask" || option == "--formula" {
 				args = append([]string{option}, args...)
 			}
 		}
@@ -236,4 +236,33 @@ func (a AppConfig) PackageQueryCommand() string {
 		args[i] = "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
 	}
 	return a.InstallMethod + " install " + strings.Join(args, " ")
+}
+
+// WithBrewSelector appends the app's typed --cask or --formula option to a
+// legacy Homebrew command string that does not select a kind itself, so query
+// and removal act on the same kind that installation chose. Appending keeps
+// "brew uninstall NAME" forms parseable.
+func (a AppConfig) WithBrewSelector(command string) string {
+	if a.InstallMethod != "brew" || strings.TrimSpace(command) == "" {
+		return command
+	}
+	selector := ""
+	for _, option := range a.Options {
+		if option == "--cask" || option == "--formula" {
+			selector = option
+		}
+	}
+	if selector == "" {
+		return command
+	}
+	tokens, err := splitPackageCommand(command)
+	if err != nil {
+		return command
+	}
+	for _, token := range tokens {
+		if token == "--cask" || token == "--formula" {
+			return command
+		}
+	}
+	return command + " " + selector
 }

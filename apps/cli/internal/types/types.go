@@ -392,6 +392,30 @@ var catalogPlatform = sync.OnceValue(platform.DetectPlatform)
 
 // GetOSConfig returns the appropriate OS configuration for the current platform
 func (app *CrossPlatformApp) GetOSConfig() OSConfig {
+	return app.selectOSConfig().withBrewSelection()
+}
+
+// withBrewSelection turns the legacy brew_cask flag into the typed --cask
+// option, so installation dispatch cannot drop the Cask selection.
+func (config OSConfig) withBrewSelection() OSConfig {
+	if config.InstallMethod != "brew" || !config.BrewCask {
+		return config
+	}
+	for _, option := range config.Options {
+		if option == "--cask" || option == "--formula" {
+			return config
+		}
+	}
+	for _, token := range strings.Fields(config.InstallCommand) {
+		if token == "--cask" || token == "--formula" {
+			return config
+		}
+	}
+	config.Options = append(append([]string{}, config.Options...), "--cask")
+	return config
+}
+
+func (app *CrossPlatformApp) selectOSConfig() OSConfig {
 	// Check if all_platforms is defined (cross-platform tools like mise)
 	if app.AllPlatforms.InstallMethod != "" {
 		return app.AllPlatforms

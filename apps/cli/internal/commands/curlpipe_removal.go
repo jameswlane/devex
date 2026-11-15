@@ -33,7 +33,7 @@ func uninstallConfiguredApplication(ctx context.Context, app types.AppConfig, in
 		}
 		return nil
 	}
-	command := strings.TrimSpace(app.UninstallCommand)
+	command := strings.TrimSpace(app.WithBrewSelector(app.UninstallCommand))
 	if command == "" {
 		command = strings.TrimSpace(app.PackageQueryCommand())
 	}

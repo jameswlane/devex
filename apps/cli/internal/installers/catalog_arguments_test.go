@@ -35,7 +35,7 @@ var _ = Describe("Catalog package arguments", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(installed).To(BeTrue())
 			switch method {
-			case "apt", "deb", "dnf", "flatpak", "mise", "pip", "appimage":
+			case "apt", "brew", "deb", "dnf", "flatpak", "mise", "pip", "appimage":
 				Expect(executor.args).To(Equal(append([]string{"is-installed"}, want...)))
 			default:
 				// List-only methods skip the installed probe; the last call is the removal.

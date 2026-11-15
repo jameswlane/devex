@@ -58,6 +58,19 @@ all_platforms:
 
 An OS configuration can also define `dependencies`, `pre_install`, `post_install`, `config_files`, `themes`, `download_url`, `destination`, and alternative installation configurations. Follow a shipped application with the same installer when adding these fields.
 
+### Homebrew formulae and Casks
+
+On macOS, `install_method: brew` installs a formula unless you select a Cask. Select GUI apps with `options: [--cask]` (or `install_command: --cask NAME`); the older `brew_cask: true` flag means the same thing. DevEx uses the selection for installation, `devex status` checks and removal. `--cask` and `--formula` are the only Homebrew options accepted.
+
+```yaml
+macos:
+  install_method: brew
+  packages: [ghostty]
+  options: [--cask]
+```
+
+Homebrew runs as your user, never as root. When DevEx is started with `sudo`, it switches back to the invoking user. If `brew` isn't on `PATH`, DevEx looks in `/opt/homebrew/bin` (Apple Silicon) and `/usr/local/bin` (Intel).
+
 ## Custom install hooks
 
 `pre_install` and `post_install` accept explicit `shell` scripts. Treat application YAML and any referenced scripts as trusted executable code: command validation is a pattern-based policy, not a shell sandbox. Both interactive and noninteractive installation validate the original script with the configured security level, global overrides, and the application's `app_overrides` before execution. A rejection names the application and points to `security.yaml`; review the hook first and use a narrowly scoped override only for code you trust.
