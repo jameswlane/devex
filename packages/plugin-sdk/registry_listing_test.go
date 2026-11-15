@@ -2,6 +2,7 @@ package sdk_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -162,5 +163,89 @@ var _ = Describe("Downloader registry listing", func() {
 		plugins, err := newDownloader(server.URL).GetAvailablePlugins(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(plugins).To(HaveKey("tool-git"))
+	})
+
+	Context("when a later listing page fails", func() {
+		writeExpiredCache := func() {
+			data, err := json.Marshal(sdk.PluginRegistry{
+				LastUpdated: time.Now().Add(-24 * time.Hour),
+				Plugins:     map[string]sdk.PluginMetadata{"cached-plugin": {}},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.WriteFile(filepath.Join(cacheDir, "registry.json"), data, 0o600)).To(Succeed())
+		}
+
+		// pagedServer serves page 1 of a two-page listing and hands page 2 to onPage2.
+		pagedServer := func(onPage2 func(http.ResponseWriter, *http.Request)) *httptest.Server {
+			return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Query().Get("page") == "2" {
+					onPage2(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, registryPage(1, 2, "tool-git"))
+			}))
+		}
+
+		dropConnection := func(w http.ResponseWriter, _ *http.Request) {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			Expect(err).NotTo(HaveOccurred())
+			_ = conn.Close()
+		}
+
+		It("falls back to an expired cache on a transport failure", func() {
+			writeExpiredCache()
+			server := pagedServer(dropConnection)
+			defer server.Close()
+
+			plugins, err := newDownloader(server.URL).GetAvailablePlugins(context.Background())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plugins).To(HaveKey("cached-plugin"))
+			Expect(plugins).NotTo(HaveKey("tool-git"))
+		})
+
+		It("reports a transport failure when there is no cache", func() {
+			server := pagedServer(dropConnection)
+			defer server.Close()
+
+			_, err := newDownloader(server.URL).GetAvailablePlugins(context.Background())
+			Expect(err).To(MatchError(ContainSubstring("failed to fetch registry page 2")))
+		})
+
+		It("keeps a non-200 response an error even with a cache", func() {
+			writeExpiredCache()
+			server := pagedServer(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			})
+			defer server.Close()
+
+			_, err := newDownloader(server.URL).GetAvailablePlugins(context.Background())
+			Expect(err).To(MatchError(ContainSubstring("registry server returned HTTP 404")))
+		})
+
+		It("keeps an unparseable page an error even with a cache", func() {
+			writeExpiredCache()
+			server := pagedServer(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(w, "not json")
+			})
+			defer server.Close()
+
+			_, err := newDownloader(server.URL).GetAvailablePlugins(context.Background())
+			Expect(err).To(MatchError(ContainSubstring("failed to parse registry page 2")))
+		})
+
+		It("returns the context error when cancelled during a later page", func() {
+			writeExpiredCache()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			server := pagedServer(func(w http.ResponseWriter, r *http.Request) {
+				cancel()
+				dropConnection(w, r)
+			})
+			defer server.Close()
+
+			_, err := newDownloader(server.URL).GetAvailablePlugins(ctx)
+			Expect(err).To(MatchError(context.Canceled))
+		})
 	})
 })

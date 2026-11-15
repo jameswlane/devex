@@ -945,27 +945,19 @@ func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegis
 	client := &http.Client{Timeout: 30 * time.Second}
 	body, err := d.fetchRegistryPage(ctx, client, 1)
 	if err != nil {
-		var status registryStatusError
-		if errors.As(err, &status) {
-			return nil, err
-		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		// Return cached registry if available
-		if cachedRegistry != nil {
-			if d.logger != nil {
-				d.logger.Warning("Using cached registry (network unavailable)")
-			}
-			return cachedRegistry, nil
-		}
-		return nil, fmt.Errorf("failed to fetch registry: %w", err)
+		return d.registryFetchFallback(ctx, err, cachedRegistry)
 	}
 
+	var pageErr error
 	resp, plugins, err := collectRegistryPages(body, func(page int) ([]byte, error) {
-		return d.fetchRegistryPage(ctx, client, page)
+		body, err := d.fetchRegistryPage(ctx, client, page)
+		pageErr = err
+		return body, err
 	})
 	if err != nil {
+		if pageErr != nil {
+			return d.registryFetchFallback(ctx, err, cachedRegistry)
+		}
 		return nil, err
 	}
 	registry := PluginRegistry{
@@ -978,6 +970,26 @@ func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegis
 	// Cache the registry
 	d.cacheRegistry(&registry)
 	return &registry, nil
+}
+
+// registryFetchFallback handles a failed registry page request. A non-200
+// response or a cancelled context stays an error; a transport failure falls
+// back to the cached registry when one exists.
+func (d *Downloader) registryFetchFallback(ctx context.Context, err error, cachedRegistry *PluginRegistry) (*PluginRegistry, error) {
+	var status registryStatusError
+	if errors.As(err, &status) {
+		return nil, err
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if cachedRegistry != nil {
+		if d.logger != nil {
+			d.logger.Warning("Using cached registry (network unavailable)")
+		}
+		return cachedRegistry, nil
+	}
+	return nil, fmt.Errorf("failed to fetch registry: %w", err)
 }
 
 // registryStatusError reports a registry listing request that got a non-200 response.
