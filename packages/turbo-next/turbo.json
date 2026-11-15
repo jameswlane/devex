@@ -1,0 +1,44 @@
+{
+	"extends": ["//"],
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				".env",
+				".env.local",
+				".env.production",
+				".env.production.local"
+			],
+			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"outputs": [".next/**", "!.next/cache/**"]
+		},
+		"test": {
+			"dependsOn": [],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				".env",
+				".env.local",
+				".env.test",
+				".env.test.local"
+			],
+			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"outputs": []
+		},
+		"dev": {
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				".env",
+				".env.local",
+				".env.development",
+				".env.development.local"
+			],
+			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"passThroughEnv": ["PORT", "HOSTNAME"]
+		},
+		"start": {
+			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"passThroughEnv": ["PORT", "HOSTNAME"]
+		}
+	}
+}

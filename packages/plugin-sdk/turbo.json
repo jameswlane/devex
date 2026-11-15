@@ -1,5 +1,5 @@
 {
-	"extends": ["//"],
+	"extends": ["//", "@devex/turbo-go"],
 	"tasks": {
 		"build": {
 			"outputs": []

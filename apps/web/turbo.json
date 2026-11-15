@@ -1,0 +1,16 @@
+{
+	"extends": ["//", "@devex/turbo-next"],
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build", "generate"]
+		},
+		"generate": {
+			"dependsOn": [],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/apps/cli/config/applications/**/*.yaml"
+			],
+			"outputs": ["app/generated/**"]
+		}
+	}
+}

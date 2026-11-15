@@ -6,12 +6,26 @@ on:
       - 'apps/**'
       - 'packages/**'
       - 'scripts/ci/**'
+      - 'turbo.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.mise.toml'
+      - 'biome.json'
+      - 'scripts/turbo/**'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'apps/**'
       - 'packages/**'
       - 'scripts/ci/**'
+      - 'turbo.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.mise.toml'
+      - 'biome.json'
+      - 'scripts/turbo/**'
       - '.github/workflows/ci.yml'
 permissions:
   contents: read
@@ -41,11 +55,29 @@ jobs:
         with:
           filters: |
             cli:
+              - 'turbo.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.mise.toml'
+              - 'biome.json'
+              - 'scripts/turbo/**'
+              - 'packages/turbo-go/**'
+              - 'packages/Taskfile.plugin.yml'
               - 'apps/cli/**'
               - '.github/workflows/ci.yml'
               # The CLI builds against the local SDK through a replace directive.
               - 'packages/plugin-sdk/**'
             sdk:
+              - 'turbo.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.mise.toml'
+              - 'biome.json'
+              - 'scripts/turbo/**'
+              - 'packages/turbo-go/**'
+              - 'packages/Taskfile.plugin.yml'
               - 'packages/plugin-sdk/**'
               - 'scripts/ci/**'
               - '.github/workflows/ci.yml'
@@ -53,10 +85,34 @@ jobs:
               - 'packages/**'
               - '!packages/plugin-sdk/**'
             web:
+              - 'turbo.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.mise.toml'
+              - 'biome.json'
+              - 'scripts/turbo/**'
+              - 'packages/turbo-next/**'
               - 'apps/web/**'
             registry:
+              - 'turbo.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.mise.toml'
+              - 'biome.json'
+              - 'scripts/turbo/**'
+              - 'packages/turbo-next/**'
               - 'apps/registry/**'
             docs:
+              - 'turbo.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.mise.toml'
+              - 'biome.json'
+              - 'scripts/turbo/**'
+              - 'packages/turbo-next/**'
               - 'apps/docs/**'
       - name: Test plugin matrix selection
         if: steps.changes.outputs.sdk == 'true'
@@ -108,7 +164,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install
       - name: Lint CLI
-        run: pnpm turbo lint --filter=@devex/cli --concurrency=1
+        run: pnpm turbo:run run lint --filter=@devex/cli --concurrency=1
       - name: Vulnerability check (CLI)
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
         env:
@@ -121,12 +177,12 @@ jobs:
           go-package: ./...
           work-dir: apps/cli
       - name: Build CLI
-        run: pnpm turbo build --filter=@devex/cli
+        run: pnpm turbo:run run build --filter=@devex/cli
       - name: Validate shipped configurations and local assets
         working-directory: apps/cli
         run: go run ./internal/tools/configcheck
       - name: Test CLI
-        run: pnpm turbo test --filter=@devex/cli
+        run: pnpm turbo:run run test --filter=@devex/cli
   test-cli-macos:
     name: Test CLI (macOS)
     runs-on: macos-latest

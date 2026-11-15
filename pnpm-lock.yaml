@@ -374,6 +374,10 @@ importers:
 
   packages/tool-stackdetector: {}
 
+  packages/turbo-go: {}
+
+  packages/turbo-next: {}
+
 packages:
 
   '@adobe/css-tools@4.4.4':
