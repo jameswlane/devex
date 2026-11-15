@@ -3,6 +3,7 @@ package sdk_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -174,7 +175,25 @@ mQENBFj3...fake key content...
 		})
 	})
 
+	Describe("SystemGPGVerifier without system gpg", func() {
+		It("should return an error when neither gpg nor gpgv is on PATH", func() {
+			GinkgoT().Setenv("PATH", tempDir)
+
+			verifier, err := sdk.NewSystemGPGVerifier()
+			Expect(err).To(MatchError(ContainSubstring("system gpg not found")))
+			Expect(verifier).To(BeNil())
+		})
+	})
+
 	Describe("SystemGPGVerifier", func() {
+		BeforeEach(func() {
+			if _, err := exec.LookPath("gpg"); err != nil {
+				if _, err := exec.LookPath("gpgv"); err != nil {
+					Skip("system gpg/gpgv not installed")
+				}
+			}
+		})
+
 		It("should create a system GPG verifier", func() {
 			verifier, err := sdk.NewSystemGPGVerifier()
 			Expect(err).ToNot(HaveOccurred())
