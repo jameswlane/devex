@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -83,6 +86,10 @@ type TemplatePlanner struct {
 	AppResolver     AppResolver
 	PluginAvailable func(ctx context.Context, name string) bool
 	Now             func() time.Time
+	// System overrides the host facts (`os`, `arch`) that conditions such as
+	// platform("darwin") and {{ system.os }} see. Unset keys use runtime.GOOS
+	// and runtime.GOARCH; tests use it to plan for other platforms.
+	System map[string]string
 }
 
 type PlanOptions struct {
@@ -118,7 +125,11 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 		return nil, nil, fmt.Errorf("template '%s' does not define lifecycle action '%s'", spec.ID, opts.Action)
 	}
 
-	inputs, err := ResolveInputs(ctx, *spec, opts.InputOptions)
+	inputOptions := opts.InputOptions
+	if opts.Action != LifecycleInstall {
+		inputOptions.NotRequired = requiredInputsUnusedBy(*spec, steps)
+	}
+	inputs, err := ResolveInputs(ctx, *spec, inputOptions)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -131,10 +142,7 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 	evalCtx := EvaluationContext{
 		Inputs:    inputs,
 		Resources: opts.KnownResources,
-		System: map[string]string{
-			"os":   runtime.GOOS,
-			"arch": runtime.GOARCH,
-		},
+		System:    p.systemFacts(),
 	}
 
 	planned := make([]PlannedStep, 0, len(steps))
@@ -154,6 +162,7 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 		planned = append(planned, plannedStep)
 	}
 
+	planned = pruneSkippedDependencies(planned)
 	planned, err = sortPlannedSteps(planned)
 	if err != nil {
 		return nil, nil, err
@@ -171,6 +180,40 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 		Steps:           planned,
 		CreatedAt:       createdAt,
 	}, nil
+}
+
+// requiredInputsUnusedBy returns the required inputs that none of steps
+// reference. Maintain, status and remove usually act on recorded resources, so
+// an input that only chose what to install (such as which components) must not
+// make them fail for a missing answer.
+func requiredInputsUnusedBy(spec TemplateSpec, steps []TemplateStepSpec) map[string]bool {
+	encoded, err := yaml.Marshal(steps)
+	if err != nil {
+		return nil
+	}
+	text := string(encoded)
+	unused := map[string]bool{}
+	for key, input := range spec.Inputs {
+		if input.Required && !inputReferencePattern(key).MatchString(text) {
+			unused[key] = true
+		}
+	}
+	return unused
+}
+
+func inputReferencePattern(key string) *regexp.Regexp {
+	return regexp.MustCompile(`\binputs\.` + regexp.QuoteMeta(key) + `\b`)
+}
+
+func (p *TemplatePlanner) systemFacts() map[string]string {
+	facts := map[string]string{
+		"os":   runtime.GOOS,
+		"arch": runtime.GOARCH,
+	}
+	for key, value := range p.System {
+		facts[key] = value
+	}
+	return facts
 }
 
 func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, evalCtx EvaluationContext, validatePlugins bool) (PlannedStep, error) {
@@ -319,6 +362,34 @@ func (p *TemplatePlanner) planAppStep(ctx context.Context, result PlannedStep, s
 		return result, fmt.Errorf("plugin '%s' is not available", plugin)
 	}
 	return result, nil
+}
+
+// pruneSkippedDependencies drops depends_on references to steps whose `if`
+// condition left them out of the plan. A skipped dependency counts as
+// satisfied, so a step can depend on a platform-guarded setup step (such as
+// installing Docker Engine on Linux only). ValidateTemplateSpec has already
+// rejected references to step IDs that do not exist at all.
+func pruneSkippedDependencies(steps []PlannedStep) []PlannedStep {
+	included := make(map[string]bool, len(steps))
+	for _, step := range steps {
+		included[step.ID] = true
+	}
+	for index, step := range steps {
+		if len(step.DependsOn) == 0 {
+			continue
+		}
+		kept := make([]string, 0, len(step.DependsOn))
+		for _, dep := range step.DependsOn {
+			if included[dep] {
+				kept = append(kept, dep)
+			}
+		}
+		if len(kept) == 0 {
+			kept = nil
+		}
+		steps[index].DependsOn = kept
+	}
+	return steps
 }
 
 func sortPlannedSteps(steps []PlannedStep) ([]PlannedStep, error) {

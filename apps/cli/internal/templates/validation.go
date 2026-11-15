@@ -188,6 +188,11 @@ func isShellOperator(value string) bool {
 func validateDockerLikeArgs(args []string) error {
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
+		if arg == "--" {
+			// Everything after "--" is the container command, not docker
+			// flags; the Docker plugin passes it through unparsed.
+			return nil
+		}
 		switch {
 		case strings.HasPrefix(arg, "--name="):
 			value := strings.TrimPrefix(arg, "--name=")

@@ -1,0 +1,81 @@
+---
+title: DevOps
+description: Install Docker, Kubernetes, Terraform or OpenTofu, and the AWS CLI at pinned versions with the built-in devops lifecycle template
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# DevOps
+
+The built-in `devops` lifecycle template installs container, Kubernetes, infrastructure-as-code and AWS tools. mise pins every command-line tool to the version you choose. Docker Engine comes from the system package manager.
+
+```bash
+devex template info devops
+devex init --profile devops   # optional: record the profile in ~/.devex
+```
+
+## Tools and versions
+
+| Tool | Default | Version input | Default version | Notes |
+| --- | --- | --- | --- | --- |
+| `docker` | Selected | - | Distribution package | Linux only. Adds you to the `docker` group. |
+| `kubectl` | Selected | `kubectl_version` | `1.37` | |
+| `helm` | - | `helm_version` | `4` | |
+| `kind` | - | `kind_version` | `0.33` | Needs a container runtime: select `docker` too on Linux. |
+| `terraform` | Selected | `terraform_version` | `1.17` | Business Source License. |
+| `opentofu` | - | `opentofu_version` | `1.13` | Open-source Terraform alternative. |
+| `awscli` | Selected | `awscli_version` | `2` | AWS CLI v2. |
+
+A version input is a mise version prefix. `1.37` installs the newest 1.37.x release, and `maintain` moves to newer patch releases within that prefix.
+
+## Install
+
+```bash
+# The defaults: Docker Engine, kubectl, Terraform and the AWS CLI
+devex install --template devops --non-interactive
+
+# Kubernetes-only workstation with local clusters
+devex install --template devops \
+  --answer tools=docker,kubectl,helm,kind \
+  --answer kubectl_version=1.36 \
+  --non-interactive
+
+# OpenTofu instead of Terraform
+devex install --template devops --answer tools=opentofu,awscli --non-interactive
+```
+
+## Limits
+
+<Callout type="warn">
+DevEx never configures cloud credentials. After install, run `aws configure` or `aws sso login` yourself.
+</Callout>
+
+- **macOS Docker**: Docker Engine is installed only on Linux. On macOS, install Docker Desktop yourself; its license terms apply.
+- **Docker group**: log out and back in after the first install, so the `docker` group applies.
+- **Remove**: `remove` uninstalls the mise tools but keeps Docker Engine, because other templates may use it.
+
+## Maintain, status and remove
+
+```bash
+devex status --template devops --run latest
+devex maintain --template devops --run latest
+devex remove --template devops --run latest --force
+```
+
+## Smoke procedure
+
+Run this on a fresh Debian or Ubuntu VM:
+
+```bash
+devex template validate devops
+devex template plan devops --action install --answer tools=docker,kubectl,helm --non-interactive --format yaml
+devex install --template devops --answer tools=docker,kubectl,helm --non-interactive --dry-run
+devex install --template devops --answer tools=docker,kubectl,helm --non-interactive
+
+kubectl version --client
+helm version
+sudo docker run --rm hello-world
+
+devex status --template devops --run latest
+devex remove --template devops --run latest --force
+```

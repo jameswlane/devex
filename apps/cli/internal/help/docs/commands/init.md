@@ -107,15 +107,20 @@ See what files would be created without actually creating them.
 
 ## Templates
 
-You can start with pre-configured templates:
+`--profile` accepts the built-in profiles `full-stack`, `backend`, `frontend` and `minimal`, plus one profile per starter lifecycle template:
 
-- `web-fullstack` - Full-stack web development
-- `react-frontend` - React frontend development
-- `vue-frontend` - Vue.js frontend development
-- `backend-api` - Backend API development
-- `python-data` - Python data science
-- `devops-tools` - DevOps and infrastructure tools
-- `mobile-dev` - Mobile development tools
+- `data-science` - isolated JupyterLab and MLflow containers
+- `devops` - Docker, kubectl, Helm, kind, Terraform or OpenTofu, and the AWS CLI
+- `game-development` - opt-in Godot editor
+- `mobile` - React Native, Flutter, Android and iOS prerequisites
+
+A starter profile takes its tools and languages from its template. `init` writes configuration only. Install the template afterwards:
+
+```bash
+devex init --profile devops
+devex template plan devops --action install
+devex install --template devops
+```
 
 List available templates:
 ```bash

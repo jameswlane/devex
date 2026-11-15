@@ -1,0 +1,73 @@
+---
+title: Game Development
+description: Install the Godot editor with the opt-in game-development lifecycle template, and what to do for Unity and Unreal
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# Game Development
+
+The built-in `game-development` lifecycle template is opt-in. It installs nothing until you name an engine, and Godot is the only engine it supports.
+
+```bash
+devex template info game-development
+devex init --profile game-development   # optional: record the profile in ~/.devex
+```
+
+## Engines
+
+| Engine | Supported | How |
+| --- | --- | --- |
+| Godot | Yes | Flathub on Linux (`org.godotengine.Godot`), Homebrew cask on macOS (`godot`) |
+| Godot .NET | Yes | `godot_edition=dotnet`: `org.godotengine.GodotSharp` or the `godot-mono` cask |
+| Unity | No | Unity Hub needs a Unity account sign-in and a license choice. Install it from unity.com. |
+| Unreal Engine | No | Needs an Epic Games account linked to GitHub. On Linux you build it from source. |
+
+## Install
+
+```bash
+# Godot (GDScript)
+devex install --template game-development --answer engine=godot --non-interactive
+
+# Godot with C# support
+devex install --template game-development \
+  --answer engine=godot \
+  --answer godot_edition=dotnet \
+  --non-interactive
+```
+
+<Callout type="warn">
+Without `--answer engine=godot`, a non-interactive install fails because `engine` is required. Nothing is installed by accident.
+</Callout>
+
+## Limits
+
+- On Linux, the Flatpak sandbox reaches only your home directory, so keep projects there.
+- The .NET edition needs a .NET SDK on `PATH` to build C# projects. This template does not install one.
+- The macOS steps use Homebrew and do not install it.
+
+## Maintain, status and remove
+
+```bash
+devex status --template game-development --run latest
+devex maintain --template game-development --run latest   # brew upgrade on macOS
+devex remove --template game-development --run latest --force
+```
+
+On Linux, `maintain` does nothing. Update Godot with `flatpak update org.godotengine.Godot`.
+
+## Smoke procedure
+
+Run this on a fresh Debian or Ubuntu desktop VM:
+
+```bash
+devex template validate game-development
+devex template plan game-development --action install --answer engine=godot --non-interactive --format yaml
+devex install --template game-development --answer engine=godot --non-interactive --dry-run
+devex install --template game-development --answer engine=godot --non-interactive
+
+flatpak run org.godotengine.Godot --version
+
+devex status --template game-development --run latest
+devex remove --template game-development --run latest --force
+```

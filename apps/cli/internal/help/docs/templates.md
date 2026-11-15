@@ -33,6 +33,26 @@ devex runs resources <run-id>
 devex runs operations <run-id>
 ```
 
+## Built-in Starter Templates
+
+DevEx ships these lifecycle starters. Each one is also a `devex init --profile` name.
+
+| ID | Installs | Required answers | Platforms |
+| --- | --- | --- | --- |
+| `devops` | Docker Engine (Linux), kubectl, Helm, kind, Terraform, OpenTofu, AWS CLI | none (`tools` defaults to docker, kubectl, terraform, awscli) | Linux, macOS |
+| `mobile` | Node.js, JDK, Flutter, Android Studio, CocoaPods (macOS) | `targets` | Linux, macOS |
+| `data-science` | JupyterLab (Python, R, or both) and MLflow containers | none (`components` defaults to jupyter) | Linux, macOS |
+| `game-development` | Godot or Godot .NET | `engine=godot` (opt-in) | Linux, macOS |
+
+```bash
+devex install --template devops --answer tools=kubectl,helm --non-interactive
+devex install --template mobile --answer targets=react-native,android --non-interactive
+devex install --template data-science --answer components=jupyter,mlflow --non-interactive
+devex install --template game-development --answer engine=godot --non-interactive
+```
+
+Platform-specific steps use `platform("linux")` or `platform("darwin")` guards. Each starter's `metadata.limitations` lists what it cannot automate, such as Xcode, Android SDK licenses, Docker Desktop, and Unity or Unreal accounts.
+
 ## Template Schema Reference
 
 Canonical lifecycle templates use `schema_version: devex.template/v1`.
@@ -70,6 +90,8 @@ Supported step types:
 
 Each lifecycle step must define exactly one primary action. Steps support `id`, `order`, `if`, `depends_on`, `on_error`, `description`, and `resources`.
 
+A `depends_on` entry that names a step skipped by its own `if` condition counts as satisfied. A step can therefore depend on a platform-guarded setup step, such as Docker Engine installed only on Linux.
+
 ## Inputs
 
 Supported input types are `text`, `select`, `multiselect`, and `bool`.
@@ -93,6 +115,8 @@ Input precedence, from lowest to highest:
 4. CLI flags passed with `--answer key=value`
 
 Interactive prompts are used only for missing required inputs when `--non-interactive` is not set. With `--non-interactive`, missing required inputs fail fast.
+
+Required inputs are enforced for `install`. For `maintain`, `status` and `remove`, an input is enforced only when that action's own steps reference it (`{{ inputs.key }}` or `inputs.key` in a condition). Those actions normally work from recorded resources, so they need no answers.
 
 ```yaml
 # prod.answers.yaml
@@ -168,7 +192,7 @@ plugin:
 
 At execution time the command is passed as the first plugin argument, followed by `args`. Prefer one argument per list item. Do not encode shell pipelines or multiple commands inside one string.
 
-For Docker-style templates, use explicit flags such as `--name`, `--port`, `--env`, `--volume`, `--restart`, and `--detach`.
+For Docker-style templates, use explicit flags such as `--name`, `--port`, `--env`, `--volume`, `--restart`, and `--detach`. Put the container command after a `--` argument, for example `- --` followed by `- mlflow` and `- server`. Arguments after `--` are passed to the container and are not checked as Docker flags.
 
 ## Sensitive Input Redaction
 
