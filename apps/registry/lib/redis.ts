@@ -28,11 +28,16 @@ export const upstashRedis = (() => {
 				process.env.UPSTASH_REDIS_REST_URL &&
 				process.env.UPSTASH_REDIS_REST_TOKEN
 			) {
-				upstashRedisInstance = Redis.fromEnv();
+				// The store wrapper deals in raw strings, so keep Upstash from
+				// parsing JSON values into objects on read.
+				upstashRedisInstance = Redis.fromEnv({
+					automaticDeserialization: false,
+				});
 			} else if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
 				upstashRedisInstance = new Redis({
 					url: process.env.KV_REST_API_URL,
 					token: process.env.KV_REST_API_TOKEN,
+					automaticDeserialization: false,
 				});
 			}
 		} catch (error) {
@@ -126,13 +131,19 @@ export interface RedisStore {
 	disconnect(): Promise<void>;
 }
 
+// Upstash returns numbers or parsed JSON when automatic deserialization is
+// on. Turn whatever comes back into the string the caller originally stored.
+function toStoredString(value: unknown): string | null {
+	if (value === null || value === undefined) return null;
+	return typeof value === "string" ? value : JSON.stringify(value);
+}
+
 // Upstash Redis implementation
 class UpstashRedisStore implements RedisStore {
 	constructor(private client: Redis) {}
 
 	async get(key: string): Promise<string | null> {
-		const result = await this.client.get(key);
-		return typeof result === "string" ? result : null;
+		return toStoredString(await this.client.get(key));
 	}
 
 	async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
@@ -161,7 +172,7 @@ class UpstashRedisStore implements RedisStore {
 
 	async mget(...keys: string[]): Promise<(string | null)[]> {
 		const results = await this.client.mget(...keys);
-		return results.map((r) => (typeof r === "string" ? r : null));
+		return results.map(toStoredString);
 	}
 
 	async mset(

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
 	Application,
 	Config,
@@ -327,38 +328,12 @@ export class RegistryTransformationService {
 		return match ? match[1] : null;
 	}
 
-	// Generate improved hash for data to detect changes with more granularity
-	private generateDataHash(data: any[], useContent: boolean = false): string {
-		// Create a hash based on data length and first/last item timestamps
+	// Hash the full input. The transformation is a pure function of it, so
+	// identical input is the only safe reason to reuse a cached result: any
+	// difference in page, filter or item content produces a different key.
+	private generateDataHash(data: unknown[]): string {
 		if (data.length === 0) return "empty";
-
-		const firstItem = data[0];
-		const lastItem = data[data.length - 1];
-
-		const hashData: any = {
-			length: data.length,
-			first: firstItem?.updatedAt || firstItem?.createdAt,
-			last: lastItem?.updatedAt || lastItem?.createdAt,
-		};
-
-		// For more sensitive caching, include content-based hash
-		if (useContent && data.length <= 10) {
-			// Only hash content for small datasets to avoid performance issues
-			hashData.contentHash = Buffer.from(
-				JSON.stringify(
-					data.map((item) => ({
-						name: item.name,
-						updated: item.updatedAt || item.createdAt,
-					})),
-				),
-			)
-				.toString("base64")
-				.slice(0, 8);
-		}
-
-		return Buffer.from(JSON.stringify(hashData))
-			.toString("base64")
-			.slice(0, 16);
+		return createHash("sha256").update(JSON.stringify(data)).digest("hex");
 	}
 
 	// Determine appropriate TTL based on data characteristics
@@ -395,7 +370,7 @@ export class RegistryTransformationService {
 			await this.loadCacheStats();
 		}
 
-		const hash = this.generateDataHash(plugins, plugins.length <= 50); // Use content hash for smaller datasets
+		const hash = this.generateDataHash(plugins);
 		const cacheKey = this.getCacheKey("plugins", hash);
 
 		try {
@@ -484,7 +459,7 @@ export class RegistryTransformationService {
 	): Promise<ApplicationResponse[]> {
 		if (applications.length === 0) return [];
 
-		const hash = this.generateDataHash(applications, applications.length <= 50);
+		const hash = this.generateDataHash(applications);
 		const cacheKey = this.getCacheKey("applications", hash);
 
 		try {
@@ -596,7 +571,7 @@ export class RegistryTransformationService {
 	): Promise<ConfigResponse[]> {
 		if (configs.length === 0) return [];
 
-		const hash = this.generateDataHash(configs, configs.length <= 20);
+		const hash = this.generateDataHash(configs);
 		const cacheKey = this.getCacheKey("configs", hash);
 
 		try {
@@ -649,7 +624,7 @@ export class RegistryTransformationService {
 	async transformStacks(stacks: StackWithExtras[]): Promise<StackResponse[]> {
 		if (stacks.length === 0) return [];
 
-		const hash = this.generateDataHash(stacks, stacks.length <= 20);
+		const hash = this.generateDataHash(stacks);
 		const cacheKey = this.getCacheKey("stacks", hash);
 
 		try {
@@ -964,14 +939,6 @@ export class RegistryTransformationService {
 		const keysToTry = commonHashes.map(
 			(hash) => `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`,
 		);
-
-		// Also try some generated patterns based on typical data sizes
-		for (let size = 1; size <= 100; size += 10) {
-			const hash = Buffer.from(JSON.stringify({ length: size }))
-				.toString("base64")
-				.slice(0, 16);
-			keysToTry.push(`${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`);
-		}
 
 		// Delete these keys if they exist
 		const deletePromises = keysToTry.map(async (key) => {
