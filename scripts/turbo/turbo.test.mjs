@@ -152,7 +152,7 @@ test("real web build depends on generation; catalog and generator edits invalida
 
 test("registry build, dev and typecheck depend on same-package Prisma generation", () => {
 	const root = fixture();
-	for (const name of ["build", "dev", "typecheck", "test"]) {
+	for (const name of ["build", "dev", "typecheck", "test", "db:seed"]) {
 		const entry = task(root, name, "registry");
 		assert.ok(entry.dependencies.includes("@devex/registry#db:generate"), name);
 		assert.notEqual(entry.command, "<NONEXISTENT>");
@@ -278,15 +278,16 @@ test("a generation cache hit restores the catalog without rerunning its script",
 	);
 });
 
-test("Prisma generation failures prevent registry build, dev and typecheck", () => {
+test("Prisma generation failures prevent registry client consumers", () => {
 	const root = fixture();
 	script(root, "apps/registry", {
 		"db:generate": 'node -e "process.exit(9)"',
+		"db:seed": "node -e \"require('fs').writeFileSync('db:seed-ran','yes')\"",
 		build: "node -e \"require('fs').writeFileSync('build-ran','yes')\"",
 		dev: "node -e \"require('fs').writeFileSync('dev-ran','yes')\"",
 		typecheck: "node -e \"require('fs').writeFileSync('typecheck-ran','yes')\"",
 	});
-	for (const name of ["build", "dev", "typecheck", "test"]) {
+	for (const name of ["build", "dev", "typecheck", "test", "db:seed"]) {
 		const result = spawnSync(
 			turbo,
 			["run", name, "--filter=@devex/registry", "--daemon=false"],
@@ -498,7 +499,8 @@ test("root runner fingerprints real tools, respects overrides, and fails when to
 		"fake-bin/go",
 		`#!/usr/bin/env node
 if(process.env.FAIL_TOOL)process.exit(19);
-require('assert/strict').deepEqual(process.argv.slice(2), ['env','GOVERSION']);
+require('assert/strict').equal(process.argv[2], 'env');
+for (const key of ['GOVERSION','GOOS','GOARCH','CGO_ENABLED','GOFLAGS']) require('assert/strict').ok(process.argv.includes(key));
 console.log(process.env.GOTOOLCHAIN || 'go-fixture-1');
 `,
 	);
@@ -633,7 +635,7 @@ for (const name of ["Lint CLI", "Build CLI", "Test CLI"]) {
 				`#!/usr/bin/env node
 const fs = require('fs');
 const args = process.argv.slice(2);
-if (args.join(' ') === 'env GOVERSION') console.log('go-ci-fixture');
+if (args[0] === 'env') console.log('go-ci-fixture');
 else if (args.join(' ') === 'version') console.log('golangci-ci-fixture');
 else fs.appendFileSync(${JSON.stringify(path.join(root, "executed.jsonl"))}, JSON.stringify({tool:${JSON.stringify(tool)},args,hash:process.env.TURBO_HASH})+'\\n');
 `,
@@ -712,4 +714,170 @@ test("shared configuration changes route to relevant existing CI jobs", () => {
 		assert.ok(
 			matches(regressionWorkflow.on[event].paths, ".github/workflows/ci.yml"),
 		);
+});
+
+test("registry seeding waits for the generated client before executing", () => {
+	const root = fixture();
+	script(root, "apps/registry", {
+		"db:generate":
+			"node -e \"require('fs').writeFileSync('client-ready','yes')\"",
+		"db:seed":
+			"node -e \"require('assert/strict').equal(require('fs').readFileSync('client-ready','utf8'),'yes');require('fs').writeFileSync('seed-ran','yes')\"",
+	});
+	run(root, ["db:seed", "--filter=@devex/registry"]);
+	assert.equal(
+		fs.readFileSync(path.join(root, "apps/registry/seed-ran"), "utf8"),
+		"yes",
+	);
+});
+
+test("runner probes only deduplicated executable Go graph directories and propagates selected failures", () => {
+	const root = fixture();
+	fs.symlinkSync(
+		path.join(repo, "node_modules"),
+		path.join(root, "node_modules"),
+		"dir",
+	);
+	write(root, "apps/cli/go.mod", "module example.com/cli\n");
+	// Give the filtered CLI a graph dependency to exercise transitive selection.
+	const cli = JSON.parse(
+		fs.readFileSync(path.join(root, "apps/cli/package.json")),
+	);
+	cli.devDependencies = {
+		...cli.devDependencies,
+		"@devex/plugin-sdk": "workspace:*",
+	};
+	write(root, "apps/cli/package.json", JSON.stringify(cli));
+	const calls = path.join(root, "probes.jsonl");
+	write(
+		root,
+		"fake-bin/go",
+		`#!/usr/bin/env node
+const fs = require('fs');
+fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.cwd())+'\\n');
+if(process.cwd().endsWith(process.env.FAIL_MODULE))process.exit(19);
+console.log('go-fixture');
+`,
+	);
+	fs.chmodSync(path.join(root, "fake-bin/go"), 0o755);
+	const invoke = (tasks, fail) =>
+		spawnSync(
+			process.execPath,
+			[
+				path.join(root, "scripts/turbo/run.mjs"),
+				"run",
+				...tasks,
+				"--filter=@devex/cli",
+				"--dry=json",
+			],
+			{
+				encoding: "utf8",
+				env: {
+					...process.env,
+					PATH: `${root}/fake-bin${path.delimiter}${process.env.PATH}`,
+					FAIL_MODULE: fail,
+				},
+			},
+		);
+	const result = invoke(["build", "test"], "package-manager-apt");
+	assert.equal(result.status, 0, result.stderr);
+	assert.deepEqual(
+		fs.readFileSync(calls, "utf8").trim().split("\n").map(JSON.parse).sort(),
+		["apps/cli", "packages/plugin-sdk"]
+			.map((directory) => path.join(root, directory))
+			.sort(),
+	);
+	for (const module of ["cli", "plugin-sdk"]) {
+		const failure = invoke(["build"], module);
+		assert.notEqual(failure.status, 0);
+		assert.match(failure.stderr, /Turbo toolchain setup failed/);
+	}
+	// A graph node without a script cannot execute and must not require a toolchain.
+	const sdk = JSON.parse(
+		fs.readFileSync(path.join(root, "packages/plugin-sdk/package.json")),
+	);
+	delete sdk.scripts.build;
+	delete sdk.scripts.download;
+	write(root, "packages/plugin-sdk/package.json", JSON.stringify(sdk));
+	fs.unlinkSync(calls);
+	const transit = invoke(["build"], "plugin-sdk");
+	assert.equal(transit.status, 0, transit.stderr);
+	assert.deepEqual(
+		fs.readFileSync(calls, "utf8").trim().split("\n").map(JSON.parse),
+		[path.join(root, "apps/cli")],
+	);
+});
+
+test("persistent GOENV edits change hashes and the execution guard rejects stale settings", async () => {
+	const root = fixture();
+	fs.symlinkSync(
+		path.join(repo, "node_modules"),
+		path.join(root, "node_modules"),
+		"dir",
+	);
+	write(root, "apps/cli/go.mod", "module example.com/cli\ngo 1.26\n");
+	const goenv = path.join(root, "isolated-goenv");
+	const env = { ...process.env, GOENV: goenv };
+	for (const key of ["GOOS", "GOARCH", "CGO_ENABLED", "GOFLAGS"])
+		delete env[key];
+	const invoke = () => {
+		const result = spawnSync(
+			process.execPath,
+			[
+				path.join(root, "scripts/turbo/run.mjs"),
+				"run",
+				"test",
+				"--filter=@devex/cli",
+				"--dry=json",
+			],
+			{ env, encoding: "utf8" },
+		);
+		assert.equal(result.status, 0, result.stderr);
+		return JSON.parse(result.stdout).tasks.find(
+			(task) => task.taskId === "@devex/cli#test",
+		).hash;
+	};
+	let previous = invoke();
+	for (const setting of [
+		"GOOS=freebsd",
+		"GOARCH=arm64",
+		"CGO_ENABLED=1",
+		"CGO_ENABLED=0",
+		"GOFLAGS=-trimpath",
+	]) {
+		execFileSync("go", ["env", "-w", setting], {
+			cwd: path.join(root, "apps/cli"),
+			env,
+		});
+		const next = invoke();
+		assert.notEqual(next, previous, setting);
+		previous = next;
+	}
+	// Capture a valid fingerprint, mutate only the persistent file, then run guard.
+	const { goFingerprint } = await import("./toolchain.mjs");
+	const fingerprint = goFingerprint(path.join(root, "apps/cli"), env);
+	execFileSync("go", ["env", "-w", "GOFLAGS=-tags=changed"], {
+		cwd: path.join(root, "apps/cli"),
+		env,
+	});
+	const guard = spawnSync(
+		process.execPath,
+		[
+			path.join(root, "scripts/turbo/go-task.mjs"),
+			process.execPath,
+			"-e",
+			"process.exit(0)",
+		],
+		{
+			cwd: path.join(root, "apps/cli"),
+			encoding: "utf8",
+			env: {
+				...env,
+				TURBO_HASH: "stale",
+				DEVEX_GO_TOOLCHAIN: JSON.stringify([fingerprint]),
+			},
+		},
+	);
+	assert.notEqual(guard.status, 0);
+	assert.match(guard.stderr, /Use pnpm turbo:run/);
 });

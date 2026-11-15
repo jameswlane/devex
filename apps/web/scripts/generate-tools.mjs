@@ -1,4 +1,13 @@
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
+import {
+	mkdir,
+	readdir,
+	readFile,
+	rename,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "js-yaml";
@@ -18,6 +27,12 @@ async function yamlFiles(directory) {
 	return files.flat().sort();
 }
 
+function optionalBoolean(config, field) {
+	if (Object.hasOwn(config, field) && typeof config[field] !== "boolean") {
+		throw new Error(`${field} must be a boolean`);
+	}
+}
+
 function platformInfo(config) {
 	if (!config) return null;
 	if (
@@ -29,6 +44,7 @@ function platformInfo(config) {
 			"platform requires an install_method string and optional install_command string",
 		);
 	}
+	optionalBoolean(config, "official_support");
 	return {
 		installMethod: config.install_method,
 		installCommand: config.install_command ?? config.download_url ?? "",
@@ -54,6 +70,16 @@ export async function generateTools({
 					throw new Error(`application requires a nonempty ${field} string`);
 				}
 			}
+			for (const field of ["tags", "desktop_environments"]) {
+				if (
+					Object.hasOwn(app, field) &&
+					(!Array.isArray(app[field]) ||
+						app[field].some((value) => typeof value !== "string"))
+				) {
+					throw new Error(`${field} must be an array of strings`);
+				}
+			}
+			for (const field of ["official", "default"]) optionalBoolean(app, field);
 			if (names.has(app.name))
 				throw new Error(`Duplicate application: ${app.name}`);
 			names.add(app.name);
@@ -106,15 +132,21 @@ export async function generateTools({
 	// identical inputs must produce identical cached artifacts.
 	await mkdir(outputDirectory, { recursive: true });
 	const target = path.join(outputDirectory, "tools.json");
-	const temporary = `${target}.tmp`;
-	await writeFile(temporary, `${JSON.stringify(catalog, null, 2)}\n`);
-	await rename(temporary, target);
+	const temporary = `${target}.${randomUUID()}.tmp`;
+	try {
+		await writeFile(temporary, `${JSON.stringify(catalog, null, 2)}\n`, {
+			flag: "wx",
+		});
+		await rename(temporary, target);
+	} finally {
+		await rm(temporary, { force: true });
+	}
 	return catalog;
 }
 
 if (
 	process.argv[1] &&
-	path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+	realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
 	generateTools().catch((error) => {
 		console.error(error.message);

@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { version } from "./toolchain.mjs";
+import { goFingerprint, version } from "./toolchain.mjs";
 
 try {
 	let [command, ...args] = process.argv.slice(2);
 	// biome-ignore lint/suspicious/noUndeclaredEnvVars: Turbo injects its task hash at execution time.
 	if (process.env.TURBO_HASH) {
-		const actualGo = version("go", ["env", "GOVERSION"], process.cwd());
+		const actualGo = goFingerprint(process.cwd());
 		// biome-ignore lint/suspicious/noUndeclaredEnvVars: Declared by the shared @devex/turbo-go configuration.
 		const expectedGo = JSON.parse(process.env.DEVEX_GO_TOOLCHAIN || "[]");
 		if (!expectedGo.includes(actualGo))

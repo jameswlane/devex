@@ -331,9 +331,10 @@ The root Biome config affects JavaScript linting. Plugin build caches retain the
 existing executable paths and exclude matching `.go` source files.
 
 Root Turbo commands use `scripts/turbo/run.mjs` to measure the active tools before
-hashing. It queries `go env GOVERSION` in every Go module, honoring module-selected
-Go toolchains and local/CI overrides; the sorted set of resolved versions affects
-Go tasks only. `golangci-lint version` affects Go lint tasks only. Next-only graphs
+hashing. It queries effective `go env` settings in executable Go modules in the
+selected task graph, including dependencies. This honors module-selected toolchains,
+persistent Go environment settings, and local/CI overrides; the sorted set of
+fingerprints affects Go tasks only. `golangci-lint version` affects Go lint tasks only. Next-only graphs
 need neither tool. Use `pnpm turbo:run run <task> [filters/options]` for custom
 cached Go runs. Raw `pnpm exec turbo` bypasses measurement; Go task scripts reject
 uncached runs without matching measured fingerprints. Direct package commands
