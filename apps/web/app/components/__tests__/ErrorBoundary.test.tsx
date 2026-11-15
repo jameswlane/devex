@@ -1,15 +1,23 @@
 /**
- * @jest-environment jsdom
+ * @vitest-environment jsdom
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type React from "react";
-import "@testing-library/jest-dom";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 import { ErrorBoundary } from "../ErrorBoundary";
 
 // Mock the error handling module
-jest.mock("../../utils/error-handling", () => ({
-	handleComponentError: jest.fn((error, errorInfo) => ({
+vi.mock("../../utils/error-handling", () => ({
+	handleComponentError: vi.fn((error, errorInfo) => ({
 		hasError: true,
 		error,
 		errorInfo,
@@ -51,11 +59,11 @@ const CustomFallback: React.FC<{ error?: Error; retry: () => void }> = ({
 );
 
 // Mock console.error to avoid noise in tests
-const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 afterEach(() => {
 	consoleSpy.mockClear();
-	jest.clearAllMocks();
+	vi.clearAllMocks();
 });
 
 afterAll(() => {
@@ -121,7 +129,7 @@ describe("ErrorBoundary", () => {
 
 		it("should show generic error message when no error message available", () => {
 			// Mock handleComponentError to return error without message
-			jest.mocked(handleComponentError).mockReturnValueOnce({
+			vi.mocked(handleComponentError).mockReturnValueOnce({
 				hasError: true,
 				error: undefined,
 				errorInfo: {},
@@ -165,14 +173,12 @@ describe("ErrorBoundary", () => {
 		});
 
 		describe("in development mode", () => {
-			let nodeEnv: jest.ReplaceProperty<string | undefined>;
-
 			beforeAll(() => {
-				nodeEnv = jest.replaceProperty(process.env, "NODE_ENV", "development");
+				vi.stubEnv("NODE_ENV", "development");
 			});
 
 			afterAll(() => {
-				nodeEnv.restore();
+				vi.unstubAllEnvs();
 			});
 
 			it("should show technical details in development", () => {
@@ -180,7 +186,7 @@ describe("ErrorBoundary", () => {
 				testError.stack = "Error: Test error\\n    at test.js:1:1";
 
 				// Mock handleComponentError to return error with stack
-				jest.mocked(handleComponentError).mockReturnValueOnce({
+				vi.mocked(handleComponentError).mockReturnValueOnce({
 					hasError: true,
 					error: testError,
 					errorInfo: {},
@@ -205,21 +211,19 @@ describe("ErrorBoundary", () => {
 		});
 
 		describe("in production mode", () => {
-			let nodeEnv: jest.ReplaceProperty<string | undefined>;
-
 			beforeAll(() => {
-				nodeEnv = jest.replaceProperty(process.env, "NODE_ENV", "production");
+				vi.stubEnv("NODE_ENV", "production");
 			});
 
 			afterAll(() => {
-				nodeEnv.restore();
+				vi.unstubAllEnvs();
 			});
 
 			it("should not show technical details in production", () => {
 				const testError = new Error("Test error");
 				testError.stack = "Error: Test error\\n    at test.js:1:1";
 
-				jest.mocked(handleComponentError).mockReturnValueOnce({
+				vi.mocked(handleComponentError).mockReturnValueOnce({
 					hasError: true,
 					error: testError,
 					errorInfo: {},

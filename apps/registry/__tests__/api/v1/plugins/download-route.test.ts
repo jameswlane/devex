@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { NextRequest } from "next/server";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type {
 	Plugin,
 	PluginVersion,
 } from "../../../../generated/prisma/client";
 
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
-		pluginVersion: { findUnique: jest.fn() },
+		plugin: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+		pluginVersion: { findUnique: vi.fn() },
 	},
 }));
 
@@ -16,13 +16,13 @@ import { GET } from "@/app/api/v1/plugins/[id]/download/[platform]/route";
 
 type MockPrisma = {
 	plugin: {
-		findUnique: jest.Mock<
+		findUnique: Mock<
 			(args: { where: { name: string } }) => Promise<Plugin | null>
 		>;
-		findFirst: jest.Mock<
+		findFirst: Mock<
 			(args: { where: { shortName: string } }) => Promise<Plugin | null>
 		>;
-		update: jest.Mock<
+		update: Mock<
 			(args: {
 				where: { id: string };
 				data: {
@@ -33,7 +33,7 @@ type MockPrisma = {
 		>;
 	};
 	pluginVersion: {
-		findUnique: jest.Mock<
+		findUnique: Mock<
 			(args: {
 				where: { pluginId_version: { pluginId: string; version: string } };
 			}) => Promise<PluginVersion | null>
@@ -41,7 +41,7 @@ type MockPrisma = {
 	};
 };
 
-const { prisma: mockPrisma } = jest.requireMock("@/lib/prisma") as {
+const { prisma: mockPrisma } = (await import("@/lib/prisma")) as unknown as {
 	prisma: MockPrisma;
 };
 
@@ -126,7 +126,7 @@ const params = {
 
 describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
 		mockPrisma.plugin.findFirst.mockResolvedValue(null);
 		mockPrisma.plugin.update.mockResolvedValue(plugin);

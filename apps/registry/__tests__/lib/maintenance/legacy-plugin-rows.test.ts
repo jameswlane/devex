@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	findLegacyPluginRows,
 	removeLegacyPluginRows,
@@ -10,21 +10,21 @@ type Row = Record<string, unknown>;
 function mockDb(aliased: Row[], candidates: Row[]) {
 	const tx = {
 		plugin: {
-			update: jest
+			update: vi
 				.fn<(args: unknown) => Promise<unknown>>()
 				.mockResolvedValue({}),
-			delete: jest
+			delete: vi
 				.fn<(args: unknown) => Promise<unknown>>()
 				.mockResolvedValue({}),
 		},
 	};
-	const findMany = jest
+	const findMany = vi
 		.fn<(args: unknown) => Promise<Row[]>>()
 		.mockResolvedValueOnce(aliased)
 		.mockResolvedValueOnce(candidates);
 	const db = {
 		plugin: { findMany },
-		$transaction: jest.fn(async (fn: (client: typeof tx) => Promise<void>) =>
+		$transaction: vi.fn(async (fn: (client: typeof tx) => Promise<void>) =>
 			fn(tx),
 		),
 	};

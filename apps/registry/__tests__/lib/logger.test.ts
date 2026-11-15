@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createApiError,
 	createDatabaseError,
@@ -12,10 +13,10 @@ import {
 
 // Mock console methods to capture output
 const mockConsole = {
-	error: jest.fn(),
-	warn: jest.fn(),
-	info: jest.fn(),
-	debug: jest.fn(),
+	error: vi.fn(),
+	warn: vi.fn(),
+	info: vi.fn(),
+	debug: vi.fn(),
 };
 
 // Replace console methods with mocks
@@ -229,11 +230,12 @@ describe("Logger Module", () => {
 
 		describe("debug logging", () => {
 			afterEach(() => {
-				jest.restoreAllMocks();
+				vi.restoreAllMocks();
+				vi.unstubAllEnvs();
 			});
 
 			it("should log debug messages in development", () => {
-				jest.replaceProperty(process.env, "NODE_ENV", "development");
+				vi.stubEnv("NODE_ENV", "development");
 				const devLogger = new StructuredLogger();
 
 				devLogger.debug("Debug message", { debugInfo: "test" });
@@ -245,7 +247,7 @@ describe("Logger Module", () => {
 			});
 
 			it("should not log debug messages in production", () => {
-				jest.replaceProperty(process.env, "NODE_ENV", "production");
+				vi.stubEnv("NODE_ENV", "production");
 				const prodLogger = new StructuredLogger();
 
 				prodLogger.debug("Debug message", { debugInfo: "test" });

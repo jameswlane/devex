@@ -1,31 +1,24 @@
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	jest,
-} from "@jest/globals";
 import { invalidateByTag } from "@vercel/functions";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	invalidateCdnTags,
 	pluginCacheTags,
 	requestPluginCdnPurge,
 } from "@/lib/cdn-cache";
 
-jest.mock("@vercel/functions", () => ({
-	invalidateByTag: jest.fn<typeof invalidateByTag>(),
+vi.mock("@vercel/functions", () => ({
+	invalidateByTag: vi.fn<typeof invalidateByTag>(),
 }));
 const originalKey = process.env.REVALIDATE_API_KEY;
 const originalUrl = process.env.REGISTRY_URL;
 const originalFetch = global.fetch;
-const fetchMock = jest.fn<typeof fetch>();
+const fetchMock = vi.fn<typeof fetch>();
 beforeEach(() => {
 	delete process.env.REVALIDATE_API_KEY;
 	delete process.env.REGISTRY_URL;
 	global.fetch = fetchMock;
-	jest.mocked(invalidateByTag).mockResolvedValue(undefined);
-	jest.spyOn(console, "warn").mockImplementation(() => {});
+	vi.mocked(invalidateByTag).mockResolvedValue(undefined);
+	vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 afterEach(() => {
 	global.fetch = originalFetch;
@@ -33,7 +26,7 @@ afterEach(() => {
 	else process.env.REVALIDATE_API_KEY = originalKey;
 	if (originalUrl === undefined) delete process.env.REGISTRY_URL;
 	else process.env.REGISTRY_URL = originalUrl;
-	jest.restoreAllMocks();
+	vi.restoreAllMocks();
 });
 describe("CDN cache tags", () => {
 	it("includes collection tags to cover aliases and registry responses", () => {
@@ -52,9 +45,9 @@ describe("CDN cache tags", () => {
 		]);
 	});
 	it("warns on runtime failure without exposing the error", async () => {
-		jest
-			.mocked(invalidateByTag)
-			.mockRejectedValue(new Error("sensitive request"));
+		vi.mocked(invalidateByTag).mockRejectedValue(
+			new Error("sensitive request"),
+		);
 		await expect(invalidateCdnTags(["plugins"])).resolves.toBeUndefined();
 		expect(console.warn).toHaveBeenCalledWith(
 			"CDN purge failed; cache TTL remains the freshness fallback",

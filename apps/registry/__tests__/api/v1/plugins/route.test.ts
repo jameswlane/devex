@@ -1,37 +1,38 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { NextRequest } from "next/server";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 
 // Setup all mocks before imports
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
 		plugin: {
-			findMany: jest.fn(),
-			count: jest.fn(),
+			findMany: vi.fn(),
+			count: vi.fn(),
 		},
 	},
 }));
 
-jest.mock("@/lib/transformation-service", () => ({
+vi.mock("@/lib/transformation-service", () => ({
 	transformationService: {
-		transformPlugins: jest.fn(),
+		transformPlugins: vi.fn(),
 	},
 }));
 
-jest.mock("@/lib/validation", () => ({
-	validatePaginationParams: jest.fn(() => ({
+vi.mock("@/lib/validation", () => ({
+	validatePaginationParams: vi.fn(() => ({
 		success: true,
 		data: { page: 1, limit: 50 },
 	})),
-	validatePluginType: jest.fn((val) => val),
-	validateSearchQuery: jest.fn((val) => val),
+	validatePluginType: vi.fn((val) => val),
+	validateSearchQuery: vi.fn((val) => val),
 }));
 
-jest.mock("@/lib/logger", () => ({
-	createApiError: jest.fn(() => new Response("Error", { status: 500 })),
-	logDatabaseError: jest.fn(),
+vi.mock("@/lib/logger", () => ({
+	logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+	createApiError: vi.fn(() => new Response("Error", { status: 500 })),
+	logDatabaseError: vi.fn(),
 }));
 
-jest.mock("@/lib/config", () => ({
+vi.mock("@/lib/config", () => ({
 	REGISTRY_CONFIG: {
 		pagination: {
 			defaultLimit: 50,
@@ -44,13 +45,13 @@ jest.mock("@/lib/config", () => ({
 import { GET } from "@/app/api/v1/plugins/route";
 
 // Get references to the mocked modules
-const { prisma: mockPrisma } = jest.requireMock("@/lib/prisma") as any;
-const { transformationService: mockTransformationService } = jest.requireMock(
-	"@/lib/transformation-service",
-) as any;
-const { validatePaginationParams } = jest.requireMock(
-	"@/lib/validation",
-) as any;
+const { prisma: mockPrisma } = (await import("@/lib/prisma")) as unknown as any;
+const { transformationService: mockTransformationService } = (await import(
+	"@/lib/transformation-service"
+)) as unknown as any;
+const { validatePaginationParams } = (await import(
+	"@/lib/validation"
+)) as unknown as any;
 
 const createMockRequest = (params: Record<string, string> = {}) => {
 	const url = new URL("http://localhost/api/v1/plugins");
@@ -104,7 +105,7 @@ const mockFormattedPlugin = {
 
 describe("/api/v1/plugins", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 
 		// Setup default mock responses
 		mockPrisma.plugin.findMany.mockResolvedValue([mockPlugin]);
@@ -280,14 +281,14 @@ describe("/api/v1/plugins", () => {
 				error: mockError,
 			});
 
-			const { createApiError } = jest.requireMock<{
-				createApiError: jest.Mock<
+			const { createApiError } = (await import("@/lib/logger")) as unknown as {
+				createApiError: Mock<
 					(
 						...args: Parameters<typeof import("@/lib/logger").createApiError>
 					) => Response
 				>;
-				logDatabaseError: jest.Mock;
-			}>("@/lib/logger");
+				logDatabaseError: Mock;
+			};
 			createApiError.mockReturnValue(
 				new Response("Validation Error", { status: 400 }),
 			);
@@ -354,14 +355,16 @@ describe("/api/v1/plugins", () => {
 			const dbError = new Error("Database connection failed");
 			mockPrisma.plugin.findMany.mockRejectedValue(dbError);
 
-			const { createApiError, logDatabaseError } = jest.requireMock<{
-				createApiError: jest.Mock<
+			const { createApiError, logDatabaseError } = (await import(
+				"@/lib/logger"
+			)) as unknown as {
+				createApiError: Mock<
 					(
 						...args: Parameters<typeof import("@/lib/logger").createApiError>
 					) => Response
 				>;
-				logDatabaseError: jest.Mock;
-			}>("@/lib/logger");
+				logDatabaseError: Mock;
+			};
 			createApiError.mockReturnValue(
 				new Response("Database Error", { status: 500 }),
 			);

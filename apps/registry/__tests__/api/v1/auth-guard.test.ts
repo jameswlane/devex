@@ -1,100 +1,99 @@
+import { NextRequest } from "next/server";
 import {
 	afterAll,
 	beforeEach,
 	describe,
 	expect,
 	it,
-	jest,
-} from "@jest/globals";
-import { NextRequest } from "next/server";
+	type Mock,
+	vi,
+} from "vitest";
 import { invalidateCdnTags } from "@/lib/cdn-cache";
 
-jest.mock("@/lib/cdn-cache", () => ({
-	...jest.requireActual<typeof import("@/lib/cdn-cache")>("@/lib/cdn-cache"),
-	invalidateCdnTags: jest.fn<typeof invalidateCdnTags>(),
+vi.mock("@/lib/cdn-cache", async () => ({
+	...(await vi.importActual<typeof import("@/lib/cdn-cache")>(
+		"@/lib/cdn-cache",
+	)),
+	invalidateCdnTags: vi.fn<typeof invalidateCdnTags>(),
 }));
 
 // Setup all mocks before imports
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
 		application: {
-			create: jest.fn(),
-			update: jest.fn(),
-			delete: jest.fn(),
+			create: vi.fn(),
+			update: vi.fn(),
+			delete: vi.fn(),
 		},
 		plugin: {
-			create: jest.fn(),
-			update: jest.fn(),
-			delete: jest.fn(),
+			create: vi.fn(),
+			update: vi.fn(),
+			delete: vi.fn(),
 		},
 	},
 }));
 
-jest.mock("@/lib/error-handler", () => ({
-	withErrorHandling: jest.fn((handler) => handler),
-	safeDatabase: jest.fn((fn: () => unknown) => fn()),
+vi.mock("@/lib/error-handler", () => ({
+	withErrorHandling: vi.fn((handler) => handler),
+	safeDatabase: vi.fn((fn: () => unknown) => fn()),
 }));
 
-jest.mock("@/lib/transformation-service", () => ({
+vi.mock("@/lib/transformation-service", () => ({
 	transformationService: {},
 }));
 
-jest.mock("@/lib/response-optimization", () => {
-	const { NextResponse } = jest.requireActual(
+vi.mock("@/lib/response-optimization", async () => {
+	const { NextResponse } = (await vi.importActual(
 		"next/server",
-	) as typeof import("next/server");
+	)) as typeof import("next/server");
 	return {
 		ResponseType: { REALTIME: "realtime" },
-		createOptimizedResponse: jest.fn((data: unknown) =>
-			NextResponse.json(data),
-		),
-		createPaginatedResponse: jest.fn((data: unknown) =>
-			NextResponse.json(data),
-		),
+		createOptimizedResponse: vi.fn((data: unknown) => NextResponse.json(data)),
+		createPaginatedResponse: vi.fn((data: unknown) => NextResponse.json(data)),
 	};
 });
 
-jest.mock("@/lib/cache-invalidation", () => ({
-	invalidateOnDataChange: jest.fn(),
-	withCacheInvalidation: jest.fn(),
-	invalidateRegistryCache: jest.fn(),
+vi.mock("@/lib/cache-invalidation", () => ({
+	invalidateOnDataChange: vi.fn(),
+	withCacheInvalidation: vi.fn(),
+	invalidateRegistryCache: vi.fn(),
 	cacheInvalidation: {
-		invalidate: jest.fn(),
-		clearAllCaches: jest.fn(),
-		getStats: jest.fn(() => ({})),
-		isInvalidationInProgress: jest.fn(() => false),
+		invalidate: vi.fn(),
+		clearAllCaches: vi.fn(),
+		getStats: vi.fn(() => ({})),
+		isInvalidationInProgress: vi.fn(() => false),
 	},
 	CACHE_TAGS: {},
 	CACHE_PATTERNS: {},
 }));
 
-jest.mock("@/lib/cache-revalidation", () => ({
-	revalidateCacheTag: jest.fn(),
-	revalidateCacheTags: jest.fn(),
-	revalidateCachePath: jest.fn(),
-	revalidateStatsCaches: jest.fn(),
-	revalidateEntity: jest.fn(),
+vi.mock("@/lib/cache-revalidation", () => ({
+	revalidateCacheTag: vi.fn(),
+	revalidateCacheTags: vi.fn(),
+	revalidateCachePath: vi.fn(),
+	revalidateStatsCaches: vi.fn(),
+	revalidateEntity: vi.fn(),
 	CacheTags: {},
 }));
 
-jest.mock("@/lib/db-health", () => ({
-	handleHealthCheck: jest.fn(),
+vi.mock("@/lib/db-health", () => ({
+	handleHealthCheck: vi.fn(),
 	DatabaseRecovery: {},
 	dbHealthMonitor: {
-		clearCache: jest.fn(),
-		checkHealth: jest.fn(async () => ({
+		clearCache: vi.fn(),
+		checkHealth: vi.fn(async () => ({
 			status: "healthy",
 			timestamp: "2026-01-01T00:00:00.000Z",
 		})),
 	},
 }));
 
-jest.mock("@/lib/startup", () => ({
-	getStartupHealth: jest.fn(),
+vi.mock("@/lib/startup", () => ({
+	getStartupHealth: vi.fn(),
 }));
 
 const mockAuditLog =
-	jest.fn<
+	vi.fn<
 		(
 			eventType: string,
 			action: string,
@@ -102,10 +101,10 @@ const mockAuditLog =
 			details: { result?: string },
 		) => Promise<void>
 	>();
-jest.mock("@/lib/audit-log", () => ({
+vi.mock("@/lib/audit-log", () => ({
 	AuditEventType: { ADMIN_ACTION: "admin_action" },
-	extractAuditContext: jest.fn(() => ({ requestId: "req-1" })),
-	initializeAuditLogger: jest.fn(() => ({ log: mockAuditLog })),
+	extractAuditContext: vi.fn(() => ({ requestId: "req-1" })),
+	initializeAuditLogger: vi.fn(() => ({ log: mockAuditLog })),
 }));
 
 import { POST as refreshHealth } from "@/app/api/health/route";
@@ -128,7 +127,7 @@ import { POST as createPlugin } from "@/app/api/v1/plugins/route";
 import { POST as revalidate } from "@/app/api/v1/revalidate/route";
 import { extractBearerToken, tokensMatch } from "@/lib/auth/require-api-key";
 
-type MockFn = jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+type MockFn = Mock<(...args: unknown[]) => Promise<unknown>>;
 type CrudMocks = Record<"create" | "update" | "delete", MockFn>;
 
 interface ErrorBody {
@@ -136,18 +135,24 @@ interface ErrorBody {
 	error: { code: string };
 }
 
-const { prisma: mockPrisma } = jest.requireMock<{
+const { prisma: mockPrisma } = (await import("@/lib/prisma")) as unknown as {
 	prisma: Record<"application" | "plugin", CrudMocks>;
-}>("@/lib/prisma");
-const { cacheInvalidation: mockCacheInvalidation } = jest.requireMock<{
+};
+const { cacheInvalidation: mockCacheInvalidation } = (await import(
+	"@/lib/cache-invalidation"
+)) as unknown as {
 	cacheInvalidation: Record<"invalidate" | "clearAllCaches", MockFn>;
-}>("@/lib/cache-invalidation");
-const { revalidateCacheTags: mockRevalidateCacheTags } = jest.requireMock<{
+};
+const { revalidateCacheTags: mockRevalidateCacheTags } = (await import(
+	"@/lib/cache-revalidation"
+)) as unknown as {
 	revalidateCacheTags: MockFn;
-}>("@/lib/cache-revalidation");
-const { dbHealthMonitor: mockDbHealthMonitor } = jest.requireMock<{
+};
+const { dbHealthMonitor: mockDbHealthMonitor } = (await import(
+	"@/lib/db-health"
+)) as unknown as {
 	dbHealthMonitor: Record<"clearCache", MockFn>;
-}>("@/lib/db-health");
+};
 
 const ADMIN_KEY = "admin-secret-value";
 const REVALIDATE_KEY = "revalidate-secret-value";

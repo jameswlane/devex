@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it } from "vitest";
 import { buildReleasePayload } from "../../../lib/releases/github-release-payload";
 
 const fixture = path.resolve(

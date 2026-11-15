@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { describe, expect, it, vi } from "vitest";
 import {
 	applySecurityHeaders,
 	createSecureErrorResponse,
@@ -11,11 +12,11 @@ import {
 } from "../../lib/security";
 
 // Mock logger to avoid console output during tests
-jest.mock("../../lib/logger", () => ({
+vi.mock("../../lib/logger", () => ({
 	logger: {
-		warn: jest.fn(),
-		error: jest.fn(),
-		info: jest.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		info: vi.fn(),
 	},
 }));
 
@@ -101,7 +102,7 @@ describe("Security Module", () => {
 				url: null, // This should cause an error
 				method: "GET",
 				headers: {
-					get: jest.fn().mockReturnValue(null),
+					get: vi.fn().mockReturnValue(null),
 				},
 			} as unknown as NextRequest;
 
@@ -355,7 +356,7 @@ describe("Security Module", () => {
 				method: "GET",
 			});
 
-			const mockHandler = jest.fn();
+			const mockHandler = vi.fn();
 
 			const response = await securityMiddleware(mockRequest, mockHandler);
 
@@ -369,7 +370,7 @@ describe("Security Module", () => {
 			});
 
 			const mockResponse = new Response("success");
-			const mockHandler = jest.fn().mockResolvedValue(mockResponse);
+			const mockHandler = vi.fn().mockResolvedValue(mockResponse);
 
 			const response = await securityMiddleware(mockRequest, mockHandler);
 
@@ -382,9 +383,7 @@ describe("Security Module", () => {
 				method: "GET",
 			});
 
-			const mockHandler = jest
-				.fn()
-				.mockRejectedValue(new Error("Handler error"));
+			const mockHandler = vi.fn().mockRejectedValue(new Error("Handler error"));
 
 			const response = await securityMiddleware(mockRequest, mockHandler);
 

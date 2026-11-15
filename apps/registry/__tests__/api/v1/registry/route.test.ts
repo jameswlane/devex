@@ -1,81 +1,81 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { NextRequest } from "next/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Setup all mocks before imports
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		$transaction: jest.fn(),
-		$disconnect: jest.fn(),
-		$connect: jest.fn(),
-		$queryRaw: jest.fn(),
-		$executeRaw: jest.fn(),
-		plugin: { findMany: jest.fn(), count: jest.fn() },
-		application: { findMany: jest.fn(), count: jest.fn() },
-		config: { findMany: jest.fn(), count: jest.fn() },
-		stack: { findMany: jest.fn(), count: jest.fn() },
-		registryStats: { findFirst: jest.fn() },
+		$transaction: vi.fn(),
+		$disconnect: vi.fn(),
+		$connect: vi.fn(),
+		$queryRaw: vi.fn(),
+		$executeRaw: vi.fn(),
+		plugin: { findMany: vi.fn(), count: vi.fn() },
+		application: { findMany: vi.fn(), count: vi.fn() },
+		config: { findMany: vi.fn(), count: vi.fn() },
+		stack: { findMany: vi.fn(), count: vi.fn() },
+		registryStats: { findFirst: vi.fn() },
 	},
 }));
 
 // Mock Redis to avoid connection warnings
-jest.mock("@/lib/redis", () => ({
+vi.mock("@/lib/redis", () => ({
 	redis: {
-		get: jest.fn(),
-		set: jest.fn(),
-		incr: jest.fn(),
-		expire: jest.fn(),
-		del: jest.fn(),
-		exists: jest.fn(),
-		mget: jest.fn(),
-		mset: jest.fn(),
-		ping: jest.fn(),
-		disconnect: jest.fn(),
+		get: vi.fn(),
+		set: vi.fn(),
+		incr: vi.fn(),
+		expire: vi.fn(),
+		del: vi.fn(),
+		exists: vi.fn(),
+		mget: vi.fn(),
+		mset: vi.fn(),
+		ping: vi.fn(),
+		disconnect: vi.fn(),
 	},
 	upstashRedis: {},
 	ioRedisClient: {},
-	createRedisStore: jest.fn(() => ({
-		get: jest.fn(),
-		set: jest.fn(),
-		incr: jest.fn(),
-		expire: jest.fn(),
-		del: jest.fn(),
-		exists: jest.fn(),
-		mget: jest.fn(),
-		mset: jest.fn(),
-		ping: jest.fn(),
-		disconnect: jest.fn(),
+	createRedisStore: vi.fn(() => ({
+		get: vi.fn(),
+		set: vi.fn(),
+		incr: vi.fn(),
+		expire: vi.fn(),
+		del: vi.fn(),
+		exists: vi.fn(),
+		mget: vi.fn(),
+		mset: vi.fn(),
+		ping: vi.fn(),
+		disconnect: vi.fn(),
 	})),
 }));
 
 // Mock db-health
-jest.mock("@/lib/db-health", () => ({
+vi.mock("@/lib/db-health", () => ({
 	dbCircuitBreaker: {
-		execute: jest.fn((fn: () => Promise<unknown>) => fn()),
+		execute: vi.fn((fn: () => Promise<unknown>) => fn()),
 	},
 	dbHealthMonitor: {
-		checkHealth: jest.fn(),
+		checkHealth: vi.fn(),
 	},
 }));
 
 // Mock rate limiting - define the mock implementation inline
-jest.mock("@/lib/rate-limit", () => ({
-	withRateLimit: jest.fn((handler) => handler),
+vi.mock("@/lib/rate-limit", () => ({
+	withRateLimit: vi.fn((handler) => handler),
 	RATE_LIMIT_CONFIGS: {
 		registry: { windowMs: 60000, maxRequests: 100 },
 	},
 }));
 
 // Mock logger
-jest.mock("@/lib/logger", () => ({
-	logDatabaseError: jest.fn(),
-	createApiError: jest.fn(() => new Response("Error", { status: 500 })),
+vi.mock("@/lib/logger", () => ({
+	logDatabaseError: vi.fn(),
+	createApiError: vi.fn(() => new Response("Error", { status: 500 })),
 }));
 
 // Import route handler after all mocks are set up
 import { GET } from "@/app/api/v1/registry/route";
 
 // Get references to the mocked modules
-const { prisma: mockPrisma } = jest.requireMock("@/lib/prisma") as any;
+const { prisma: mockPrisma } = (await import("@/lib/prisma")) as unknown as any;
 
 const createMockRequest = (params: Record<string, string> = {}) => {
 	const url = new URL("http://localhost/api/v1/registry");
@@ -90,30 +90,30 @@ const createMockRequest = (params: Record<string, string> = {}) => {
 
 describe("/api/v1/registry", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 
 		// Setup default mock responses
 		mockPrisma.$transaction.mockImplementation(
 			async (callback: (tx: unknown) => Promise<unknown>) => {
 				return await callback({
 					plugin: {
-						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 					},
 					application: {
-						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 					},
 					config: {
-						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 					},
 					stack: {
-						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 					},
 					registryStats: {
-						findFirst: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+						findFirst: vi.fn<() => Promise<null>>().mockResolvedValue(null),
 					},
 				});
 			},
@@ -129,31 +129,31 @@ describe("/api/v1/registry", () => {
 				async (callback: (tx: unknown) => Promise<unknown>) => {
 					const tx = {
 						plugin: {
-							findMany: jest
+							findMany: vi
 								.fn<() => Promise<(typeof mockPlugin)[]>>()
 								.mockResolvedValue([mockPlugin]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 						},
 						application: {
-							findMany: jest
+							findMany: vi
 								.fn<() => Promise<(typeof mockApplication)[]>>()
 								.mockResolvedValue([mockApplication]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 						},
 						config: {
-							findMany: jest
+							findMany: vi
 								.fn<() => Promise<(typeof mockConfig)[]>>()
 								.mockResolvedValue([mockConfig]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 						},
 						stack: {
-							findMany: jest
+							findMany: vi
 								.fn<() => Promise<(typeof mockStack)[]>>()
 								.mockResolvedValue([mockStack]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 						},
 						registryStats: {
-							findFirst: jest
+							findFirst: vi
 								.fn<() => Promise<typeof mockStats>>()
 								.mockResolvedValue(mockStats),
 						},
@@ -184,23 +184,23 @@ describe("/api/v1/registry", () => {
 				async (callback: (tx: unknown) => Promise<unknown>) => {
 					const tx = {
 						plugin: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						application: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						config: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						stack: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						registryStats: {
-							findFirst: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+							findFirst: vi.fn<() => Promise<null>>().mockResolvedValue(null),
 						},
 					};
 
@@ -223,25 +223,25 @@ describe("/api/v1/registry", () => {
 				async (callback: (tx: unknown) => Promise<unknown>) => {
 					const tx = {
 						plugin: {
-							findMany: jest
+							findMany: vi
 								.fn<() => Promise<(typeof mockPlugin)[]>>()
 								.mockResolvedValue([mockPlugin]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 						},
 						application: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						config: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						stack: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						registryStats: {
-							findFirst: jest
+							findFirst: vi
 								.fn<() => Promise<typeof mockStats>>()
 								.mockResolvedValue(mockStats),
 						},
@@ -263,23 +263,23 @@ describe("/api/v1/registry", () => {
 				async (callback: (tx: unknown) => Promise<unknown>) => {
 					const tx = {
 						plugin: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						application: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						config: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						stack: {
-							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
-							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
 						},
 						registryStats: {
-							findFirst: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+							findFirst: vi.fn<() => Promise<null>>().mockResolvedValue(null),
 						},
 					};
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	checkRedisHealth,
 	createRedisStore,
@@ -6,14 +6,14 @@ import {
 } from "../../lib/redis";
 
 // Mock the external Redis libraries
-jest.mock("@upstash/redis");
-jest.mock("ioredis");
-jest.mock("../../lib/logger", () => ({
+vi.mock("@upstash/redis");
+vi.mock("ioredis");
+vi.mock("../../lib/logger", () => ({
 	logger: {
-		info: jest.fn(),
-		warn: jest.fn(),
-		error: jest.fn(),
-		debug: jest.fn(),
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		debug: vi.fn(),
 	},
 }));
 
@@ -21,7 +21,7 @@ describe("Redis Store System", () => {
 	const originalEnv = process.env;
 
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		process.env = { ...originalEnv };
 	});
 

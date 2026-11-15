@@ -1,5 +1,5 @@
 /**
- * @jest-environment jsdom
+ * @vitest-environment jsdom
  */
 
 import {
@@ -10,22 +10,22 @@ import {
 	within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import "@testing-library/jest-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToolSearch } from "../ToolSearch";
 
 // Mock the error handling utilities
-jest.mock("../../utils/error-handling", () => ({
-	formatErrorMessage: jest.fn((error) => error?.message || "Unknown error"),
-	logError: jest.fn(),
-	withRetry: jest.fn(async (operation) => await operation()),
-	NetworkError: jest.fn().mockImplementation(function (message) {
+vi.mock("../../utils/error-handling", () => ({
+	formatErrorMessage: vi.fn((error) => error?.message || "Unknown error"),
+	logError: vi.fn(),
+	withRetry: vi.fn(async (operation) => await operation()),
+	NetworkError: vi.fn().mockImplementation(function (message) {
 		this.message = message;
 		this.name = "NetworkError";
 	}),
 }));
 
-// fetch is replaced with a jest.fn() in jest.setup.js
-const mockFetch = jest.mocked(fetch);
+// fetch is replaced with a vi.fn() in vi.setup.js
+const mockFetch = vi.mocked(fetch);
 
 function jsonResponse(body: unknown): Response {
 	// Only the members ToolSearch reads are needed
@@ -121,10 +121,10 @@ const mockToolsResponse = {
 
 // Route mocked fetch calls by URL so the metadata and tools requests can be
 // controlled independently of the order the component issues them in.
-const metadataHandler = jest.fn(
+const metadataHandler = vi.fn(
 	async (): Promise<Response> => jsonResponse(mockMetadata),
 );
-const toolsHandler = jest.fn(
+const toolsHandler = vi.fn(
 	async (_url: string): Promise<Response> => jsonResponse(mockToolsResponse),
 );
 
@@ -143,7 +143,7 @@ describe("ToolSearch", () => {
 	});
 
 	afterEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 	});
 
 	describe("Component Loading", () => {

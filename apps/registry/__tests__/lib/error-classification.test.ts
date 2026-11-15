@@ -1,12 +1,4 @@
 import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	jest,
-} from "@jest/globals";
-import {
 	PrismaClientInitializationError,
 	PrismaClientKnownRequestError,
 	PrismaClientRustPanicError,
@@ -14,6 +6,15 @@ import {
 	PrismaClientValidationError,
 } from "@prisma/client/runtime/client";
 import { NextRequest, type NextResponse } from "next/server";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type MockInstance,
+	vi,
+} from "vitest";
 import {
 	classifyError,
 	isRetryableDatabaseError,
@@ -94,16 +95,16 @@ function setNodeEnv(value: string) {
 
 describe("error classification and responses", () => {
 	const originalNodeEnv = process.env.NODE_ENV;
-	let errorSpy: jest.SpiedFunction<typeof logger.error>;
+	let errorSpy: MockInstance<typeof logger.error>;
 
 	beforeEach(() => {
-		errorSpy = jest.spyOn(logger, "error").mockImplementation(() => {});
-		jest.spyOn(logger, "warn").mockImplementation(() => {});
-		jest.spyOn(logger, "info").mockImplementation(() => {});
+		errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+		vi.spyOn(logger, "warn").mockImplementation(() => {});
+		vi.spyOn(logger, "info").mockImplementation(() => {});
 	});
 
 	afterEach(() => {
-		jest.restoreAllMocks();
+		vi.restoreAllMocks();
 		setNodeEnv(originalNodeEnv ?? "test");
 	});
 
@@ -249,9 +250,7 @@ describe("error classification and responses", () => {
 	describe("safeDatabase", () => {
 		it("fails fast on a missing table instead of retrying", async () => {
 			const error = knownError("P2021", MISSING_TABLE_MESSAGE);
-			const operation = jest
-				.fn<() => Promise<never>>()
-				.mockRejectedValue(error);
+			const operation = vi.fn<() => Promise<never>>().mockRejectedValue(error);
 
 			await expect(
 				safeDatabase(operation, { operation: "fetch-plugin-version" }),

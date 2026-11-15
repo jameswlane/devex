@@ -1,12 +1,5 @@
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	jest,
-} from "@jest/globals";
 import { invalidateByTag } from "@vercel/functions";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/v1/plugins/[id]/releases/route";
 import {
 	AuditEventType,
@@ -18,25 +11,27 @@ import { computeReleaseSignature } from "@/lib/releases/contract";
 import { recordPluginRelease } from "@/lib/releases/record";
 import { payload } from "../../../lib/releases/fixture";
 
-jest.mock("@vercel/functions", () => ({
-	invalidateByTag: jest.fn<typeof invalidateByTag>(),
+vi.mock("@vercel/functions", () => ({
+	invalidateByTag: vi.fn<typeof invalidateByTag>(),
 }));
-jest.mock("@/lib/cdn-cache", () => ({
-	...jest.requireActual<typeof import("@/lib/cdn-cache")>("@/lib/cdn-cache"),
-	invalidateCdnTags: jest.fn<typeof invalidateCdnTags>(),
+vi.mock("@/lib/cdn-cache", async () => ({
+	...(await vi.importActual<typeof import("@/lib/cdn-cache")>(
+		"@/lib/cdn-cache",
+	)),
+	invalidateCdnTags: vi.fn<typeof invalidateCdnTags>(),
 }));
-jest.mock("@/lib/releases/record", () => ({
-	recordPluginRelease: jest.fn<typeof recordPluginRelease>(),
+vi.mock("@/lib/releases/record", () => ({
+	recordPluginRelease: vi.fn<typeof recordPluginRelease>(),
 }));
-jest.mock("@/lib/audit-log", () => ({
+vi.mock("@/lib/audit-log", () => ({
 	AuditEventType: { ADMIN_ACTION: "admin_action" },
-	extractAuditContext: jest.fn<() => object>().mockReturnValue({}),
-	initializeAuditLogger: jest.fn<typeof initializeAuditLogger>(),
+	extractAuditContext: vi.fn<() => object>().mockReturnValue({}),
+	initializeAuditLogger: vi.fn<typeof initializeAuditLogger>(),
 }));
-jest.mock("@/lib/logger", () => ({
-	logger: { warn: jest.fn(), error: jest.fn() },
+vi.mock("@/lib/logger", () => ({
+	logger: { warn: vi.fn(), error: vi.fn() },
 }));
-const auditLog = jest.fn<AuditLogger["log"]>();
+const auditLog = vi.fn<AuditLogger["log"]>();
 const originalSecret = process.env.REGISTRY_RELEASE_WEBHOOK_SECRET;
 const context = { params: Promise.resolve({ id: payload.plugin }) };
 function request(
@@ -64,15 +59,15 @@ function request(
 }
 beforeEach(() => {
 	process.env.REGISTRY_RELEASE_WEBHOOK_SECRET = "test-secret";
-	jest.mocked(invalidateCdnTags).mockResolvedValue(undefined);
-	jest.mocked(recordPluginRelease).mockResolvedValue({
+	vi.mocked(invalidateCdnTags).mockResolvedValue(undefined);
+	vi.mocked(recordPluginRelease).mockResolvedValue({
 		pluginId: "plugin-id",
 		versionCreated: true,
 		latestChanged: true,
 	});
-	jest
-		.mocked(initializeAuditLogger)
-		.mockReturnValue({ log: auditLog } as unknown as AuditLogger);
+	vi.mocked(initializeAuditLogger).mockReturnValue({
+		log: auditLog,
+	} as unknown as AuditLogger);
 	auditLog.mockResolvedValue(undefined);
 });
 afterEach(() => {
@@ -110,7 +105,7 @@ describe("POST plugin release", () => {
 		);
 	});
 	it("returns 200 when refreshing a previously recorded version", async () => {
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-id",
 			versionCreated: false,
 			latestChanged: false,
@@ -123,12 +118,12 @@ describe("POST plugin release", () => {
 	});
 	it("does not fail the webhook when the CDN runtime purge fails", async () => {
 		const { invalidateCdnTags: realPurge } =
-			jest.requireActual<typeof import("@/lib/cdn-cache")>("@/lib/cdn-cache");
-		jest.mocked(invalidateCdnTags).mockImplementation(realPurge);
-		jest
-			.mocked(invalidateByTag)
-			.mockRejectedValue(new Error("CDN unavailable"));
-		const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+			await vi.importActual<typeof import("@/lib/cdn-cache")>(
+				"@/lib/cdn-cache",
+			);
+		vi.mocked(invalidateCdnTags).mockImplementation(realPurge);
+		vi.mocked(invalidateByTag).mockRejectedValue(new Error("CDN unavailable"));
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		expect((await POST(request(), context)).status).toBe(201);
 		expect(warn).toHaveBeenCalledWith(
 			expect.stringContaining("CDN purge failed"),
@@ -231,9 +226,9 @@ describe("POST plugin release", () => {
 		).toBe(413);
 	});
 	it("returns a no-store error for a failed write", async () => {
-		jest
-			.mocked(recordPluginRelease)
-			.mockRejectedValue(new Error("database unavailable"));
+		vi.mocked(recordPluginRelease).mockRejectedValue(
+			new Error("database unavailable"),
+		);
 		const response = await POST(request(), context);
 		expect(response.status).toBe(500);
 		expect(response.headers.get("cache-control")).toBe("no-store");

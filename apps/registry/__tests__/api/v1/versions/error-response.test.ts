@@ -1,24 +1,26 @@
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
+import { NextRequest, type NextResponse } from "next/server";
 import {
 	afterEach,
 	beforeEach,
 	describe,
 	expect,
 	it,
-	jest,
-} from "@jest/globals";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
-import { NextRequest, type NextResponse } from "next/server";
+	type Mock,
+	type MockInstance,
+	vi,
+} from "vitest";
 import type { Plugin } from "../../../../generated/prisma/client";
 
 // Real error-handler and logger; only the database and rate limiter are faked.
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: jest.fn(), findFirst: jest.fn() },
-		pluginVersion: { findUnique: jest.fn() },
+		plugin: { findUnique: vi.fn(), findFirst: vi.fn() },
+		pluginVersion: { findUnique: vi.fn() },
 	},
 }));
 
-jest.mock("@/lib/rate-limit-redis", () => ({
+vi.mock("@/lib/rate-limit-redis", () => ({
 	REDIS_RATE_LIMIT_CONFIGS: { default: {}, sync: {}, search: {}, registry: {} },
 	withRedisRateLimit: (
 		handler: (request: NextRequest) => Promise<NextResponse>,
@@ -30,15 +32,15 @@ import { logger } from "@/lib/logger";
 
 type MockPrisma = {
 	plugin: {
-		findUnique: jest.Mock<(args: unknown) => Promise<Plugin | null>>;
-		findFirst: jest.Mock<(args: unknown) => Promise<Plugin | null>>;
+		findUnique: Mock<(args: unknown) => Promise<Plugin | null>>;
+		findFirst: Mock<(args: unknown) => Promise<Plugin | null>>;
 	};
 	pluginVersion: {
-		findUnique: jest.Mock<(args: unknown) => Promise<never>>;
+		findUnique: Mock<(args: unknown) => Promise<never>>;
 	};
 };
 
-const { prisma: mockPrisma } = jest.requireMock("@/lib/prisma") as {
+const { prisma: mockPrisma } = (await import("@/lib/prisma")) as unknown as {
 	prisma: MockPrisma;
 };
 
@@ -63,12 +65,12 @@ function setNodeEnv(value: string) {
 
 describe("GET /api/v1/plugins/[id]/versions/latest with plugin_versions missing", () => {
 	const originalNodeEnv = process.env.NODE_ENV;
-	let errorSpy: jest.SpiedFunction<typeof logger.error>;
+	let errorSpy: MockInstance<typeof logger.error>;
 
 	beforeEach(() => {
-		errorSpy = jest.spyOn(logger, "error").mockImplementation(() => {});
-		jest.spyOn(logger, "warn").mockImplementation(() => {});
-		jest.spyOn(logger, "info").mockImplementation(() => {});
+		errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+		vi.spyOn(logger, "warn").mockImplementation(() => {});
+		vi.spyOn(logger, "info").mockImplementation(() => {});
 		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
 		mockPrisma.plugin.findFirst.mockResolvedValue(null);
 		mockPrisma.pluginVersion.findUnique.mockRejectedValue(
@@ -82,7 +84,7 @@ describe("GET /api/v1/plugins/[id]/versions/latest with plugin_versions missing"
 	});
 
 	afterEach(() => {
-		jest.restoreAllMocks();
+		vi.restoreAllMocks();
 		setNodeEnv(originalNodeEnv ?? "test");
 	});
 

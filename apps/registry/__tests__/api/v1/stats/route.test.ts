@@ -1,40 +1,47 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { NextRequest } from "next/server";
+import {
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type MockedFunction,
+	vi,
+} from "vitest";
 
 // Mock Next.js cache
-const mockUnstableCache = jest.fn((fn) => fn);
-jest.mock("next/cache", () => ({
+const mockUnstableCache = vi.hoisted(() => vi.fn((fn) => fn));
+vi.mock("next/cache", () => ({
 	unstable_cache: mockUnstableCache,
-	revalidateTag: jest.fn(),
-	revalidatePath: jest.fn(),
+	revalidateTag: vi.fn(),
+	revalidatePath: vi.fn(),
 }));
 
 // Setup Prisma mock before imports
-jest.mock("@/lib/prisma", () => ({
-	ensurePrisma: jest.fn(),
+vi.mock("@/lib/prisma", () => ({
+	ensurePrisma: vi.fn(),
 }));
 
 // Mock logger
-jest.mock("@/lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
 	logger: {
-		info: jest.fn(),
-		warn: jest.fn(),
-		error: jest.fn(),
-		debug: jest.fn(),
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		debug: vi.fn(),
 	},
-	logPerformance: jest.fn(),
-	createApiError: jest.fn(() => new Response("Error", { status: 500 })),
+	logPerformance: vi.fn(),
+	createApiError: vi.fn(() => new Response("Error", { status: 500 })),
 }));
 
 // Mock error handler
-jest.mock("@/lib/error-handler", () => ({
-	withErrorHandling: jest.fn((handler) => handler),
-	safeDatabase: jest.fn((fn: () => Promise<unknown>) => fn()),
+vi.mock("@/lib/error-handler", () => ({
+	withErrorHandling: vi.fn((handler) => handler),
+	safeDatabase: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 
 // Mock response optimization
-jest.mock("@/lib/response-optimization", () => ({
-	createOptimizedResponse: jest.fn(
+vi.mock("@/lib/response-optimization", () => ({
+	createOptimizedResponse: vi.fn(
 		(data: unknown, options: { headers: Record<string, string> }) => {
 			return new Response(JSON.stringify(data), {
 				status: 200,
@@ -69,7 +76,7 @@ const createMockRequest = (params: Record<string, string> = {}) => {
 		url: url.toString(),
 		nextUrl: url,
 		headers: {
-			get: jest.fn((name: string) => {
+			get: vi.fn((name: string) => {
 				if (name === "if-none-match") return params["if-none-match"] || null;
 				return null;
 			}),
@@ -77,12 +84,13 @@ const createMockRequest = (params: Record<string, string> = {}) => {
 	} as unknown as NextRequest;
 };
 
+const { ensurePrisma } = (await import("@/lib/prisma")) as any;
+
 describe("/api/v1/stats", () => {
 	let mockPrismaClient: any;
-	const { ensurePrisma } = jest.requireMock("@/lib/prisma") as any;
 
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 
 		// Reset unstable_cache to default behavior
 		mockUnstableCache.mockImplementation((fn) => fn);
@@ -90,13 +98,13 @@ describe("/api/v1/stats", () => {
 		mockPrismaClient = {
 			// Mock individual Prisma queries (new implementation)
 			application: {
-				count: jest
+				count: vi
 					.fn<() => Promise<number>>()
 					.mockResolvedValueOnce(50) // Total apps
 					.mockResolvedValueOnce(30) // Linux apps
 					.mockResolvedValueOnce(25) // macOS apps
 					.mockResolvedValueOnce(20), // Windows apps
-				groupBy: jest
+				groupBy: vi
 					.fn<
 						() => Promise<{ category: string; _count: { category: number } }[]>
 					>()
@@ -106,13 +114,13 @@ describe("/api/v1/stats", () => {
 					]),
 			},
 			plugin: {
-				count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
-				aggregate: jest
+				count: vi.fn<() => Promise<number>>().mockResolvedValue(25),
+				aggregate: vi
 					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 					.mockResolvedValue({
 						_sum: { downloadCount: 1000 },
 					}),
-				groupBy: jest
+				groupBy: vi
 					.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 					.mockResolvedValue([
 						{ type: "package-manager", _count: { type: 15 } },
@@ -120,13 +128,13 @@ describe("/api/v1/stats", () => {
 					]),
 			},
 			config: {
-				count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
-				aggregate: jest
+				count: vi.fn<() => Promise<number>>().mockResolvedValue(15),
+				aggregate: vi
 					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 					.mockResolvedValue({
 						_sum: { downloadCount: 500 },
 					}),
-				groupBy: jest
+				groupBy: vi
 					.fn<
 						() => Promise<{ category: string; _count: { category: number } }[]>
 					>()
@@ -136,8 +144,8 @@ describe("/api/v1/stats", () => {
 					]),
 			},
 			stack: {
-				count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
-				aggregate: jest
+				count: vi.fn<() => Promise<number>>().mockResolvedValue(10),
+				aggregate: vi
 					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 					.mockResolvedValue({
 						_sum: { downloadCount: 300 },
@@ -145,7 +153,7 @@ describe("/api/v1/stats", () => {
 			},
 		};
 
-		(ensurePrisma as jest.MockedFunction<typeof ensurePrisma>).mockReturnValue(
+		(ensurePrisma as MockedFunction<typeof ensurePrisma>).mockReturnValue(
 			mockPrismaClient,
 		);
 	});
@@ -248,7 +256,7 @@ describe("/api/v1/stats", () => {
 		});
 
 		it("should support force refresh parameter", async () => {
-			const { unstable_cache } = jest.requireMock("next/cache") as any;
+			const { unstable_cache } = (await import("next/cache")) as any;
 
 			// First call without refresh
 			const req1 = createMockRequest();
@@ -324,13 +332,13 @@ describe("/api/v1/stats", () => {
 			// Reset and set up specific mock behavior for this test
 			mockPrismaClient = {
 				application: {
-					count: jest
+					count: vi
 						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
-					groupBy: jest
+					groupBy: vi
 						.fn<
 							() => Promise<
 								{ category: string; _count: { category: number } }[]
@@ -341,26 +349,26 @@ describe("/api/v1/stats", () => {
 						]),
 				},
 				plugin: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 0 },
 						}),
-					groupBy: jest
+					groupBy: vi
 						.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 						.mockResolvedValue([
 							{ type: "package-manager", _count: { type: 15 } },
 						]),
 				},
 				config: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 0 },
 						}),
-					groupBy: jest
+					groupBy: vi
 						.fn<
 							() => Promise<
 								{ category: string; _count: { category: number } }[]
@@ -371,17 +379,17 @@ describe("/api/v1/stats", () => {
 						]),
 				},
 				stack: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 0 },
 						}),
 				},
 			};
-			(
-				ensurePrisma as jest.MockedFunction<typeof ensurePrisma>
-			).mockReturnValue(mockPrismaClient);
+			(ensurePrisma as MockedFunction<typeof ensurePrisma>).mockReturnValue(
+				mockPrismaClient,
+			);
 
 			const req = createMockRequest();
 			const response = await GET(req);
@@ -394,13 +402,13 @@ describe("/api/v1/stats", () => {
 			// Reset and set up specific mock behavior for null downloads
 			mockPrismaClient = {
 				application: {
-					count: jest
+					count: vi
 						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
-					groupBy: jest
+					groupBy: vi
 						.fn<
 							() => Promise<
 								{ category: string; _count: { category: number } }[]
@@ -411,26 +419,26 @@ describe("/api/v1/stats", () => {
 						]),
 				},
 				plugin: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: null } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: null },
 						}),
-					groupBy: jest
+					groupBy: vi
 						.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 						.mockResolvedValue([
 							{ type: "package-manager", _count: { type: 15 } },
 						]),
 				},
 				config: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: null } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: null },
 						}),
-					groupBy: jest
+					groupBy: vi
 						.fn<
 							() => Promise<
 								{ category: string; _count: { category: number } }[]
@@ -441,17 +449,17 @@ describe("/api/v1/stats", () => {
 						]),
 				},
 				stack: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: null } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: null },
 						}),
 				},
 			};
-			(
-				ensurePrisma as jest.MockedFunction<typeof ensurePrisma>
-			).mockReturnValue(mockPrismaClient);
+			(ensurePrisma as MockedFunction<typeof ensurePrisma>).mockReturnValue(
+				mockPrismaClient,
+			);
 
 			const req = createMockRequest();
 			const response = await GET(req);
@@ -479,44 +487,44 @@ describe("/api/v1/stats", () => {
 			// Reset and set up specific mock behavior for empty categories
 			mockPrismaClient = {
 				application: {
-					count: jest
+					count: vi
 						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
-					groupBy: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+					groupBy: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 				},
 				plugin: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 1000 },
 						}),
-					groupBy: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+					groupBy: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 				},
 				config: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 500 },
 						}),
-					groupBy: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+					groupBy: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 				},
 				stack: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 300 },
 						}),
 				},
 			};
-			(
-				ensurePrisma as jest.MockedFunction<typeof ensurePrisma>
-			).mockReturnValue(mockPrismaClient);
+			(ensurePrisma as MockedFunction<typeof ensurePrisma>).mockReturnValue(
+				mockPrismaClient,
+			);
 
 			const req = createMockRequest();
 			const response = await GET(req);
@@ -531,13 +539,13 @@ describe("/api/v1/stats", () => {
 			// Reset and set up specific mock behavior with null and invalid categories
 			mockPrismaClient = {
 				application: {
-					count: jest
+					count: vi
 						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
-					groupBy: jest
+					groupBy: vi
 						.fn<
 							() => Promise<
 								(
@@ -553,26 +561,26 @@ describe("/api/v1/stats", () => {
 						]),
 				},
 				plugin: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 1000 },
 						}),
-					groupBy: jest
+					groupBy: vi
 						.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 						.mockResolvedValue([
 							{ type: "package-manager", _count: { type: 15 } },
 						]),
 				},
 				config: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 500 },
 						}),
-					groupBy: jest
+					groupBy: vi
 						.fn<
 							() => Promise<
 								{ category: string; _count: { category: number } }[]
@@ -583,17 +591,17 @@ describe("/api/v1/stats", () => {
 						]),
 				},
 				stack: {
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
-					aggregate: jest
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: vi
 						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 						.mockResolvedValue({
 							_sum: { downloadCount: 300 },
 						}),
 				},
 			};
-			(
-				ensurePrisma as jest.MockedFunction<typeof ensurePrisma>
-			).mockReturnValue(mockPrismaClient);
+			(ensurePrisma as MockedFunction<typeof ensurePrisma>).mockReturnValue(
+				mockPrismaClient,
+			);
 
 			const req = createMockRequest();
 			const response = await GET(req);
@@ -604,11 +612,11 @@ describe("/api/v1/stats", () => {
 				valid: 10,
 			});
 			expect(data.categories.applications).not.toHaveProperty("null");
-			expect(data.categories.applications).not.toHaveProperty("");
+			expect(Object.hasOwn(data.categories.applications, "")).toBe(false);
 		});
 
 		it("should use Next.js unstable_cache for caching", async () => {
-			const { unstable_cache } = jest.requireMock("next/cache") as any;
+			const { unstable_cache } = (await import("next/cache")) as any;
 
 			const req = createMockRequest();
 			await GET(req);
@@ -624,9 +632,9 @@ describe("/api/v1/stats", () => {
 		});
 
 		it("should log performance metrics", async () => {
-			const { logPerformance } = jest.requireMock<
-				typeof import("@/lib/logger")
-			>("@/lib/logger") as any;
+			const { logPerformance } = (await import(
+				"@/lib/logger"
+			)) as unknown as typeof import("@/lib/logger") as any;
 
 			// Force refresh to ensure fetchStatsFromDB executes and calls logPerformance
 			const req = createMockRequest({ refresh: "true" });

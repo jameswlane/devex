@@ -1,4 +1,14 @@
 import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mock,
+	type MockInstance,
+	vi,
+} from "vitest";
+import {
 	getStartupHealth,
 	gracefulShutdown,
 	initializeApplication,
@@ -6,33 +16,37 @@ import {
 } from "../../lib/startup";
 
 // Mock dependencies
-jest.mock("../../lib/prisma", () => ({
-	warmupPrisma: jest.fn(),
-	disconnectPrisma: jest.fn(),
+vi.mock("../../lib/prisma", () => ({
+	warmupPrisma: vi.fn(),
+	disconnectPrisma: vi.fn(),
 }));
 
-jest.mock("../../lib/redis", () => ({
-	warmupRedis: jest.fn(),
-	closeRedisConnection: jest.fn(),
+vi.mock("../../lib/redis", () => ({
+	warmupRedis: vi.fn(),
+	closeRedisConnection: vi.fn(),
 	redis: {
-		ping: jest.fn(),
+		ping: vi.fn(),
 	},
 }));
 
-jest.mock("../../lib/transformation-service", () => ({
-	RegistryTransformationService: jest.fn().mockImplementation(() => ({
-		getCacheStats: jest
-			.fn()
-			.mockResolvedValue({ hitRate: 0.85, totalRequests: 100, cacheSize: 10 }),
-	})),
+vi.mock("../../lib/transformation-service", () => ({
+	RegistryTransformationService: vi.fn(
+		class {
+			getCacheStats = vi.fn().mockResolvedValue({
+				hitRate: 0.85,
+				totalRequests: 100,
+				cacheSize: 10,
+			});
+		},
+	),
 }));
 
-jest.mock("../../lib/logger", () => ({
+vi.mock("../../lib/logger", () => ({
 	logger: {
-		info: jest.fn(),
-		warn: jest.fn(),
-		error: jest.fn(),
-		debug: jest.fn(),
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		debug: vi.fn(),
 	},
 }));
 
@@ -42,13 +56,13 @@ import { closeRedisConnection, redis, warmupRedis } from "../../lib/redis";
 
 describe("Startup Module", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 	});
 
 	describe("initializeApplication", () => {
 		it("should successfully initialize with warmup enabled", async () => {
-			(warmupPrisma as jest.Mock).mockResolvedValue(undefined);
-			(warmupRedis as jest.Mock).mockResolvedValue(undefined);
+			(warmupPrisma as Mock).mockResolvedValue(undefined);
+			(warmupRedis as Mock).mockResolvedValue(undefined);
 
 			const results = await initializeApplication({
 				enableWarmup: true,
@@ -89,10 +103,10 @@ describe("Startup Module", () => {
 		});
 
 		it("should handle database warmup failures", async () => {
-			(warmupPrisma as jest.Mock).mockRejectedValue(
+			(warmupPrisma as Mock).mockRejectedValue(
 				new Error("Database connection failed"),
 			);
-			(warmupRedis as jest.Mock).mockResolvedValue(undefined);
+			(warmupRedis as Mock).mockResolvedValue(undefined);
 
 			const results = await initializeApplication({
 				enableWarmup: true,
@@ -111,8 +125,8 @@ describe("Startup Module", () => {
 		});
 
 		it("should handle Redis warmup failures", async () => {
-			(warmupPrisma as jest.Mock).mockResolvedValue(undefined);
-			(warmupRedis as jest.Mock).mockRejectedValue(
+			(warmupPrisma as Mock).mockResolvedValue(undefined);
+			(warmupRedis as Mock).mockRejectedValue(
 				new Error("Redis connection failed"),
 			);
 
@@ -133,8 +147,8 @@ describe("Startup Module", () => {
 		});
 
 		it("should handle cache warmup failures gracefully", async () => {
-			(warmupPrisma as jest.Mock).mockResolvedValue(undefined);
-			(warmupRedis as jest.Mock).mockResolvedValue(undefined);
+			(warmupPrisma as Mock).mockResolvedValue(undefined);
+			(warmupRedis as Mock).mockResolvedValue(undefined);
 
 			const results = await initializeApplication({
 				enableWarmup: true,
@@ -150,8 +164,8 @@ describe("Startup Module", () => {
 		});
 
 		it("should use default configuration when none provided", async () => {
-			(warmupPrisma as jest.Mock).mockResolvedValue(undefined);
-			(warmupRedis as jest.Mock).mockResolvedValue(undefined);
+			(warmupPrisma as Mock).mockResolvedValue(undefined);
+			(warmupRedis as Mock).mockResolvedValue(undefined);
 
 			const results = await initializeApplication();
 
@@ -169,7 +183,7 @@ describe("Startup Module", () => {
 		});
 
 		it("should handle unexpected errors during initialization", async () => {
-			(warmupPrisma as jest.Mock).mockImplementation(() => {
+			(warmupPrisma as Mock).mockImplementation(() => {
 				throw new Error("Unexpected error");
 			});
 
@@ -189,7 +203,7 @@ describe("Startup Module", () => {
 
 		it("should retry failed operations with exponential backoff", async () => {
 			let attemptCount = 0;
-			(warmupPrisma as jest.Mock).mockImplementation(() => {
+			(warmupPrisma as Mock).mockImplementation(() => {
 				attemptCount++;
 				if (attemptCount < 3) {
 					throw new Error("Connection failed");
@@ -219,7 +233,7 @@ describe("Startup Module", () => {
 
 	describe("getStartupHealth", () => {
 		it("should return basic health information", async () => {
-			(redis.ping as jest.Mock).mockResolvedValue("PONG");
+			(redis.ping as Mock).mockResolvedValue("PONG");
 
 			const health = await getStartupHealth();
 
@@ -232,9 +246,7 @@ describe("Startup Module", () => {
 		});
 
 		it("should handle Redis ping failures", async () => {
-			(redis.ping as jest.Mock).mockRejectedValue(
-				new Error("Redis unavailable"),
-			);
+			(redis.ping as Mock).mockRejectedValue(new Error("Redis unavailable"));
 
 			const health = await getStartupHealth();
 
@@ -245,7 +257,7 @@ describe("Startup Module", () => {
 		});
 
 		it("should handle Redis ping returning unexpected values", async () => {
-			(redis.ping as jest.Mock).mockResolvedValue("ERROR");
+			(redis.ping as Mock).mockResolvedValue("ERROR");
 
 			const health = await getStartupHealth();
 
@@ -255,8 +267,8 @@ describe("Startup Module", () => {
 
 	describe("gracefulShutdown", () => {
 		it("should shutdown gracefully", async () => {
-			(disconnectPrisma as jest.Mock).mockResolvedValue(undefined);
-			(closeRedisConnection as jest.Mock).mockResolvedValue(undefined);
+			(disconnectPrisma as Mock).mockResolvedValue(undefined);
+			(closeRedisConnection as Mock).mockResolvedValue(undefined);
 
 			await gracefulShutdown("SIGTERM");
 
@@ -272,8 +284,8 @@ describe("Startup Module", () => {
 
 		it("should handle shutdown errors", async () => {
 			const shutdownError = new Error("Shutdown failed");
-			(disconnectPrisma as jest.Mock).mockRejectedValue(shutdownError);
-			(closeRedisConnection as jest.Mock).mockResolvedValue(undefined);
+			(disconnectPrisma as Mock).mockRejectedValue(shutdownError);
+			(closeRedisConnection as Mock).mockResolvedValue(undefined);
 
 			await gracefulShutdown("SIGINT");
 
@@ -287,8 +299,8 @@ describe("Startup Module", () => {
 		});
 
 		it("should handle Redis shutdown errors", async () => {
-			(disconnectPrisma as jest.Mock).mockResolvedValue(undefined);
-			(closeRedisConnection as jest.Mock).mockRejectedValue(
+			(disconnectPrisma as Mock).mockResolvedValue(undefined);
+			(closeRedisConnection as Mock).mockRejectedValue(
 				new Error("Redis shutdown failed"),
 			);
 
@@ -303,14 +315,12 @@ describe("Startup Module", () => {
 	});
 
 	describe("registerShutdownHandlers", () => {
-		let mockProcessOn: jest.SpyInstance;
-		let mockProcessExit: jest.SpyInstance;
+		let mockProcessOn: MockInstance;
+		let mockProcessExit: MockInstance;
 
 		beforeEach(() => {
-			mockProcessOn = jest
-				.spyOn(process, "on")
-				.mockImplementation(() => process);
-			mockProcessExit = jest.spyOn(process, "exit").mockImplementation(() => {
+			mockProcessOn = vi.spyOn(process, "on").mockImplementation(() => process);
+			mockProcessExit = vi.spyOn(process, "exit").mockImplementation(() => {
 				throw new Error("process.exit called");
 			});
 		});
@@ -372,8 +382,8 @@ describe("Startup Module", () => {
 
 			expect(uncaughtHandler).toBeDefined();
 			expect(rejectionHandler).toBeDefined();
-			expect(typeof uncaughtHandler[1]).toBe("function");
-			expect(typeof rejectionHandler[1]).toBe("function");
+			expect(typeof uncaughtHandler?.[1]).toBe("function");
+			expect(typeof rejectionHandler?.[1]).toBe("function");
 		});
 	});
 });

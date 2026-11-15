@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from "vitest";
 import { API_CONFIG, type Tool, ToolsService } from "../tools-api";
 
 // Mock tools data

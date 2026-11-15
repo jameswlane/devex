@@ -1,26 +1,19 @@
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	jest,
-} from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { githubApi } from "../../lib/github-api";
 import { recordPluginRelease } from "../../lib/releases/record";
 import { syncPlugins } from "../../scripts/sync-github-plugins";
 
-jest.mock("../../lib/github-api", () => ({
+vi.mock("../../lib/github-api", () => ({
 	githubApi: {
-		listTags: jest.fn<typeof githubApi.listTags>(),
-		getReleaseByTag: jest.fn<typeof githubApi.getReleaseByTag>(),
-		getFileContents: jest.fn<typeof githubApi.getFileContents>(),
+		listTags: vi.fn<typeof githubApi.listTags>(),
+		getReleaseByTag: vi.fn<typeof githubApi.getReleaseByTag>(),
+		getFileContents: vi.fn<typeof githubApi.getFileContents>(),
 	},
 }));
 
-jest.mock("../../lib/releases/record", () => ({
-	recordPluginRelease: jest.fn<typeof recordPluginRelease>(),
+vi.mock("../../lib/releases/record", () => ({
+	recordPluginRelease: vi.fn<typeof recordPluginRelease>(),
 }));
 
 describe("sync-github-plugins", () => {
@@ -36,42 +29,42 @@ describe("sync-github-plugins", () => {
 
 	const mockPrisma = {
 		plugin: {
-			count: jest.fn<() => Promise<number>>().mockResolvedValue(5),
+			count: vi.fn<() => Promise<number>>().mockResolvedValue(5),
 		},
 		application: {
-			count: jest.fn<() => Promise<number>>().mockResolvedValue(2),
+			count: vi.fn<() => Promise<number>>().mockResolvedValue(2),
 		},
 		config: {
-			count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+			count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 		},
 		stack: {
-			count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+			count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 		},
 		registryStats: {
-			upsert: jest
+			upsert: vi
 				.fn<() => Promise<Record<string, never>>>()
 				.mockResolvedValue({}),
 		},
 		syncLog: {
-			create: jest
+			create: vi
 				.fn<() => Promise<Record<string, never>>>()
 				.mockResolvedValue({}),
 		},
-		$disconnect: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+		$disconnect: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
 	} as unknown as PrismaClient;
 
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		delete process.env.REVALIDATE_API_KEY;
 		delete process.env.REGISTRY_URL;
 		delete process.env.SYNC_TAG;
-		global.fetch = jest.fn<typeof fetch>();
-		jest.mocked(githubApi.getFileContents).mockResolvedValue({
+		global.fetch = vi.fn<typeof fetch>();
+		vi.mocked(githubApi.getFileContents).mockResolvedValue({
 			content: Buffer.from(
 				"type: tool\ndescription: Test plugin\nplatforms:\n  linux: {}\n",
 			).toString("base64"),
 		});
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-1",
 			versionCreated: true,
 			latestChanged: true,
@@ -131,19 +124,18 @@ describe("sync-github-plugins", () => {
 			createMockTag("packages/tool-git/v0.1.0"),
 		];
 
-		jest
-			.mocked(githubApi.listTags)
+		vi.mocked(githubApi.listTags)
 			.mockResolvedValueOnce(page1)
 			.mockResolvedValueOnce(page2);
 
-		jest
-			.mocked(githubApi.getReleaseByTag)
-			.mockImplementation((_owner, _repo, tag) => {
+		vi.mocked(githubApi.getReleaseByTag).mockImplementation(
+			(_owner, _repo, tag) => {
 				const version = tag.slice(tag.lastIndexOf("/v") + 2);
 				return Promise.resolve(createMockRelease(tag, version));
-			});
+			},
+		);
 
-		jest.mocked(global.fetch).mockImplementation((input) => {
+		vi.mocked(global.fetch).mockImplementation((input) => {
 			const url = String(input);
 			if (url.includes("checksums.txt")) {
 				return Promise.resolve(
@@ -157,7 +149,7 @@ describe("sync-github-plugins", () => {
 			return Promise.resolve(new Response(null, { status: 404 }));
 		});
 
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-1",
 			versionCreated: true,
 			latestChanged: true,
@@ -187,16 +179,16 @@ describe("sync-github-plugins", () => {
 			createMockTag("packages/tool-git/v0.2.0"),
 		];
 
-		jest.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
 
-		jest
-			.mocked(githubApi.getReleaseByTag)
-			.mockImplementation((_owner, _repo, tag) => {
+		vi.mocked(githubApi.getReleaseByTag).mockImplementation(
+			(_owner, _repo, tag) => {
 				const version = tag.slice(tag.lastIndexOf("/v") + 2);
 				return Promise.resolve(createMockRelease(tag, version));
-			});
+			},
+		);
 
-		jest.mocked(global.fetch).mockImplementation((input) => {
+		vi.mocked(global.fetch).mockImplementation((input) => {
 			const url = String(input);
 			if (url.includes("checksums.txt")) {
 				return Promise.resolve(
@@ -210,13 +202,13 @@ describe("sync-github-plugins", () => {
 			return Promise.resolve(new Response(null, { status: 404 }));
 		});
 
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-1",
 			versionCreated: true,
 			latestChanged: true,
 		});
 
-		const warning = jest.spyOn(console, "warn").mockImplementation(() => {});
+		const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
 		await syncPlugins({ prisma: mockPrisma });
 		expect(warning).toHaveBeenCalledWith(
 			expect.stringContaining(
@@ -226,7 +218,7 @@ describe("sync-github-plugins", () => {
 		warning.mockRestore();
 
 		expect(recordPluginRelease).toHaveBeenCalledTimes(3);
-		const recordedVersions = jest
+		const recordedVersions = vi
 			.mocked(recordPluginRelease)
 			.mock.calls.map((call) => call[1].version);
 		expect(recordedVersions).toEqual(["0.1.0", "0.2.0", "1.0.0"]);
@@ -237,15 +229,14 @@ describe("sync-github-plugins", () => {
 			createMockTag("packages/plugin-sdk/v0.3.0"),
 			createMockTag("packages/tool-git/v1.0.0"),
 		];
-		jest.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
-		jest
-			.mocked(githubApi.getReleaseByTag)
-			.mockImplementation((_owner, _repo, tag) =>
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
+		vi.mocked(githubApi.getReleaseByTag).mockImplementation(
+			(_owner, _repo, tag) =>
 				Promise.resolve(
 					createMockRelease(tag, tag.slice(tag.lastIndexOf("/v") + 2)),
 				),
-			);
-		jest.mocked(global.fetch).mockImplementation((input) => {
+		);
+		vi.mocked(global.fetch).mockImplementation((input) => {
 			const url = String(input);
 			return Promise.resolve(
 				url.includes("checksums.txt")
@@ -255,7 +246,7 @@ describe("sync-github-plugins", () => {
 					: new Response(null, { status: 404 }),
 			);
 		});
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-1",
 			versionCreated: true,
 			latestChanged: true,
@@ -279,19 +270,19 @@ describe("sync-github-plugins", () => {
 			createMockTag("packages/tool-git/v1.0.0"),
 		];
 
-		jest.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
 
-		jest
-			.mocked(githubApi.getReleaseByTag)
-			.mockImplementation((_owner, _repo, tag) => {
+		vi.mocked(githubApi.getReleaseByTag).mockImplementation(
+			(_owner, _repo, tag) => {
 				if (tag === "packages/tool-git/v0.2.0") {
 					return Promise.resolve(null);
 				}
 				const version = tag.slice(tag.lastIndexOf("/v") + 2);
 				return Promise.resolve(createMockRelease(tag, version));
-			});
+			},
+		);
 
-		jest.mocked(global.fetch).mockImplementation((input) => {
+		vi.mocked(global.fetch).mockImplementation((input) => {
 			const url = String(input);
 			if (url.includes("checksums.txt")) {
 				return Promise.resolve(
@@ -304,7 +295,7 @@ describe("sync-github-plugins", () => {
 			return Promise.resolve(new Response(null, { status: 404 }));
 		});
 
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-1",
 			versionCreated: true,
 			latestChanged: true,
@@ -319,9 +310,9 @@ describe("sync-github-plugins", () => {
 
 	it("sets archiveEntry for archive binaries (.tar.gz and .zip on windows)", async () => {
 		const tags = [createMockTag("packages/tool-git/v1.0.0")];
-		jest.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
 
-		jest.mocked(githubApi.getReleaseByTag).mockResolvedValueOnce({
+		vi.mocked(githubApi.getReleaseByTag).mockResolvedValueOnce({
 			html_url:
 				"https://github.com/jameswlane/devex/releases/tag/packages/tool-git/v1.0.0",
 			prerelease: false,
@@ -345,7 +336,7 @@ describe("sync-github-plugins", () => {
 			],
 		});
 
-		jest.mocked(global.fetch).mockImplementation((input) => {
+		vi.mocked(global.fetch).mockImplementation((input) => {
 			const url = String(input);
 			if (url.includes("checksums.txt")) {
 				return Promise.resolve(
@@ -358,7 +349,7 @@ describe("sync-github-plugins", () => {
 			return Promise.resolve(new Response(null, { status: 404 }));
 		});
 
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-1",
 			versionCreated: true,
 			latestChanged: true,
@@ -389,19 +380,19 @@ describe("sync-github-plugins", () => {
 			createMockTag("packages/tool-git/v1.0.0-rc.1"),
 			createMockTag("packages/tool-git/v1.0.0"),
 		];
-		jest.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
 
-		jest
-			.mocked(githubApi.getReleaseByTag)
-			.mockImplementation((_owner, _repo, tag) => {
+		vi.mocked(githubApi.getReleaseByTag).mockImplementation(
+			(_owner, _repo, tag) => {
 				const version = tag.slice(tag.lastIndexOf("/v") + 2);
 				const isPrerelease = tag.includes("-rc") || tag.includes("1.0.0-");
 				return Promise.resolve(
 					createMockRelease(tag, version, { prerelease: isPrerelease }),
 				);
-			});
+			},
+		);
 
-		jest.mocked(global.fetch).mockImplementation((input) => {
+		vi.mocked(global.fetch).mockImplementation((input) => {
 			const url = String(input);
 			if (url.includes("checksums.txt")) {
 				return Promise.resolve(
@@ -414,7 +405,7 @@ describe("sync-github-plugins", () => {
 			return Promise.resolve(new Response(null, { status: 404 }));
 		});
 
-		jest.mocked(recordPluginRelease).mockResolvedValue({
+		vi.mocked(recordPluginRelease).mockResolvedValue({
 			pluginId: "plugin-1",
 			versionCreated: true,
 			latestChanged: false,
@@ -422,9 +413,7 @@ describe("sync-github-plugins", () => {
 
 		await syncPlugins({ prisma: mockPrisma });
 
-		const payloads = jest
-			.mocked(recordPluginRelease)
-			.mock.calls.map((c) => c[1]);
+		const payloads = vi.mocked(recordPluginRelease).mock.calls.map((c) => c[1]);
 		expect(payloads[0].prerelease).toBe(true);
 		expect(payloads[1].prerelease).toBe(false);
 	});
@@ -432,22 +421,22 @@ describe("sync-github-plugins", () => {
 	it("skips a tag without recording it when metadata cannot be fetched", async () => {
 		const badTag = "packages/tool-bad/v1.0.0";
 		const goodTag = "packages/tool-git/v1.0.0";
-		jest
-			.mocked(githubApi.listTags)
-			.mockResolvedValueOnce([createMockTag(badTag), createMockTag(goodTag)]);
-		jest
-			.mocked(githubApi.getReleaseByTag)
-			.mockImplementation((_owner, _repo, tag) => {
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce([
+			createMockTag(badTag),
+			createMockTag(goodTag),
+		]);
+		vi.mocked(githubApi.getReleaseByTag).mockImplementation(
+			(_owner, _repo, tag) => {
 				const release = createMockRelease(tag, "1.0.0");
 				if (tag === badTag) {
 					release.assets[0].name =
 						"devex-plugin-tool-bad_1.0.0_linux_amd64.tar.gz";
 				}
 				return Promise.resolve(release);
-			});
-		jest
-			.mocked(githubApi.getFileContents)
-			.mockImplementation((_owner, _repo, path) =>
+			},
+		);
+		vi.mocked(githubApi.getFileContents).mockImplementation(
+			(_owner, _repo, path) =>
 				Promise.resolve(
 					path.includes("tool-bad")
 						? null
@@ -457,8 +446,8 @@ describe("sync-github-plugins", () => {
 								).toString("base64"),
 							},
 				),
-			);
-		jest.mocked(global.fetch).mockImplementation((input) => {
+		);
+		vi.mocked(global.fetch).mockImplementation((input) => {
 			const url = String(input);
 			if (url.includes("checksums.txt")) {
 				return Promise.resolve(
@@ -488,8 +477,8 @@ describe("sync-github-plugins", () => {
 
 	it("throws if all tags fail to sync", async () => {
 		const tags = [createMockTag("packages/tool-git/v1.0.0")];
-		jest.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
-		jest.mocked(githubApi.getReleaseByTag).mockResolvedValueOnce(null);
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
+		vi.mocked(githubApi.getReleaseByTag).mockResolvedValueOnce(null);
 
 		await expect(syncPlugins({ prisma: mockPrisma })).rejects.toThrow(
 			"Failed to sync all 1 tag(s)",
@@ -498,7 +487,7 @@ describe("sync-github-plugins", () => {
 
 	it("throws if single-tag requested is not found", async () => {
 		const tags = [createMockTag("packages/tool-git/v1.0.0")];
-		jest.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
+		vi.mocked(githubApi.listTags).mockResolvedValueOnce(tags);
 
 		await expect(
 			syncPlugins({

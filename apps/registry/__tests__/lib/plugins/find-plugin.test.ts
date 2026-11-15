@@ -1,17 +1,17 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { Plugin } from "../../../generated/prisma/client";
 
-jest.mock("@/lib/prisma", () => ({
-	prisma: { plugin: { findUnique: jest.fn(), findFirst: jest.fn() } },
+vi.mock("@/lib/prisma", () => ({
+	prisma: { plugin: { findUnique: vi.fn(), findFirst: vi.fn() } },
 }));
-jest.mock("@/lib/error-handler", () => ({
+vi.mock("@/lib/error-handler", () => ({
 	safeDatabase: (operation: () => Promise<unknown>) => operation(),
 }));
 
 import { findPluginByNameOrShortName } from "@/lib/plugins/find-plugin";
 
-type Lookup = jest.Mock<(args: unknown) => Promise<Plugin | null>>;
-const { prisma } = jest.requireMock("@/lib/prisma") as {
+type Lookup = Mock<(args: unknown) => Promise<Plugin | null>>;
+const { prisma } = (await import("@/lib/prisma")) as unknown as {
 	prisma: { plugin: { findUnique: Lookup; findFirst: Lookup } };
 };
 
