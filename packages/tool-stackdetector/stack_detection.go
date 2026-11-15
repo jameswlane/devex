@@ -8,9 +8,9 @@ import (
 
 // handleDetect performs basic stack detection and displays results
 func (p *StackDetectorPlugin) handleDetect(args []string) error {
-	dir := "."
-	if len(args) > 0 {
-		dir = args[0]
+	dir, err := parseDetectArgs(args)
+	if err != nil {
+		return err
 	}
 
 	// Validate directory
