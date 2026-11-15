@@ -161,7 +161,7 @@ func (e *mcpExecutor) resolveTrackedUninstall(settings config.CrossPlatformSetti
 		Config: kept(options.RemoveConfig), Data: kept(options.RemoveData),
 		ConfigFiles: []string{}, DataPaths: []string{},
 	}
-	command := strings.TrimSpace(app.WithBrewSelector(app.UninstallCommand))
+	command := strings.TrimSpace(app.WithKindSelector(app.UninstallCommand))
 	if command == "" {
 		command = strings.TrimSpace(app.PackageQueryCommand())
 	}
