@@ -246,6 +246,7 @@ var _ = Describe("Registered plugin commands", func() {
 			Expect(stdout.String()).To(Equal("recorder is up to date (2.0.0)\n"), "args: %v", args)
 		}
 		Expect(requests).NotTo(ContainElement(ContainSubstring("/binary")))
+		Expect(requests).NotTo(ContainElement(ContainSubstring("/download/")))
 		after, err := os.Stat(path)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(after.ModTime()).To(Equal(before.ModTime()))
