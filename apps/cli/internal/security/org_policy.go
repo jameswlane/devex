@@ -143,6 +143,18 @@ func LoadOrgPolicyCached(homeDir string) (*OrgPolicy, error) {
 	return cachedOrgPolicy.policy, cachedOrgPolicy.err
 }
 
+// PluginFilter returns a plugin manager filter that rejects plugins the
+// organization policy denies, and every plugin when the policy cannot load.
+func PluginFilter(homeDir string) func(pluginName string) error {
+	return func(pluginName string) error {
+		policy, err := LoadOrgPolicyCached(homeDir)
+		if err != nil {
+			return err
+		}
+		return policy.CheckPlugin(pluginName)
+	}
+}
+
 // ResetOrgPolicyCache clears the process-wide plugin policy cache.
 func ResetOrgPolicyCache() {
 	cachedOrgPolicy.Lock()

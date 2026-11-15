@@ -404,11 +404,7 @@ func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginNa
 }
 
 func (b *PluginBootstrap) checkOrgPolicy(pluginName string) error {
-	policy, err := security.LoadOrgPolicyCached(b.homeDir)
-	if err != nil {
-		return err
-	}
-	return policy.CheckPlugin(pluginName)
+	return security.PluginFilter(b.homeDir)(pluginName)
 }
 
 // ExecutePluginWithIO executes a plugin like ExecutePluginWithContext, with

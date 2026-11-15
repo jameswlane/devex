@@ -26,6 +26,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/help"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
@@ -491,7 +492,9 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 	// metadata directly so dry runs stay offline and can still display privileges.
 	if plugins == nil {
 		if home, err := utils.GetHomeDir(); err == nil {
-			plugins = sdk.NewExecutableManager(devexpaths.ForHome(home).ReadPath(devexpaths.ForHome(home).Plugins())).ListPluginsWithContext(ctx)
+			manager := sdk.NewExecutableManager(devexpaths.ForHome(home).ReadPath(devexpaths.ForHome(home).Plugins()))
+			manager.SetPluginFilter(security.PluginFilter(home))
+			plugins = manager.ListPluginsWithContext(ctx)
 		}
 	}
 	log.Info("Dry run - showing what would be installed:")
