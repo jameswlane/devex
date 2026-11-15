@@ -63,13 +63,19 @@ func VerifyArtifact(ctx context.Context, path string, metadata ArtifactVerificat
 		result.ChecksumVerified = true
 	}
 	if metadata.SignatureURL != "" {
-		if metadata.PublicKeyPath == "" || strings.Contains(metadata.PublicKeyPath, "://") {
-			return result, fmt.Errorf("signature verification requires a local trusted public key")
-		}
 		verifier := NewGPGVerifier()
 		verifier.SetExpectedFingerprint(metadata.Fingerprint)
-		if err := verifier.LoadPublicKey(metadata.PublicKeyPath); err != nil {
-			return result, err
+		if builtIn := builtInTrustKey(metadata); builtIn != nil {
+			if err := verifier.LoadPublicKeyData(builtIn); err != nil {
+				return result, err
+			}
+		} else {
+			if metadata.PublicKeyPath == "" || strings.Contains(metadata.PublicKeyPath, "://") {
+				return result, fmt.Errorf("signature verification requires a local trusted public key")
+			}
+			if err := verifier.LoadPublicKey(metadata.PublicKeyPath); err != nil {
+				return result, err
+			}
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadata.SignatureURL, nil)
 		if err != nil {

@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -37,16 +40,65 @@ func (m *MisePlugin) HandleEnsureInstalled(ctx context.Context, args []string) e
 	return nil
 }
 
-// installMise installs Mise using the official installation script
-func (m *MisePlugin) installMise(ctx context.Context) error {
-	m.logger.Println("Downloading and installing Mise...")
+// maxMiseInstallerSize bounds the downloaded installer script.
+const maxMiseInstallerSize = 5 * 1024 * 1024
 
-	// Use curl to download and execute the installation script
-	installCmd := "curl https://mise.run | sh"
-	if err := sdk.ExecCommandWithContext(ctx, false, "sh", "-c", installCmd); err != nil {
-		return fmt.Errorf("failed to download and install Mise: %w", err)
+// installMise installs Mise using the official installation script after
+// verifying its signature from mise's pinned release key.
+func (m *MisePlugin) installMise(ctx context.Context) error {
+	return m.installMiseFrom(ctx, sdk.MiseInstallScriptURL, sdk.MiseInstallVerification())
+}
+
+// installMiseFrom downloads the installer, verifies it, and only then runs it.
+// The verified script checks the mise binary against the checksums it embeds.
+func (m *MisePlugin) installMiseFrom(ctx context.Context, scriptURL string, verification sdk.ArtifactVerification) error {
+	m.logger.Println("Downloading and verifying the Mise installer...")
+
+	script, err := os.CreateTemp("", "devex-mise-install-*.sh")
+	if err != nil {
+		return fmt.Errorf("failed to create installer file: %w", err)
+	}
+	defer func() { _ = os.Remove(script.Name()) }()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, scriptURL, nil)
+	if err != nil {
+		_ = script.Close()
+		return fmt.Errorf("failed to create installer request: %w", err)
+	}
+	response, err := (&http.Client{Timeout: 60 * time.Second}).Do(request)
+	if err != nil {
+		_ = script.Close()
+		return fmt.Errorf("failed to download the Mise installer: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		_ = script.Close()
+		return fmt.Errorf("failed to download the Mise installer: HTTP %d", response.StatusCode)
+	}
+	written, copyErr := io.Copy(script, io.LimitReader(response.Body, maxMiseInstallerSize+1))
+	closeErr := script.Close()
+	if copyErr != nil {
+		return fmt.Errorf("failed to download the Mise installer: %w", copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("failed to write the Mise installer: %w", closeErr)
+	}
+	if written > maxMiseInstallerSize {
+		return fmt.Errorf("the Mise installer exceeds %d bytes", maxMiseInstallerSize)
 	}
 
+	result, err := sdk.VerifyArtifact(ctx, script.Name(), verification)
+	if err != nil {
+		return fmt.Errorf("mise installer verification failed; not running it: %w", err)
+	}
+	if !result.SignatureVerified && !result.ChecksumVerified {
+		return fmt.Errorf("mise installer verification was skipped; not running it")
+	}
+	m.logger.Println("Verified the Mise installer (checksum=%t signature=%t)", result.ChecksumVerified, result.SignatureVerified)
+
+	if err := sdk.ExecCommandWithContext(ctx, false, "sh", script.Name()); err != nil {
+		return fmt.Errorf("failed to install Mise: %w", err)
+	}
 	return nil
 }
 

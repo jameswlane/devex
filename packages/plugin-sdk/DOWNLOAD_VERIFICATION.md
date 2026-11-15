@@ -24,7 +24,25 @@ fail installation. SHA256 accepts a bare hex digest or a `sha256:` prefix.
 A signature requires an explicitly configured **local** public key; the verifier
 does not fetch trust keys from the artifact's origin. The optional fingerprint
 pins a signer within that trust key. Set both digest and signature to require both.
-A signature may be ASCII armored or binary OpenPGP.
+A signature may be ASCII armored or binary OpenPGP, either a detached signature
+or a signed message (`gpg --sign`). A signed message verifies only when its signed
+content is byte-for-byte the downloaded artifact.
+
+DevEx also compiles in a few vendor release keys. When `public_key` is omitted
+and `fingerprint` exactly matches a built-in key, that key is used; a configured
+`public_key` always takes precedence, and any other fingerprint still needs a
+local key. Built-in keys:
+
+| Vendor | Fingerprint | Source |
+| --- | --- | --- |
+| mise | `24853EC9F655CE80B48E6C3A8B81C9D17413A06D` | https://mise.jdx.dev/gpg-key.pub |
+
+The mise bootstrap (`devex setup` and the mise plugin's `ensure-installed`) uses
+this key with `required` policy: it downloads `https://mise.run`, verifies it
+against the release's `install.sh.sig`, and only then runs it. The verified
+script checks the mise binary against the checksums it embeds. If mise.run and
+the latest GitHub release briefly disagree during a mise release, the bootstrap
+fails closed; retry a few minutes later.
 
 Plugin argv equivalents are `--verification-policy`, `--sha256`,
 `--signature-url`, `--public-key`, and `--signer-fingerprint`, each followed by
