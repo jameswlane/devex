@@ -83,21 +83,25 @@ export async function GET(
 
 		const githubDownloadUrl = binary.url;
 
-		// Update download count and last download time atomically
-		// By id: pluginName may be a short name ("apt") that no row is named
-		await prisma.plugin.update({
-			where: { id: plugin.id },
-			data: {
-				downloadCount: {
-					increment: 1,
+		// CI (our e2e suite) marks its requests so they don't inflate public counts
+		const automated = isAutomatedDownload(request);
+		if (!automated) {
+			// Update download count and last download time atomically
+			// By id: pluginName may be a short name ("apt") that no row is named
+			await prisma.plugin.update({
+				where: { id: plugin.id },
+				data: {
+					downloadCount: {
+						increment: 1,
+					},
+					lastDownload: new Date(),
 				},
-				lastDownload: new Date(),
-			},
-		});
+			});
+		}
 
 		// Log the download for analytics
 		console.log(
-			`Plugin download: ${plugin.name}@${version} for ${platform} from ${getClientInfo(request)}`,
+			`Plugin download${automated ? " (ci, not counted)" : ""}: ${plugin.name}@${version} for ${platform} from ${getClientInfo(request)}`,
 		);
 
 		// Return redirect to actual download URL
@@ -108,13 +112,21 @@ export async function GET(
 				"X-Plugin-Name": plugin.name,
 				"X-Plugin-Version": version,
 				"X-Platform": platform,
-				"X-Download-Count": (plugin.downloadCount + 1).toString(),
+				"X-Download-Count": (
+					plugin.downloadCount + (automated ? 0 : 1)
+				).toString(),
 			},
 		});
 	} catch (error) {
 		logDatabaseError(error, "plugin_download");
 		return createApiError("Failed to process download", 500);
 	}
+}
+
+// Requests sent with "X-DevEx-CI: 1" (or "true") come from CI and are not counted
+function isAutomatedDownload(request: NextRequest): boolean {
+	const marker = request.headers.get("x-devex-ci")?.trim().toLowerCase();
+	return marker === "1" || marker === "true";
 }
 
 // Helper function to validate platform format

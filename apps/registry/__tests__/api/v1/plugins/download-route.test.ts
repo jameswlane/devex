@@ -109,12 +109,15 @@ const pinnedVersion = {
 	updatedAt: now,
 } satisfies PluginVersion;
 
-function request(version?: string): NextRequest {
+function request(
+	version?: string,
+	headers?: Record<string, string>,
+): NextRequest {
 	const url = new URL(
 		"http://localhost/api/v1/plugins/package-manager-apt/download/linux-amd64",
 	);
 	if (version !== undefined) url.searchParams.set("version", version);
-	return new NextRequest(url);
+	return new NextRequest(url, { headers });
 }
 
 const params = {
@@ -174,6 +177,31 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 		expect(response.headers.get("X-Plugin-Version")).toBe("1.10.0");
 		expect(response.headers.get("X-Download-Count")).toBe("11");
 		expect(mockPrisma.pluginVersion.findUnique).not.toHaveBeenCalled();
+		expect(mockPrisma.plugin.update).toHaveBeenCalledTimes(1);
+	});
+
+	it.each(["1", "true"])(
+		"redirects without counting a CI download (X-DevEx-CI: %s)",
+		async (value) => {
+			const response = await GET(
+				request(undefined, { "X-DevEx-CI": value }),
+				params,
+			);
+
+			expect(response.status).toBe(302);
+			expect(response.headers.get("location")).toBe(latestUrl);
+			expect(response.headers.get("X-Download-Count")).toBe("10");
+			expect(mockPrisma.plugin.update).not.toHaveBeenCalled();
+		},
+	);
+
+	it("counts a download whose CI marker is not set", async () => {
+		const response = await GET(
+			request(undefined, { "X-DevEx-CI": "0" }),
+			params,
+		);
+
+		expect(response.status).toBe(302);
 		expect(mockPrisma.plugin.update).toHaveBeenCalledTimes(1);
 	});
 
