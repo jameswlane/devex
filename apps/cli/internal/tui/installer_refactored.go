@@ -151,6 +151,16 @@ func (rsi *RefactoredStreamingInstaller) InstallApps(ctx context.Context, apps [
 // InstallApp installs a single application using modular components
 func (rsi *RefactoredStreamingInstaller) InstallApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	rsi.sendLog("INFO", fmt.Sprintf("Starting installation of %s", app.Name))
+	orgPolicy, err := securitypkg.LoadOrgPolicy(settings.HomeDir)
+	if err != nil {
+		return err
+	}
+	if err := orgPolicy.CheckApp(app); err != nil {
+		return err
+	}
+	if orgPolicy != nil {
+		rsi.sendLog("INFO", fmt.Sprintf("Applying organization policy %s %s (%s)", orgPolicy.DisplayName(), orgPolicy.Version, orgPolicy.Source))
+	}
 	startTime := time.Now()
 
 	// Get platform-specific configuration

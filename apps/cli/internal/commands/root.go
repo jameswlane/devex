@@ -180,6 +180,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 
 	cmd.AddCommand(NewSelfUpdateCmd(version, nil))
 	cmd.AddCommand(newPathsCmd())
+	cmd.AddCommand(NewPolicyCmd(settings))
 
 	// Register other commands
 	cmd.AddCommand(setupCmd)
@@ -464,7 +465,7 @@ func readAPICommand(cmd *cobra.Command) bool {
 	case "install-skill":
 		return cmd.Parent() != nil && cmd.Parent().Name() == "agent"
 	case "effective", "show", "validate":
-		return cmd.Parent() != nil && cmd.Parent().Name() == "config"
+		return cmd.Parent() != nil && (cmd.Parent().Name() == "config" || (cmd.Name() == "show" && cmd.Parent().Name() == "policy"))
 	}
 	return false
 }

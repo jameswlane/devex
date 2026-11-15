@@ -9,6 +9,7 @@ import (
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -78,4 +79,24 @@ var _ = Describe("Install privilege previews", func() {
 		Expect(entries).To(HaveLen(2))
 	})
 
+	It("never runs a plugin the organization policy denies while previewing", func() {
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		teamDir := filepath.Join(home, "team")
+		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(teamDir, "policy.yaml"), []byte("version: '1'\nplugins:\n  deny: [package-manager-brew]\n"), 0o600)).To(Succeed())
+		security.ResetOrgPolicyCache()
+		DeferCleanup(security.ResetOrgPolicyCache)
+		pluginDir := filepath.Join(home, ".devex", "plugins")
+		Expect(os.MkdirAll(pluginDir, 0o755)).To(Succeed())
+		marker := filepath.Join(home, "ran")
+		script := "#!/bin/sh\ntouch " + marker + "\necho '{\"name\":\"package-manager-brew\"}'\n"
+		Expect(os.WriteFile(filepath.Join(pluginDir, "devex-plugin-package-manager-brew"), []byte(script), 0o755)).To(Succeed())
+
+		var out bytes.Buffer
+		apps := []types.CrossPlatformApp{{Name: "example", AllPlatforms: types.OSConfig{InstallMethod: "brew"}}}
+		Expect(previewInstallation(context.Background(), apps, nil, &out)).To(Succeed())
+		Expect(marker).NotTo(BeAnExistingFile())
+	})
 })

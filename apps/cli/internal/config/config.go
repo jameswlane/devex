@@ -946,7 +946,12 @@ func (s *CrossPlatformSettings) GetCommandValidator() (*security.CommandValidato
 		return nil, fmt.Errorf("failed to load security config: %w", err)
 	}
 
-	return security.NewCommandValidatorWithConfig(securityConfig.Level, securityConfig), nil
+	orgPolicy, err := security.LoadOrgPolicy(s.HomeDir)
+	if err != nil {
+		return nil, err
+	}
+
+	return security.NewCommandValidatorWithConfig(securityConfig.Level, securityConfig).WithOrgPolicy(orgPolicy), nil
 }
 
 // ValidateApplicationsConfig validates a legacy applications configuration map

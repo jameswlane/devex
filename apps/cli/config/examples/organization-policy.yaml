@@ -1,0 +1,27 @@
+# Organization installation policy for DevEx.
+# Install as /etc/devex/policy.yaml (takes precedence), or as policy.yaml in
+# $DEVEX_TEAM_CONFIG_DIR (default: <devex config dir>/team).
+# Unknown fields, invalid rules, and unreadable files fail closed.
+version: "2026.11.1" # Required; change whenever the policy changes.
+name: acme-engineering # Optional display name used in warnings and errors.
+applications:
+  allow: [] # Empty means all applications. Examples: ["git", "node-*"]
+  deny: [] # Deny wins over allow. Example: ["legacy-*"]
+install_methods:
+  allow: [] # Empty means all methods. Examples: ["apt", "dnf", "mise"]
+  deny: [] # Example: ["curlpipe"]
+plugins:
+  allow: [] # Empty means all plugins. Package plugins are package-manager-<method>.
+  deny: [] # Example: ["package-manager-curlpipe"]
+sources:
+  allow: [] # URL prefixes; empty means all HTTP(S) sources.
+  deny: [] # Example: ["https://untrusted.example/"]
+privilege:
+  max_scope: system # user denies system-scope installation hooks; system is the default.
+security:
+  minimum_level: moderate # strict, moderate, permissive, or enterprise; omit for no floor.
+  allow_user_overrides: true # false ignores user global_overrides and app_overrides.
+  deny_commands: [] # RE2 regular expressions; always denied, even by an override.
+  # deny_commands:
+  #   - 'curl\s+http://'
+  #   - '\brm\s+-rf\s+/'
