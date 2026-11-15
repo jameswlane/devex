@@ -6,7 +6,7 @@
 	"main": "main.go",
 	"scripts": {
 		"build": "go build -o devex-plugin-package-manager-eopkg .",
-		"dev": "go build -race -o devex-plugin-package-manager-eopkg main.go",
+		"dev": "go build -race -o devex-plugin-package-manager-eopkg .",
 		"test": "go test ./...",
 		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",

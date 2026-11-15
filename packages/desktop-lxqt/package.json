@@ -6,7 +6,7 @@
 	"main": "main.go",
 	"scripts": {
 		"build": "go build -o devex-plugin-desktop-lxqt .",
-		"dev": "go build -race -o devex-plugin-desktop-lxqt main.go",
+		"dev": "go build -race -o devex-plugin-desktop-lxqt .",
 		"test": "go test ./...",
 		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",
