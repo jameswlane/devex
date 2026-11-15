@@ -146,7 +146,7 @@ func (d *Downloader) openInstallStorage(cache bool) (*os.Root, error) {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return nil, fmt.Errorf("elevated storage must remain beneath invoking user's home: %s", path)
 	}
-	home, err := openPathRoot(d.installOwner.HomeDir, false, nil)
+	home, err := openPathRoot(d.installOwner.HomeDir, []string{d.installOwner.HomeDir}, false, nil)
 	if err != nil {
 		return nil, err
 	}

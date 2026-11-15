@@ -52,7 +52,7 @@ func (p Paths) ReadPath(path string) string {
 			continue
 		}
 		candidate := filepath.Join(move.source, rel)
-		parent, err := openPathRoot(filepath.Dir(candidate), false, nil)
+		parent, err := openPathRoot(filepath.Dir(candidate), p.trustedBases(), false, nil)
 		if err != nil {
 			continue
 		}
@@ -65,16 +65,62 @@ func (p Paths) ReadPath(path string) string {
 	return path
 }
 
-// openPathRoot walks from the filesystem root without following symlinks. Every
-// component is checked against the opened inode, as with plugin install storage.
-func openPathRoot(path string, create bool, owner *Downloader) (*os.Root, error) {
+// trustedBases are the directories DevEx stores beneath but does not own: the
+// home and the parents of the config, data, state and cache directories.
+// Symlinks in and above them belong to the user or the system (for example
+// /var -> /private/var on macOS) and are resolved; DevEx storage below them is not.
+func (p Paths) trustedBases() []string {
+	return []string{p.Home, filepath.Dir(p.Config), filepath.Dir(p.Data), filepath.Dir(p.State), filepath.Dir(p.Cache)}
+}
+
+// trustedBase returns the deepest trusted directory containing path, or "".
+func trustedBase(path string, trusted []string) string {
+	best := ""
+	for _, base := range trusted {
+		if !filepath.IsAbs(base) {
+			continue
+		}
+		base = filepath.Clean(base)
+		rel, err := filepath.Rel(base, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if len(base) > len(best) {
+			best = base
+		}
+	}
+	return best
+}
+
+// openTrustedBase opens the deepest existing ancestor of base (or base itself)
+// with symlinks resolved, returning its unresolved path.
+func openTrustedBase(base string) (*os.Root, string, error) {
+	existing := base
+	for {
+		resolved, err := filepath.EvalSymlinks(existing)
+		if err == nil {
+			root, err := os.OpenRoot(resolved)
+			return root, existing, err
+		}
+		parent := filepath.Dir(existing)
+		if !errors.Is(err, os.ErrNotExist) || parent == existing {
+			return nil, "", err
+		}
+		existing = parent
+	}
+}
+
+// openPathRoot resolves the deepest trusted base containing path, then walks the
+// rest without following symlinks. Every component below the base is checked
+// against the opened inode, as with plugin install storage.
+func openPathRoot(path string, trusted []string, create bool, owner *Downloader) (*os.Root, error) {
 	path = filepath.Clean(path)
 	if owner != nil {
 		rel, err := filepath.Rel(owner.installOwner.HomeDir, path)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			return nil, fmt.Errorf("%w: elevated storage must remain beneath invoking user's home: %s", ErrMigrationRefused, path)
 		}
-		root, err := openPathRoot(owner.installOwner.HomeDir, false, nil)
+		root, err := openPathRoot(owner.installOwner.HomeDir, []string{owner.installOwner.HomeDir}, false, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -97,15 +143,25 @@ func openPathRoot(path string, create bool, owner *Downloader) (*os.Root, error)
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("%w: storage path must be absolute: %s", ErrMigrationRefused, path)
 	}
-	volume := filepath.VolumeName(path) + string(os.PathSeparator)
-	root, err := os.OpenRoot(volume)
+	var root *os.Root
+	var logical string
+	var err error
+	if base := trustedBase(path, trusted); base != "" {
+		root, logical, err = openTrustedBase(base)
+	} else {
+		logical = filepath.VolumeName(path) + string(os.PathSeparator)
+		root, err = os.OpenRoot(logical)
+	}
 	if err != nil {
 		return nil, err
 	}
-	rest := strings.TrimPrefix(path, volume)
-	logical := volume
+	rest, err := filepath.Rel(logical, path)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
 	for _, part := range strings.Split(rest, string(os.PathSeparator)) {
-		if part == "" {
+		if part == "" || part == "." {
 			continue
 		}
 		logical = filepath.Join(logical, part)
@@ -169,18 +225,22 @@ func (p Paths) Migrate(ctx context.Context, dryRun bool, out io.Writer) error {
 		}
 	}
 	moves := p.legacyMoves()
+	trusted := p.trustedBases()
+	if owner != nil { // Elevated: links beneath the invoking user's home are theirs, not trusted.
+		trusted = []string{p.Home}
+	}
 	for _, name := range []string{"cache", "plugin-cache", "setup-cache"} {
-		if err := validateLegacy(ctx, filepath.Join(p.Home, ".devex", name)); err != nil {
+		if err := validateLegacy(ctx, filepath.Join(p.Home, ".devex", name), trusted); err != nil {
 			return err
 		}
 	}
 	for _, move := range moves {
-		if err := validateLegacy(ctx, move.source); err != nil {
+		if err := validateLegacy(ctx, move.source, trusted); err != nil {
 			return err
 		}
 	}
 	for _, move := range moves {
-		if err := moveLegacy(ctx, move.source, move.destination, dryRun, out, owner); err != nil {
+		if err := moveLegacy(ctx, move.source, move.destination, trusted, dryRun, out, owner); err != nil {
 			return fmt.Errorf("migrate %s to %s: %w", move.source, move.destination, err)
 		}
 	}
@@ -188,7 +248,7 @@ func (p Paths) Migrate(ctx context.Context, dryRun bool, out io.Writer) error {
 	if _, err := os.Lstat(old); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	root, err := openPathRoot(old, false, nil)
+	root, err := openPathRoot(old, trusted, false, nil)
 	if err != nil {
 		return err
 	}
@@ -220,11 +280,11 @@ func (p Paths) Migrate(ctx context.Context, dryRun bool, out io.Writer) error {
 	return atomicStorageWrite(root, "README", []byte(text), 0600, own)
 }
 
-func validateLegacy(ctx context.Context, path string) error {
+func validateLegacy(ctx context.Context, path string, trusted []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	root, err := openPathRoot(filepath.Dir(path), false, nil)
+	root, err := openPathRoot(filepath.Dir(path), trusted, false, nil)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -258,7 +318,7 @@ func validateLegacy(ctx context.Context, path string) error {
 			return err
 		}
 		for _, name := range names {
-			if err := validateLegacy(ctx, filepath.Join(path, name)); err != nil {
+			if err := validateLegacy(ctx, filepath.Join(path, name), trusted); err != nil {
 				return err
 			}
 		}
@@ -266,7 +326,7 @@ func validateLegacy(ctx context.Context, path string) error {
 	return nil
 }
 
-func moveLegacy(ctx context.Context, source, destination string, dry bool, out io.Writer, owner *Downloader) error {
+func moveLegacy(ctx context.Context, source, destination string, trusted []string, dry bool, out io.Writer, owner *Downloader) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -276,7 +336,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 	if filepath.Clean(source) == filepath.Clean(destination) {
 		return nil
 	}
-	src, err := openPathRoot(filepath.Dir(source), false, nil)
+	src, err := openPathRoot(filepath.Dir(source), trusted, false, nil)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -297,7 +357,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 	}
 	if info.IsDir() {
 		if dry {
-			dest, err := openPathRoot(destination, false, nil)
+			dest, err := openPathRoot(destination, trusted, false, nil)
 			if err == nil {
 				_ = dest.Close()
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -305,13 +365,13 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 			}
 		}
 		if !dry {
-			dest, err := openPathRoot(destination, true, owner)
+			dest, err := openPathRoot(destination, trusted, true, owner)
 			if err != nil {
 				return err
 			}
 			_ = dest.Close()
 		}
-		dir, err := openPathRoot(source, false, nil)
+		dir, err := openPathRoot(source, trusted, false, nil)
 		if err != nil {
 			return err
 		}
@@ -327,7 +387,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 			return err
 		}
 		for _, name := range names {
-			if err := moveLegacy(ctx, filepath.Join(source, name), filepath.Join(destination, name), dry, out, owner); err != nil {
+			if err := moveLegacy(ctx, filepath.Join(source, name), filepath.Join(destination, name), trusted, dry, out, owner); err != nil {
 				return err
 			}
 		}
@@ -344,7 +404,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("%w: refusing special source %s", ErrMigrationRefused, source)
 	}
-	parent, e := openPathRoot(filepath.Dir(destination), false, nil)
+	parent, e := openPathRoot(filepath.Dir(destination), trusted, false, nil)
 	if e == nil {
 		_ = parent.Close()
 	} else if !errors.Is(e, os.ErrNotExist) {
@@ -363,7 +423,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		_, _ = fmt.Fprintf(out, "Would move %s -> %s\n", source, destination)
 		return nil
 	}
-	dst, err := openPathRoot(filepath.Dir(destination), true, owner)
+	dst, err := openPathRoot(filepath.Dir(destination), trusted, true, owner)
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"os"
+	"os/user"
 	"path/filepath"
 )
 
@@ -80,6 +81,57 @@ var _ = Describe("Legacy directory migration", func() {
 		Expect(os.Symlink(outside, p.Config)).To(Succeed())
 		Expect(p.Migrate(context.Background(), false, &output)).To(MatchError(ContainSubstring(sdk.ErrMigrationRefused.Error())))
 		Expect(os.ReadFile(filepath.Join(outside, "config.yaml"))).To(Equal([]byte("outside")))
+	})
+	It("finds and migrates legacy storage when HOME passes through a symlink", func() {
+		real := GinkgoT().TempDir()
+		linked := filepath.Join(GinkgoT().TempDir(), "home")
+		Expect(os.Symlink(real, linked)).To(Succeed())
+		home = filepath.Join(linked, "user")
+		p = sdk.ResolvePathsFor("linux", home, func(string) string { return "" })
+		old := filepath.Join(home, ".devex")
+		write(filepath.Join(old, "plugins", "plugin"), "binary")
+		write(filepath.Join(old, "config", "applications.yaml"), "apps")
+		Expect(p.ReadPath(p.Plugins())).To(Equal(filepath.Join(old, "plugins")))
+		Expect(p.ReadPath(filepath.Join(p.Config, "config", "applications.yaml"))).To(Equal(filepath.Join(old, "config", "applications.yaml")))
+		Expect(p.Migrate(context.Background(), false, &output)).To(Succeed())
+		Expect(os.ReadFile(filepath.Join(p.Plugins(), "plugin"))).To(Equal([]byte("binary")))
+		Expect(os.ReadFile(filepath.Join(p.Config, "config", "applications.yaml"))).To(Equal([]byte("apps")))
+
+		outside := GinkgoT().TempDir()
+		write(filepath.Join(outside, "plugin"), "outside")
+		Expect(os.RemoveAll(old)).To(Succeed())
+		Expect(os.Symlink(outside, old)).To(Succeed())
+		Expect(p.Migrate(context.Background(), false, &output)).To(MatchError(ContainSubstring("refusing symlinked storage directory " + old)))
+		Expect(os.Remove(old)).To(Succeed())
+		Expect(os.Remove(filepath.Join(p.Data, "plugins", "plugin"))).To(Succeed())
+		Expect(os.Remove(filepath.Join(p.Data, "plugins"))).To(Succeed())
+		Expect(os.Symlink(outside, filepath.Join(p.Data, "plugins"))).To(Succeed())
+		Expect(p.ReadPath(p.Plugins())).To(Equal(p.Plugins()))
+		write(filepath.Join(old, "plugins", "other"), "other")
+		Expect(p.Migrate(context.Background(), false, &output)).To(MatchError(ContainSubstring(sdk.ErrMigrationRefused.Error())))
+		Expect(filepath.Join(outside, "other")).NotTo(BeAnExistingFile())
+	})
+	It("trusts only HOME when migrating with elevation", func() {
+		account, err := user.Current()
+		Expect(err).NotTo(HaveOccurred())
+		original := sdk.NewPrivilegeResolver
+		DeferCleanup(func() { sdk.NewPrivilegeResolver = original })
+		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver {
+			return sdk.PrivilegeResolver{Elevated: true, CurrentUser: func() (*user.User, error) { return &user.User{Uid: "0", HomeDir: "/root"}, nil }, LookupUser: func(string) (*user.User, error) {
+				return &user.User{Uid: account.Uid, Gid: account.Gid, Username: account.Username, HomeDir: home}, nil
+			}, Getenv: func(k string) string {
+				if k == "SUDO_USER" {
+					return account.Username
+				}
+				return ""
+			}}
+		}
+		outside := GinkgoT().TempDir()
+		write(filepath.Join(outside, "devex", "logs", "log"), "outside")
+		Expect(os.MkdirAll(filepath.Join(home, ".local"), 0700)).To(Succeed())
+		Expect(os.Symlink(outside, filepath.Join(home, ".local", "share"))).To(Succeed())
+		Expect(p.Migrate(context.Background(), false, &output)).To(MatchError(ContainSubstring(sdk.ErrMigrationRefused.Error())))
+		Expect(os.ReadFile(filepath.Join(outside, "devex", "logs", "log"))).To(Equal([]byte("outside")))
 	})
 	It("honors cancellation and leaves recoverable sources", func() {
 		source := filepath.Join(home, ".devex/config.yaml")
