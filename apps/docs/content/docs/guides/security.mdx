@@ -462,11 +462,12 @@ template installs) and `devex setup` unless the run is a confirmed plan with a
 signed approval of its digest:
 
 ```bash
+# Approver (once): create a key, then add its public key to approval.approvers
+# in policy.yaml before anyone previews a plan (the digest binds the policy).
+devex approval keygen --out ~/.config/devex/approver.pem
+
 # Requester: preview the plan and send the digest to an approver.
 devex install git docker --dry-run --format json   # "approval_required": true, "digest": "sha256:..."
-
-# Approver (once): create a key and add its public key to approval.approvers.
-devex approval keygen --out ~/.config/devex/approver.pem
 
 # Approver: sign a decision (or --decision rejected --reason "...").
 devex approval sign sha256:... --key ~/.config/devex/approver.pem \

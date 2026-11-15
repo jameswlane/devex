@@ -117,6 +117,11 @@ func newApprovalSignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if keyInfo, statErr := os.Stat(keyPath); statErr == nil {
+				if outInfo, outErr := os.Stat(out); outErr == nil && os.SameFile(keyInfo, outInfo) {
+					return fmt.Errorf("--out %s is the signing key; choose another path", out)
+				}
+			}
 			if err := os.WriteFile(out, append(encoded, '\n'), 0o600); err != nil {
 				return fmt.Errorf("write approval: %w", err)
 			}

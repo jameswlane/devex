@@ -141,6 +141,11 @@ var _ = Describe("Organization plan approval", func() {
 			Expect(err).To(MatchError(ContainSubstring("no organization policy approvers are configured")))
 		})
 
+		It("refuses to sign with a malformed key instead of panicking", func() {
+			approval := PlanApproval{SchemaVersion: 1}
+			Expect(approval.Sign(nil)).To(MatchError(ContainSubstring("expected an Ed25519 private key")))
+		})
+
 		It("loads records strictly", func() {
 			path := filepath.Join(teamDir, "approval.json")
 			Expect(os.WriteFile(path, []byte(`{"schema_version":1,"extra":true}`), 0o600)).To(Succeed())

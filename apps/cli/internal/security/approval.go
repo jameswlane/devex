@@ -203,6 +203,9 @@ func (a PlanApproval) signedBytes() ([]byte, error) {
 
 // Sign sets the approval's signature.
 func (a *PlanApproval) Sign(key ed25519.PrivateKey) error {
+	if len(key) != ed25519.PrivateKeySize {
+		return fmt.Errorf("expected an Ed25519 private key")
+	}
 	data, err := a.signedBytes()
 	if err != nil {
 		return err

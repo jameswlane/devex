@@ -157,7 +157,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 					recordPlanChangedApproval(settings.HomeDir, expectPlan, approvalFile)
 					return fmt.Errorf("%s (confirmed %s, now %s); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage, expectPlan, snapshot.Digest)
 				}
-				ctx, err = approvePlan(ctx, settings.HomeDir, snapshot.Digest, approvalFile)
+				ctx, err = approvePlan(ctx, settings.HomeDir, snapshot, approvalFile)
 				if err != nil {
 					return err
 				}
@@ -267,10 +267,24 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 // approvePlan verifies a signed approval of the confirmed plan digest when the
 // organization policy requires one (or when one is supplied), records the
 // decision in the audit log, and marks ctx as running the approved plan.
-func approvePlan(ctx context.Context, homeDir, digest, approvalFile string) (context.Context, error) {
+func approvePlan(ctx context.Context, homeDir string, snapshot agentapi.ExecutionSnapshot, approvalFile string) (context.Context, error) {
+	digest := snapshot.Digest
 	policy, err := security.LoadOrgPolicy(homeDir)
 	if err != nil {
 		return ctx, err
+	}
+	// The approval binds the policy the plan was resolved with.
+	planned := ""
+	if ref := snapshot.Plan.OrganizationPolicy; ref != nil {
+		planned = ref.SHA256
+	}
+	current := ""
+	if policy != nil {
+		current = policy.SHA256
+	}
+	if planned != current {
+		recordPlanChangedApproval(homeDir, digest, approvalFile)
+		return ctx, fmt.Errorf("%s (the organization policy changed); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage)
 	}
 	if approvalFile == "" {
 		if !policy.ApprovalRequired() {

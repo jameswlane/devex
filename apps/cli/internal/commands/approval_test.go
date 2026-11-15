@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
@@ -223,6 +224,15 @@ var _ = Describe("Install with an organization plan approval", func() {
 		Expect(events[0].Error).To(ContainSubstring("plan changed"))
 	})
 
+	It("refuses an approval when the policy changed after the plan was resolved", func() {
+		digest, _ := preview()
+		approval := sign(digest, security.ApprovalApproved, "")
+		snapshot := agentapi.ExecutionSnapshot{Digest: digest, Plan: agentapi.Plan{OrganizationPolicy: &agentapi.PolicyRef{SHA256: "resolved-under-an-older-policy"}}}
+		_, err := approvePlan(context.Background(), home, snapshot, approval)
+		Expect(err).To(MatchError(ContainSubstring("the organization policy changed")))
+		Expect(auditEvents()).To(HaveLen(1))
+	})
+
 	It("generates keys without overwriting and verifies signed approvals", func() {
 		newKey := filepath.Join(home, "new.pem")
 		Expect(run("approval", "keygen", "--out", newKey)).To(Succeed())
@@ -239,6 +249,8 @@ var _ = Describe("Install with an organization plan approval", func() {
 		Expect(run("approval", "verify", approval, "--plan", digest)).To(Succeed())
 		Expect(output.String()).To(ContainSubstring("Valid approval of " + digest + " by it-security"))
 		Expect(run("approval", "sign", digest, "--key", keyPath, "--approver", "it-security", "--decision", "maybe", "--out", approval)).To(MatchError(ContainSubstring("--decision must be")))
+		Expect(run("approval", "sign", digest, "--key", keyPath, "--approver", "it-security", "--out", keyPath)).To(MatchError(ContainSubstring("is the signing key")))
+		Expect(os.ReadFile(keyPath)).To(ContainSubstring("PRIVATE KEY"))
 		Expect(run("approval", "sign", "abc", "--key", keyPath, "--approver", "it-security", "--out", approval)).To(MatchError(ContainSubstring("must be the sha256")))
 	})
 })
