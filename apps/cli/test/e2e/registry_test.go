@@ -23,12 +23,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// ciMarkerHeader tells the registry not to count the suite's downloads (#475).
+const ciMarkerHeader = "X-DevEx-CI"
+
 // sourceRegistry keeps real plugin download/checksum verification in the path.
-// Only staged plugins are overridden; other requests use the selected registry.
+// Only staged plugins are overridden; other requests use the selected registry,
+// marked as CI traffic.
 func sourceRegistry(upstream string, metadata map[string]sdk.PluginMetadata, files map[string]string) *httptest.Server {
 	target, err := url.Parse(upstream)
 	Expect(err).NotTo(HaveOccurred())
-	proxy := &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) { r.SetURL(target) }}
+	proxy := &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) {
+		r.SetURL(target)
+		r.Out.Header.Set(ciMarkerHeader, "1")
+	}}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(parts) >= 4 && strings.Join(parts[:3], "/") == "api/v1/plugins" {
@@ -57,12 +64,9 @@ func sourceRegistry(upstream string, metadata map[string]sdk.PluginMetadata, fil
 func configureSourceRegistry() {
 	directory := filepath.Join(envDefault("DEVEX_E2E_TESTDATA", "/opt/devex-e2e/testdata"), "plugins")
 	entries, err := os.ReadDir(directory)
-	if os.IsNotExist(err) {
-		return
-	}
-	Expect(err).NotTo(HaveOccurred())
-	if len(entries) == 0 {
-		return
+	// Without staged plugins the proxy still runs, so every registry request is marked as CI.
+	if !os.IsNotExist(err) {
+		Expect(err).NotTo(HaveOccurred())
 	}
 	metadata := map[string]sdk.PluginMetadata{}
 	files := map[string]string{}
@@ -86,7 +90,9 @@ func configureSourceRegistry() {
 
 var _ = Describe("Source plugin registry", Label("registry"), func() {
 	It("serves source metadata and binaries while forwarding other plugins", func() {
-		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = fmt.Fprint(w, "upstream:"+r.URL.Path) }))
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, "upstream:"+r.URL.Path+" ci:"+r.Header.Get(ciMarkerHeader))
+		}))
 		defer upstream.Close()
 		file := filepath.Join(sandbox.work, "source-plugin")
 		Expect(os.WriteFile(file, []byte("source-binary"), 0600)).To(Succeed())
@@ -100,7 +106,8 @@ var _ = Describe("Source plugin registry", Label("registry"), func() {
 			"/api/v1/plugins/demo":                                                 `"version":"test"`,
 			"/api/v1/plugins/demo/versions/latest":                                 `"name":"demo"`,
 			"/api/v1/plugins/demo/download/" + runtime.GOOS + "-" + runtime.GOARCH: "source-binary",
-			"/api/v1/plugins/other":                                                "upstream:/api/v1/plugins/other",
+			"/api/v1/plugins/other":                                                "upstream:/api/v1/plugins/other ci:1",
+			"/api/v1/plugins/other/download/linux-amd64":                           "upstream:/api/v1/plugins/other/download/linux-amd64 ci:1",
 		} {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+path, nil)
