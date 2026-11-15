@@ -425,14 +425,15 @@ func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName st
 		}
 	}
 
-	if !installretry.Eligible(pluginName, args) {
+	manager, eligible := installretry.Eligible(pluginName, args)
+	if !eligible {
 		return b.manager.ExecutePluginWithIO(ctx, pluginName, args, streams)
 	}
 	policy, err := installretry.Configured()
 	if err != nil {
 		return err
 	}
-	return policy.Run(ctx, streams.Stderr, func(stderr io.Writer) error {
+	return policy.Run(ctx, manager, streams.Stderr, func(stderr io.Writer) error {
 		attemptStreams := streams
 		attemptStreams.Stderr = stderr
 		return b.manager.ExecutePluginWithIO(ctx, pluginName, args, attemptStreams)
