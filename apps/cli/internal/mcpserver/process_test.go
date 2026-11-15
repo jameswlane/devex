@@ -77,13 +77,14 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		for _, name := range mcpserver.ReadOnlyTools {
 			arguments := map[string]any{}
 			if name == "plan_install" {
-				arguments["apps"] = []string{"git"}
+				// bat is bundled for every platform, so the plan works on any host.
+				arguments["apps"] = []string{"bat"}
 			}
 			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: arguments})
 			Expect(err).NotTo(HaveOccurred(), name)
 			Expect(result.IsError).To(BeFalse(), "%s: %v", name, result.Content)
 		}
-		_, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "install_apps", Arguments: map[string]any{"apps": []string{"git"}}})
+		_, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "install_apps", Arguments: map[string]any{"apps": []string{"bat"}}})
 		Expect(err).To(MatchError(ContainSubstring("unknown tool")))
 		resource, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: mcpserver.EffectiveConfigURI})
 		Expect(err).NotTo(HaveOccurred())
@@ -132,7 +133,8 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		Expect(names).To(ContainElements(mcpserver.MutatingTools))
 
 		// Preparing only plans; nothing is installed.
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_install", Arguments: map[string]any{"apps": []string{"git"}}})
+		// bat is bundled for every platform, so the plan works on any host.
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_install", Arguments: map[string]any{"apps": []string{"bat"}}})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.IsError).To(BeFalse(), "%v %s", result.Content, stderr.String())
 		Expect(result.StructuredContent).To(HaveKey("plan_id"))

@@ -165,7 +165,9 @@ func (d *Detector) detectMacOSVersionContext(parent context.Context, platform *P
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sw_vers", "-productVersion")
+	// sw_vers ships at a fixed path; MCP clients and launchd often start DevEx
+	// with a PATH that does not include /usr/bin.
+	cmd := exec.CommandContext(ctx, "/usr/bin/sw_vers", "-productVersion")
 	output, err := cmd.Output()
 	if err != nil {
 		return err

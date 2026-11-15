@@ -17,6 +17,9 @@ import (
 )
 
 var _ = Describe("Organization policy installation plans", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var home, teamDir, policyPath string
 	var settings config.CrossPlatformSettings
 

@@ -20,6 +20,9 @@ import (
 )
 
 var _ = Describe("Devcontainer command", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var (
 		settings config.CrossPlatformSettings
 		project  string

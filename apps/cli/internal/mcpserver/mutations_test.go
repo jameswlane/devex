@@ -19,6 +19,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mcpserver"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 type fakeExecutor struct {
@@ -95,6 +96,9 @@ func (f *fakeExecutor) Uninstall(_ context.Context, targets []mcpserver.Uninstal
 }
 
 var _ = Describe("MCP mutating tools", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var (
 		ctx      context.Context
 		executor *fakeExecutor

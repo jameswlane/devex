@@ -12,6 +12,7 @@ import (
 
 func TestCommands(t *testing.T) {
 	t.Parallel()
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Commands Suite")
 }

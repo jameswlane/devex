@@ -15,6 +15,9 @@ import (
 )
 
 var _ = Describe("Install plan and Confirmation screen", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var (
 		model            *SetupModel
 		originalCheck    func(context.Context, []types.CrossPlatformApp) map[string]bool
@@ -174,6 +177,9 @@ var _ = Describe("Install plan and Confirmation screen", func() {
 })
 
 var _ = Describe("Consent hook preview", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	It("shows commands and conditional config destinations but only selected-shell initialization", func() {
 		model := &SetupModel{step: StepConfirmation,
 			system:     SystemInfo{shells: []string{"bash"}, themes: []string{"Tokyo Night"}},

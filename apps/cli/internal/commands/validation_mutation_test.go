@@ -13,6 +13,9 @@ import (
 )
 
 var _ = Describe("Validation before mutation", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var settings config.CrossPlatformSettings
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()

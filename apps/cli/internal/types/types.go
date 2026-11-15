@@ -390,6 +390,19 @@ type CrossPlatformApp struct {
 
 var catalogPlatform = sync.OnceValue(platform.DetectPlatform)
 
+// catalogOS names the operating system whose catalog entries apply.
+var catalogOS = runtime.GOOS
+
+// PinCatalogOSForTesting makes catalog selection use goos instead of the host
+// operating system, so specs that model one platform's entries behave the same
+// on every host. It returns a function that restores the previous value.
+// Production code must not call it.
+func PinCatalogOSForTesting(goos string) (restore func()) {
+	previous := catalogOS
+	catalogOS = goos
+	return func() { catalogOS = previous }
+}
+
 // GetOSConfig returns the appropriate OS configuration for the current platform
 func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 	return app.selectOSConfig().withBrewSelection()
@@ -422,7 +435,7 @@ func (app *CrossPlatformApp) selectOSConfig() OSConfig {
 	}
 
 	// Return OS-specific config
-	switch runtime.GOOS {
+	switch catalogOS {
 	case "linux":
 		if len(app.Linux.PlatformRequirements) == 0 {
 			return app.Linux
@@ -544,7 +557,7 @@ func (config *OSConfig) IsPlatformSupported() bool {
 	}
 
 	// Get current platform info
-	currentOS := runtime.GOOS
+	currentOS := catalogOS
 	// TODO: Add platform detection for version and arch
 	// For now, we'll implement basic OS matching
 
@@ -596,12 +609,12 @@ func (app *CrossPlatformApp) Validate() error {
 	}
 
 	if !app.IsSupported() {
-		return fmt.Errorf("app %s is not supported on %s", app.Name, runtime.GOOS)
+		return fmt.Errorf("app %s is not supported on %s", app.Name, catalogOS)
 	}
 
 	osConfig := app.GetOSConfig()
 	if osConfig.InstallMethod == "" {
-		return fmt.Errorf("install method is required for app %s on %s", app.Name, runtime.GOOS)
+		return fmt.Errorf("install method is required for app %s on %s", app.Name, catalogOS)
 	}
 
 	return nil

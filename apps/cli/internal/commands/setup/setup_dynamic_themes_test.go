@@ -10,6 +10,8 @@ import (
 )
 
 func TestGetAvailableThemeNames(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	t.Run("should extract themes from application configurations", func(t *testing.T) {
 		// Create test settings with apps that have themes
 		settings := config.CrossPlatformSettings{

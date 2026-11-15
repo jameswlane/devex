@@ -11,6 +11,10 @@ import (
 )
 
 var _ = Describe("Theme Selection Flow", func() {
+	// Without a selected shell the wizard follows $SHELL; zsh (the macOS
+	// default) adds the Oh My Zsh step these sequences do not expect.
+	BeforeEach(func() { GinkgoT().Setenv("SHELL", "/bin/bash") })
+
 	var createMockSetupModel func() *SetupModel
 
 	BeforeEach(func() {
@@ -210,6 +214,10 @@ var _ = Describe("Theme Selection Flow", func() {
 })
 
 var _ = Describe("Theme Step Navigation", func() {
+	// Without a selected shell the wizard follows $SHELL; zsh (the macOS
+	// default) adds the Oh My Zsh step these sequences do not expect.
+	BeforeEach(func() { GinkgoT().Setenv("SHELL", "/bin/bash") })
+
 	Context("when handling empty desktop apps", func() {
 		It("should skip to languages step if no desktop apps", func() {
 			model := &SetupModel{

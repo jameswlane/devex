@@ -12,6 +12,7 @@ import (
 
 func TestConfig(t *testing.T) {
 	t.Parallel()
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Config Suite")
 }
