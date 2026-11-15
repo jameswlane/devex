@@ -65,7 +65,7 @@
 		"commitlint": "^21.2.4",
 		"glob": "^14.0.4",
 		"js-yaml": "^5.5.0",
-		"turbo": "2.11.10"
+		"turbo": "2.11.11"
 	},
 	"pnpm": {
 		"overrides": {
