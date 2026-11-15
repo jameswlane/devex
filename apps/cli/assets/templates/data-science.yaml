@@ -24,6 +24,8 @@ metadata:
   limitations:
     - Everything runs in Docker containers, so the system Python and R are never changed.
     - Notebooks live in the devex-jupyter-work volume, and MLflow data in devex-mlflow-data.
+    - Without Docker access, the first Linux install adds you to the docker group and then fails to start containers.
+    - Log out and back in (or run newgrp docker), then run the same install again.
     - Docker Engine is installed only on Linux. On macOS, start Docker Desktop yourself first; its license terms apply.
     - Jupyter generates a login token at start. Read it with docker logs on the notebook container.
     - Ports are published on 127.0.0.1 only. GPU access is not configured.
