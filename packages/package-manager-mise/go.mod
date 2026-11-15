@@ -3,6 +3,7 @@ module github.com/jameswlane/devex/packages/package-manager-mise
 go 1.26.0
 
 require (
+	github.com/ProtonMail/go-crypto v1.5.2
 	github.com/jameswlane/devex/packages/plugin-sdk v0.0.1
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
@@ -12,7 +13,6 @@ replace github.com/jameswlane/devex/packages/plugin-sdk => ../plugin-sdk
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/ProtonMail/go-crypto v1.5.2 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect

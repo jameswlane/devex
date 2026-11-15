@@ -8,6 +8,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/viper"
 )
 
@@ -81,15 +82,17 @@ func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 		Description: "Development environment manager for programming languages",
 		Linux: types.OSConfig{
 			InstallMethod:   "curlpipe",
-			DownloadURL:     "https://mise.run",
+			DownloadURL:     sdk.MiseInstallScriptURL,
 			InstallCommand:  "curl https://mise.run | sh",
 			InstalledBinary: "mise",
+			Verification:    sdk.MiseInstallVerification(),
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:   "curlpipe",
-			DownloadURL:     "https://mise.run",
+			DownloadURL:     sdk.MiseInstallScriptURL,
 			InstallCommand:  "curl https://mise.run | sh",
 			InstalledBinary: "mise",
+			Verification:    sdk.MiseInstallVerification(),
 		},
 		Windows: types.OSConfig{
 			InstallMethod:   "curlpipe",

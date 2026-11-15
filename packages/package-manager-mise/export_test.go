@@ -1,0 +1,12 @@
+package main
+
+import (
+	"context"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+)
+
+// InstallMiseFrom exposes the verified installer flow to tests.
+func InstallMiseFrom(m *MisePlugin, ctx context.Context, scriptURL string, verification sdk.ArtifactVerification) error {
+	return m.installMiseFrom(ctx, scriptURL, verification)
+}

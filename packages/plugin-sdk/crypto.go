@@ -68,7 +68,11 @@ func (v *GPGVerifier) LoadPublicKey(keyPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load public key: %w", err)
 	}
+	return v.LoadPublicKeyData(keyData)
+}
 
+// LoadPublicKeyData loads an armored or binary public key from memory.
+func (v *GPGVerifier) LoadPublicKeyData(keyData []byte) error {
 	// Try to parse as armored key first
 	block, err := armor.Decode(bytes.NewReader(keyData))
 	if err == nil {
@@ -140,10 +144,19 @@ func (v *GPGVerifier) VerifySignature(filePath, signaturePath string) error {
 		sigReader = block.Body
 	}
 
-	// Verify the signature
+	// Verify the signature. Some vendors (for example mise's install.sh.sig)
+	// publish an OpenPGP signed message instead of a detached signature; accept
+	// it only when its signed content is byte-for-byte the artifact.
 	signer, err := openpgp.CheckDetachedSignature(v.publicKeyRing, file, sigReader, nil)
 	if err != nil {
-		return fmt.Errorf("signature verification failed: %w", err)
+		var messageErr error
+		signer, messageErr = v.checkSignedMessage(filePath, sigData)
+		if errors.Is(messageErr, errNotSignedMessage) {
+			return fmt.Errorf("signature verification failed: %w", err)
+		}
+		if messageErr != nil {
+			return fmt.Errorf("signature verification failed: %w", messageErr)
+		}
 	}
 	if signer == nil {
 		return fmt.Errorf("signature verification failed: no signer found")
@@ -158,6 +171,46 @@ func (v *GPGVerifier) VerifySignature(filePath, signaturePath string) error {
 	}
 
 	return nil
+}
+
+// errNotSignedMessage means the signature is not an OpenPGP signed message.
+var errNotSignedMessage = errors.New("not an OpenPGP signed message")
+
+// maxSignedMessageSize bounds the content of a signed-message signature.
+const maxSignedMessageSize = 1024 * 1024
+
+// checkSignedMessage verifies a non-detached OpenPGP signed message and
+// requires its literal content to equal the artifact at filePath.
+func (v *GPGVerifier) checkSignedMessage(filePath string, sigData []byte) (*openpgp.Entity, error) {
+	var reader io.Reader = bytes.NewReader(sigData)
+	if block, err := armor.Decode(bytes.NewReader(sigData)); err == nil {
+		reader = block.Body
+	}
+	message, err := openpgp.ReadMessage(reader, v.publicKeyRing, nil, nil)
+	if err != nil || message.IsEncrypted || !message.IsSigned {
+		return nil, errNotSignedMessage
+	}
+	content, err := io.ReadAll(io.LimitReader(message.UnverifiedBody, maxSignedMessageSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > maxSignedMessageSize {
+		return nil, errors.New("signed message content is too large")
+	}
+	if message.SignatureError != nil {
+		return nil, message.SignatureError
+	}
+	if message.SignedBy == nil || message.SignedBy.Entity == nil {
+		return nil, errors.New("signed message has no trusted signer")
+	}
+	artifact, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(content, artifact) {
+		return nil, errors.New("signed content does not match the artifact")
+	}
+	return message.SignedBy.Entity, nil
 }
 
 // VerifySignatureFromURL downloads and verifies a signature from a URL
