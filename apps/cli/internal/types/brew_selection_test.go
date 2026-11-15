@@ -45,6 +45,7 @@ var _ = Describe("Homebrew formula and Cask selection", func() {
 		Entry("command already selects", types.AppConfig{InstallMethod: "brew", Options: []string{"--cask"}}, "--formula docker", "--formula docker"),
 		Entry("no selector", types.AppConfig{InstallMethod: "brew"}, "git", "git"),
 		Entry("other installer", types.AppConfig{InstallMethod: "snap", Options: []string{"--cask"}}, "nvim", "nvim"),
+		Entry("selector only in install_command", types.AppConfig{InstallMethod: "brew", InstallCommand: "--cask docker"}, "docker", "docker --cask"),
 		Entry("empty command", types.AppConfig{InstallMethod: "brew", Options: []string{"--cask"}}, "", ""),
 	)
 

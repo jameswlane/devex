@@ -252,6 +252,16 @@ func (a AppConfig) WithBrewSelector(command string) string {
 			selector = option
 		}
 	}
+	if selector == "" && command != a.InstallCommand {
+		// A selector written only in install_command still applies to removal.
+		if installTokens, err := splitPackageCommand(a.InstallCommand); err == nil {
+			for _, token := range installTokens {
+				if token == "--cask" || token == "--formula" {
+					selector = token
+				}
+			}
+		}
+	}
 	if selector == "" {
 		return command
 	}
