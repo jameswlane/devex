@@ -22,6 +22,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
@@ -939,6 +940,10 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 			if err := si.repo.AddApp(app.Name); err != nil {
 				return err
 			}
+		}
+		// The receipt feeds devex inventory; failing to write it must not fail the install.
+		if err := inventory.Record(ctx, si.repo, app, inventory.RecordOptions{}); err != nil {
+			si.sendLog("WARN", fmt.Sprintf("Could not record the installed version of %s: %v", app.Name, err))
 		}
 		return RecordLifecycle(si.repo, app.Name, hooksComplete)
 	})

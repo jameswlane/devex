@@ -8,7 +8,7 @@ description: Export the software DevEx manages, with installed versions, and rep
 `devex inventory` exports the applications DevEx manages on a machine, with the manager, packages and versions the native package manager reports, and reconciles DevEx's records with what is actually installed. It changes nothing.
 
 ```bash
-devex inventory [--format table|json|yaml] [--include-hostname] [--check]
+devex inventory [--format table|json|yaml] [--include-hostname] [--include-unmanaged] [--check]
 ```
 
 ## What is reported
@@ -22,16 +22,36 @@ For every application DevEx tracks:
 | `packages` | The native package identifiers that method installed (installation options such as `--classic` are left out) |
 | `version` | The version the package manager reports now |
 | `state` | `installed`, `missing` (the package manager reports it is not installed) or `unknown` (it could not be checked; `detail` says why) |
-| `managed_by` | Always `devex` |
+| `managed_by` | `devex` for applications DevEx tracks, `none` for unmanaged software listed with `--include-unmanaged` |
 | `definition_recorded` | Whether DevEx recorded the definition when it installed the application |
+| `recorded_version` | The version the package manager reported right after DevEx installed the application (omitted when it was not recorded) |
+| `installed_at` | When DevEx installed the application (omitted for installs from before DevEx recorded it) |
 
 Versions come from `dpkg-query` for apt and deb packages, `snap list` and `flatpak info`. Other methods (mise, curlpipe, Docker, ...) are reported as `unknown`. For applications installed by DevEx versions that did not record definitions, the current catalog definition is used and the drift entry says so.
 
 An application is `missing` only when its package manager answers that the package is not installed. When the check itself fails (the manager is not on `PATH`, snapd is unreachable, a permission error), the application is `unknown` with the error in `detail`, and no drift is reported. Applications installed from a downloaded `.deb` file or URL are `unknown`: DevEx does not record the dpkg package name such a file installs, so it cannot be checked. If the command is canceled or times out, it fails instead of printing a partial export.
 
+## Install receipts
+
+When DevEx installs an application, it records a receipt: the manager, the native package identifiers, the version the package manager reports right after the install, the install time, the salted machine ID (see below) and `managed_by: devex`. Uninstalling the application removes its receipt. Applications installed by earlier DevEx versions have no receipt until they are reinstalled; they are still reported, without `recorded_version` and `installed_at`.
+
 ## Drift
 
-`drift` lists differences: `missing` for tracked applications that are no longer installed, and `no_definition` for records without a definition (reinstall the application with `devex install` to record one). `--check` exits nonzero when there is drift, for use in automation.
+`drift` lists differences between DevEx's records and the machine:
+
+| Kind | Meaning |
+| --- | --- |
+| `missing` | DevEx tracks the application, but the package manager reports it is not installed |
+| `changed` | The installed version differs from the version DevEx recorded at install (for example, upgraded with `apt upgrade`) |
+| `host_changed` | The receipt was written on another machine: the DevEx records were copied or restored here |
+| `no_definition` | DevEx has no recorded definition; reinstall the application with `devex install` to record one |
+| `unmanaged` | With `--include-unmanaged` only: a catalog application installed natively but not tracked by DevEx |
+
+`--check` exits nonzero when there is drift, for use in automation.
+
+## Unmanaged software
+
+`--include-unmanaged` also checks every catalog application DevEx does not track and lists those the package manager reports installed, with `managed_by: none` and an `unmanaged` drift entry. Only apt, deb, snap and flatpak applications are checked, and only verified installs are listed. It is off by default because it queries the package manager once per catalog package, and because software installed outside DevEx is usually expected; turn it on to find software to bring under DevEx management. With `--check`, unmanaged software counts as drift.
 
 ## Machine identity
 
@@ -39,10 +59,17 @@ An application is `missing` only when its package manager answers that the packa
 
 ## Ingestion
 
-The JSON and YAML output has `schema_version: devex.inventory/v1`; fields are only added, never renamed, within v1. Collect it from each machine, for example:
+The JSON and YAML output has `schema_version: devex.inventory/v1`; fields are only added, never renamed, within v1, so consumers should ignore fields they do not know. Collect it from each machine, for example:
 
 ```bash
 devex inventory --format json > "inventory-$(date +%F).json"
 # or in a fleet: devex remote install … then
 ssh devbox devex inventory --format json | jq '.items[] | {name, version, state}'
 ```
+
+Ways to ingest it:
+
+- **Files in a repository or bucket:** write one file per machine, named by `machine.id`, from a cron job or CI runner, and diff them over time.
+- **Log pipeline or SIEM:** emit one record per item with `jq -c '.machine as $m | .items[] | . + {machine: $m.id}'` and ship the lines with your log agent.
+- **CMDB or asset system:** map `machine.id` to the asset, and `name`, `version` and `managed_by` to its software records. Upsert by `machine.id` and `name`.
+- **Compliance gate:** run `devex inventory --check` and fail the job on drift; the JSON on stdout says what drifted.

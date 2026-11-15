@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/inventory"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -22,6 +24,7 @@ func NewInventoryCmd(repo types.Repository, settings config.CrossPlatformSetting
 		format          string
 		includeHostname bool
 		check           bool
+		unmanaged       bool
 	)
 	cmd := &cobra.Command{
 		Use:   "inventory",
@@ -30,14 +33,19 @@ func NewInventoryCmd(repo types.Repository, settings config.CrossPlatformSetting
 with the manager, packages and versions the native package manager reports
 (dpkg for apt and deb, snap, flatpak), and reconcile the two.
 
-Drift lists applications DevEx tracks that are no longer installed, and
-applications without a recorded definition. The machine is identified by a
+DevEx records the version, manager and machine of each application when it
+installs it. Drift lists applications DevEx tracks that are no longer
+installed, whose installed version changed since DevEx installed them, whose
+records come from another machine, or that have no recorded definition. With
+--include-unmanaged, catalog applications installed natively but not tracked
+by DevEx are listed and reported as unmanaged. The machine is identified by a
 salted hash of /etc/machine-id; the hostname is included only with
 --include-hostname. The JSON and YAML schema is ` + inventory.SchemaVersion + `.
 
 Nothing is changed. Use --check in automation to exit nonzero on drift.`,
 		Example: `  devex inventory --format json > inventory.json
-  devex inventory --check`,
+  devex inventory --check
+  devex inventory --include-unmanaged`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		Annotations:  map[string]string{catalogAnnotation: catalogRequired},
@@ -56,7 +64,11 @@ Nothing is changed. Use --check in automation to exit nonzero on drift.`,
 				}
 				return types.CrossPlatformApp{}, false
 			}
-			result, err := inventory.Build(cmd.Context(), repo, inventory.Options{DevexVersion: inventoryVersion, IncludeHostname: includeHostname, Resolve: resolve})
+			options := inventory.Options{DevexVersion: inventoryVersion, IncludeHostname: includeHostname, Resolve: resolve}
+			if unmanaged {
+				options.Catalog = settings.GetAllApps
+			}
+			result, err := inventory.Build(cmd.Context(), repo, options)
 			if err != nil {
 				return err
 			}
@@ -81,13 +93,13 @@ Nothing is changed. Use --check in automation to exit nonzero on drift.`,
 					fmt.Fprintln(out, "DevEx does not manage any applications on this machine yet.")
 				} else {
 					w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-					fmt.Fprintln(w, "APPLICATION\tMANAGER\tVERSION\tSTATE")
+					fmt.Fprintln(w, "APPLICATION\tMANAGER\tVERSION\tSTATE\tMANAGED BY")
 					for _, item := range result.Items {
 						version := item.Version
 						if version == "" {
 							version = "-"
 						}
-						fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", item.Name, item.Manager, version, item.State)
+						fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", item.Name, item.Manager, version, item.State, item.ManagedBy)
 					}
 					if err := w.Flush(); err != nil {
 						return err
@@ -106,5 +118,14 @@ Nothing is changed. Use --check in automation to exit nonzero on drift.`,
 	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, yaml)")
 	cmd.Flags().BoolVar(&includeHostname, "include-hostname", false, "Include the hostname in the export")
 	cmd.Flags().BoolVar(&check, "check", false, "Exit nonzero when there is drift")
+	cmd.Flags().BoolVar(&unmanaged, "include-unmanaged", false, "Also list catalog applications installed natively but not tracked by DevEx")
 	return cmd
+}
+
+// recordInstallReceipt records the installed version, manager and machine
+// for devex inventory. It only warns on failure: the install itself succeeded.
+func recordInstallReceipt(ctx context.Context, repo types.Repository, app types.CrossPlatformApp) {
+	if err := inventory.Record(ctx, repo, app, inventory.RecordOptions{}); err != nil {
+		log.Warn("Could not record the installed version", "app", app.Name, "error", err)
+	}
 }

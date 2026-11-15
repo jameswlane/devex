@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
@@ -159,6 +160,8 @@ var _ = Describe("APT batching", func() {
 		Expect(tracked.GetApp("GitHub CLI")).NotTo(BeNil())
 		Expect(LifecycleUnfinished(tracked, "GitHub CLI")).To(BeFalse())
 		Expect(tracked.Get(lifecycleKey("GitHub CLI"))).To(Equal(lifecycleComplete))
+		// Registration records the install receipt devex inventory reads.
+		Expect(tracked.Get(inventory.ReceiptKey("GitHub CLI"))).To(SatisfyAll(ContainSubstring(`"manager":"apt"`), ContainSubstring(`"packages":["gh"]`), ContainSubstring(`"managed_by":"devex"`)))
 		// bat was installed outside a DevEx lifecycle, so it is still skipped.
 		_, err := tracked.GetApp("bat")
 		Expect(err).To(HaveOccurred())

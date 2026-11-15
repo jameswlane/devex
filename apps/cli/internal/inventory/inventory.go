@@ -40,6 +40,10 @@ type Item struct {
 	ManagedBy  string   `json:"managed_by" yaml:"managed_by"`
 	Definition bool     `json:"definition_recorded" yaml:"definition_recorded"`
 	Detail     string   `json:"detail,omitempty" yaml:"detail,omitempty"`
+	// RecordedVersion and InstalledAt come from the receipt DevEx wrote when
+	// it installed the application.
+	RecordedVersion string     `json:"recorded_version,omitempty" yaml:"recorded_version,omitempty"`
+	InstalledAt     *time.Time `json:"installed_at,omitempty" yaml:"installed_at,omitempty"`
 }
 
 // Machine identifies the host without revealing it.
@@ -63,7 +67,7 @@ type Inventory struct {
 // Drift is a difference between DevEx's records and the machine.
 type Drift struct {
 	App    string `json:"app" yaml:"app"`
-	Kind   string `json:"kind" yaml:"kind"` // missing, no_definition
+	Kind   string `json:"kind" yaml:"kind"` // missing, no_definition, changed, host_changed, unmanaged
 	Detail string `json:"detail" yaml:"detail"`
 }
 
@@ -83,6 +87,9 @@ type Options struct {
 	// Resolve returns the current catalog definition for an application
 	// without a recorded one.
 	Resolve func(name string) (types.CrossPlatformApp, bool)
+	// Catalog, when set, lists the definitions checked for software that is
+	// installed natively but not tracked by DevEx.
+	Catalog func() []types.CrossPlatformApp
 }
 
 // Reader is the part of the DevEx datastore Build reads.
@@ -134,14 +141,25 @@ func Build(ctx context.Context, repo Reader, options Options) (Inventory, error)
 		if item.State == StateMissing {
 			result.Drift = append(result.Drift, Drift{App: record.Name, Kind: "missing", Detail: "tracked by DevEx but not installed according to " + item.Manager})
 		}
+		result.Drift = append(result.Drift, compareReceipt(repo, &item, result.Machine.ID)...)
 		result.Items = append(result.Items, item)
+	}
+	if options.Catalog != nil {
+		if err := addUnmanaged(ctx, &result, tracked, options); err != nil {
+			return result, err
+		}
 	}
 	// A query canceled during the last item must not yield a successful export.
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
 	sort.Slice(result.Items, func(i, j int) bool { return result.Items[i].Name < result.Items[j].Name })
-	sort.Slice(result.Drift, func(i, j int) bool { return result.Drift[i].App < result.Drift[j].App })
+	sort.Slice(result.Drift, func(i, j int) bool {
+		if result.Drift[i].App != result.Drift[j].App {
+			return result.Drift[i].App < result.Drift[j].App
+		}
+		return result.Drift[i].Kind < result.Drift[j].Kind
+	})
 	return result, nil
 }
 
@@ -251,19 +269,54 @@ func firstLine(text string) string {
 	return line
 }
 
-func machine(options Options) Machine {
-	path := options.MachineIDPath
+// addUnmanaged adds catalog applications that the native package manager
+// reports installed but DevEx does not track. Only verified installs count;
+// missing and unqueryable applications are left out.
+func addUnmanaged(ctx context.Context, result *Inventory, tracked []types.AppConfig, options Options) error {
+	known := make(map[string]bool, len(tracked))
+	for _, record := range tracked {
+		known[strings.ToLower(strings.TrimSpace(record.Name))] = true
+	}
+	for _, app := range options.Catalog() {
+		key := strings.ToLower(strings.TrimSpace(app.Name))
+		if key == "" || known[key] {
+			continue
+		}
+		known[key] = true
+		config := app.GetOSConfig()
+		if !queryable(config.InstallMethod) {
+			continue
+		}
+		item := Item{Name: app.Name, ManagedBy: "none", Manager: config.InstallMethod, Packages: []string{}, State: StateUnknown}
+		if err := inspect(ctx, &item, config, options.Query); err != nil {
+			return err
+		}
+		if item.State != StateInstalled {
+			continue
+		}
+		result.Items = append(result.Items, item)
+		result.Drift = append(result.Drift, Drift{App: app.Name, Kind: "unmanaged", Detail: "installed with " + item.Manager + " but not tracked by DevEx; install it with devex install to manage it"})
+	}
+	return ctx.Err()
+}
+
+// machineID returns a salted hash of the machine-id at path, or
+// "unavailable". The hash identifies the machine across exports without
+// revealing its machine-id.
+func machineID(path string) string {
 	if path == "" {
 		path = "/etc/machine-id"
 	}
-	id := "unavailable"
-	if data, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(data)) != "" {
-		// A salted hash identifies the machine across exports without revealing
-		// its machine-id.
-		sum := sha256.Sum256([]byte("devex-inventory:" + strings.TrimSpace(string(data))))
-		id = hex.EncodeToString(sum[:])[:16]
+	data, err := os.ReadFile(path)
+	if err != nil || strings.TrimSpace(string(data)) == "" {
+		return "unavailable"
 	}
-	result := Machine{ID: id, OS: runtime.GOOS, Arch: runtime.GOARCH}
+	sum := sha256.Sum256([]byte("devex-inventory:" + strings.TrimSpace(string(data))))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+func machine(options Options) Machine {
+	result := Machine{ID: machineID(options.MachineIDPath), OS: runtime.GOOS, Arch: runtime.GOARCH}
 	if options.IncludeHostname {
 		result.Hostname, _ = os.Hostname()
 	}

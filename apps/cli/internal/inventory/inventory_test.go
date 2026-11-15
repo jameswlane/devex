@@ -20,6 +20,12 @@ import (
 type fakeRepo struct {
 	apps        []string
 	definitions map[string]types.CrossPlatformApp
+	values      map[string]string // other keys, such as install receipts
+}
+
+func (f fakeRepo) Set(key, value string) error {
+	f.values[key] = value
+	return nil
 }
 
 func (f fakeRepo) ListApps() ([]types.AppConfig, error) {
@@ -31,6 +37,12 @@ func (f fakeRepo) ListApps() ([]types.AppConfig, error) {
 }
 
 func (f fakeRepo) Get(key string) (string, error) {
+	if value, ok := f.values[key]; ok {
+		return value, nil
+	}
+	if !strings.HasPrefix(key, "installed-app-definition:") {
+		return "", errors.New("not found")
+	}
 	name := strings.TrimPrefix(key, "installed-app-definition:")
 	app, ok := f.definitions[name]
 	if !ok {
@@ -60,7 +72,7 @@ var _ = Describe("Inventory", func() {
 			"git":        aptApp("git", "git"),
 			"curl-tools": aptApp("curl-tools", "curl", "jq"),
 			"gone":       aptApp("gone", "gone-pkg"),
-		}}
+		}, values: map[string]string{}}
 		machineID := filepath.Join(GinkgoT().TempDir(), "machine-id")
 		Expect(os.WriteFile(machineID, []byte("0123456789abcdef0123456789abcdef\n"), 0o600)).To(Succeed())
 		options = inventory.Options{
@@ -102,6 +114,99 @@ var _ = Describe("Inventory", func() {
 		result, err := inventory.Build(context.Background(), repo, options)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Drift).To(ContainElement(SatisfyAll(HaveField("App", "git"), HaveField("Kind", "missing"))))
+	})
+
+	Context("with install receipts", func() {
+		var recordOptions inventory.RecordOptions
+
+		BeforeEach(func() {
+			recordOptions = inventory.RecordOptions{Query: options.Query, Now: options.Now, MachineIDPath: options.MachineIDPath}
+			Expect(inventory.Record(context.Background(), repo, repo.definitions["git"], recordOptions)).To(Succeed())
+		})
+
+		find := func(result inventory.Inventory, name string) inventory.Item {
+			for _, item := range result.Items {
+				if item.Name == name {
+					return item
+				}
+			}
+			Fail("no item " + name)
+			return inventory.Item{}
+		}
+
+		It("records the installed identifiers, version, manager, host and owner", func() {
+			var receipt inventory.Receipt
+			Expect(json.Unmarshal([]byte(repo.values[inventory.ReceiptKey("git")]), &receipt)).To(Succeed())
+			Expect(receipt).To(SatisfyAll(
+				HaveField("Manager", "apt"), HaveField("Packages", []string{"git"}), HaveField("Version", "1:2.43.0-1"),
+				HaveField("ManagedBy", "devex"), HaveField("InstalledAt", options.Now()),
+			))
+			result, err := inventory.Build(context.Background(), repo, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(receipt.MachineID).To(Equal(result.Machine.ID))
+			item := find(result, "git")
+			Expect(item.RecordedVersion).To(Equal("1:2.43.0-1"))
+			Expect(item.InstalledAt).To(HaveValue(Equal(options.Now())))
+			Expect(result.Drift).NotTo(ContainElement(HaveField("App", "git")))
+		})
+
+		It("reports a version changed outside DevEx", func() {
+			native["git"] = "1:2.45.1-1"
+			result, err := inventory.Build(context.Background(), repo, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(find(result, "git")).To(SatisfyAll(HaveField("Version", "1:2.45.1-1"), HaveField("RecordedVersion", "1:2.43.0-1")))
+			Expect(result.Drift).To(ContainElement(SatisfyAll(HaveField("App", "git"), HaveField("Kind", "changed"), HaveField("Detail", ContainSubstring("now reports 1:2.45.1-1")))))
+		})
+
+		It("reports records copied from another machine", func() {
+			other := filepath.Join(GinkgoT().TempDir(), "machine-id")
+			Expect(os.WriteFile(other, []byte("fedcba9876543210fedcba9876543210\n"), 0o600)).To(Succeed())
+			options.MachineIDPath = other
+			result, err := inventory.Build(context.Background(), repo, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Drift).To(ContainElement(SatisfyAll(HaveField("App", "git"), HaveField("Kind", "host_changed"))))
+		})
+
+		It("records no version for a manager it cannot query, and reports no change", func() {
+			mise := types.CrossPlatformApp{Name: "node", Linux: types.OSConfig{InstallMethod: "mise", InstallCommand: "node@22"}}
+			Expect(inventory.Record(context.Background(), repo, mise, recordOptions)).To(Succeed())
+			Expect(repo.values[inventory.ReceiptKey("node")]).To(SatisfyAll(ContainSubstring(`"manager":"mise"`), Not(ContainSubstring(`"version"`))))
+		})
+	})
+
+	Context("with unmanaged software", func() {
+		BeforeEach(func() {
+			native["htop"] = "3.3.0-4"
+			options.Catalog = func() []types.CrossPlatformApp {
+				return []types.CrossPlatformApp{
+					aptApp("Git", "git"), // tracked under another case: not unmanaged
+					aptApp("htop", "htop"),
+					aptApp("absent", "absent-pkg"),
+					{Name: "node", Linux: types.OSConfig{InstallMethod: "mise", InstallCommand: "node"}},
+				}
+			}
+		})
+
+		It("lists only catalog software verified installed outside DevEx", func() {
+			result, err := inventory.Build(context.Background(), repo, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Items).To(ContainElement(SatisfyAll(HaveField("Name", "htop"), HaveField("ManagedBy", "none"), HaveField("Version", "3.3.0-4"), HaveField("State", "installed"))))
+			Expect(result.Items).To(HaveLen(5))
+			unmanaged := []string{}
+			for _, drift := range result.Drift {
+				if drift.Kind == "unmanaged" {
+					unmanaged = append(unmanaged, drift.App)
+				}
+			}
+			Expect(unmanaged).To(Equal([]string{"htop"}))
+		})
+
+		It("does not look for it unless asked", func() {
+			options.Catalog = nil
+			result, err := inventory.Build(context.Background(), repo, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Items).NotTo(ContainElement(HaveField("Name", "htop")))
+		})
 	})
 
 	It("checks records without a definition against the current catalog", func() {

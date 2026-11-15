@@ -18,6 +18,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -154,6 +155,7 @@ var _ = Describe("Uninstall Command", func() {
 				GinkgoT().Setenv(key, "")
 			}
 			Expect(mockRepo.Set("installed-app-definition:test-app", "damaged definition")).To(Succeed())
+			Expect(mockRepo.Set(inventory.ReceiptKey("test-app"), `{"manager":"apt"}`)).To(Succeed())
 			DeferCleanup(commands.SetUninstallInstallerForTest(func(context.Context, string) types.BaseInstaller {
 				Fail("forget must never look up or bootstrap an installer")
 				return nil
@@ -176,10 +178,14 @@ var _ = Describe("Uninstall Command", func() {
 			}
 			definition, err := mockRepo.Get("installed-app-definition:test-app")
 			Expect(err).NotTo(HaveOccurred())
+			receipt, err := mockRepo.Get(inventory.ReceiptKey("test-app"))
+			Expect(err).NotTo(HaveOccurred())
 			if present {
 				Expect(definition).To(Equal("damaged definition"))
+				Expect(receipt).NotTo(BeEmpty())
 			} else {
 				Expect(definition).To(BeEmpty())
+				Expect(receipt).To(BeEmpty())
 			}
 		}
 		It("clears a tracked app with a damaged definition without any installer or file cleanup", func() {
