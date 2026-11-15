@@ -70,6 +70,10 @@ func ResolvePackageInstall(method, command string, packages, options []string) (
 			continue
 		}
 		name, value, inline := strings.Cut(token, "=")
+		if method == "zypper" && name == "-t" {
+			// Zypper's short spelling; the plugin argv uses the long form.
+			name = "--type"
+		}
 		takesValue, ok := packageOption(method, name)
 		if !ok {
 			return request, fmt.Errorf("unsupported %s package option %q", method, name)
@@ -84,6 +88,9 @@ func ResolvePackageInstall(method, command string, packages, options []string) (
 			}
 			if value == "" || strings.ContainsAny(value, "\x00\n\r") {
 				return request, fmt.Errorf("option %s requires a nonempty single-line value", name)
+			}
+			if method == "zypper" && value != "package" && value != "pattern" {
+				return request, fmt.Errorf("zypper option --type must be package or pattern, not %q", value)
 			}
 			request.Options = append(request.Options, name+"="+value)
 		} else {
@@ -127,6 +134,11 @@ func packageOption(method, name string) (takesValue, supported bool) {
 	case "cargo":
 		if name == "--locked" {
 			return false, true
+		}
+	case "zypper":
+		// --type selects packages or SUSE software patterns.
+		if name == "--type" {
+			return true, true
 		}
 	}
 	return false, false
@@ -230,6 +242,12 @@ func (a AppConfig) PackageQueryCommand() string {
 			if option == "--cask" || option == "--formula" {
 				args = append([]string{option}, args...)
 			}
+		}
+	}
+	if a.InstallMethod == "zypper" {
+		// Keep the package or pattern selection; it names what to query.
+		if request, err := ResolvePackageInstall(a.InstallMethod, "", a.Packages, a.Options); err == nil {
+			args = append(append([]string{}, request.Options...), args...)
 		}
 	}
 	for i, arg := range args {

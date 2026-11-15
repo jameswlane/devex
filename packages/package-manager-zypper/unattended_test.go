@@ -17,6 +17,13 @@ var _ = Describe("Unattended zypper execution", func() {
 		Expect(plugin.Execute("remove", []string{"example"})).To(Succeed())
 		Expect(plugin.Execute("update", nil)).To(Succeed())
 		Expect(plugin.Execute("upgrade", []string{"example"})).To(Succeed())
-		Expect(recorder.Calls("zypper")).To(HaveLen(4))
+		Expect(plugin.Execute("install", []string{"-t", "pattern", "devel_basis"})).To(Succeed())
+		Expect(plugin.Execute("remove", []string{"-t", "pattern", "devel_basis"})).To(Succeed())
+		calls := recorder.Calls("zypper")
+		Expect(calls).To(HaveLen(6))
+		for _, call := range calls {
+			// zypper's global --non-interactive must precede the subcommand.
+			Expect(call.Args[0]).To(Equal("--non-interactive"))
+		}
 	})
 })

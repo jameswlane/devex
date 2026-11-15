@@ -167,7 +167,7 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 
 	pluginName := "package-manager-" + p.method
 	switch p.method {
-	case "apt", "appimage", "brew", "deb", "dnf", "flatpak", "mise", "pip", "yum":
+	case "apt", "appimage", "brew", "deb", "dnf", "flatpak", "mise", "pip", "yum", "zypper":
 		packages, err := catalogPackageArguments(p.method, command)
 		if err != nil {
 			return false, err
@@ -206,7 +206,8 @@ func (p *PluginBasedInstaller) executeQuietly(pluginName string, args []string) 
 }
 
 // catalogPackageArguments returns identifiers for removal and discovery; only
-// Homebrew's namespace selector is meaningful outside installation.
+// Homebrew's namespace selector and Zypper's --type selection are meaningful
+// outside installation.
 func catalogPackageArguments(method, command string) ([]string, error) {
 	if method == "script" || method == "curlpipe" {
 		parts := strings.Fields(command)
@@ -222,7 +223,7 @@ func catalogPackageArguments(method, command string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if method == "brew" {
+	if method == "brew" || method == "zypper" {
 		return append(request.Options, request.Packages...), nil
 	}
 	return request.Packages, nil

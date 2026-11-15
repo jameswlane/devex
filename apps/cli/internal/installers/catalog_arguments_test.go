@@ -35,7 +35,7 @@ var _ = Describe("Catalog package arguments", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(installed).To(BeTrue())
 			switch method {
-			case "apt", "brew", "deb", "dnf", "flatpak", "mise", "pip", "appimage":
+			case "apt", "brew", "deb", "dnf", "flatpak", "mise", "pip", "appimage", "zypper":
 				Expect(executor.args).To(Equal(append([]string{"is-installed"}, want...)))
 			default:
 				// List-only methods skip the installed probe; the last call is the removal.
@@ -50,6 +50,9 @@ var _ = Describe("Catalog package arguments", func() {
 		Entry("leading and trailing flags", "snap", "--edge nvim --classic", []string{"nvim"}),
 		Entry("cargo flag", "cargo", "zoxide --locked", []string{"zoxide"}),
 		Entry("package group", "dnf", "@development-tools pkg-config", []string{"@development-tools", "pkg-config"}),
+		Entry("zypper package", "zypper", "git", []string{"git"}),
+		Entry("zypper pattern", "zypper", "-t pattern devel_basis", []string{"--type=pattern", "devel_basis"}),
+		Entry("zypper pattern long option", "zypper", "zypper install --type=pattern devel_C_C++", []string{"--type=pattern", "devel_C_C++"}),
 		Entry("versioned tool", "mise", "node@lts", []string{"node@lts"}),
 		Entry("container tag", "docker", "mysql:8.4", []string{"mysql:8.4"}),
 		Entry("qualified package", "emerge", "app-editors/neovim", []string{"app-editors/neovim"}),

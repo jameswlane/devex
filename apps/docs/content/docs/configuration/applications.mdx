@@ -71,6 +71,19 @@ macos:
 
 Homebrew runs as your user, never as root. When DevEx is started with `sudo`, it switches back to the invoking user. If `brew` isn't on `PATH`, DevEx looks in `/opt/homebrew/bin` (Apple Silicon) and `/usr/local/bin` (Intel).
 
+### Zypper packages and patterns
+
+On openSUSE and SUSE Linux Enterprise, `install_method: zypper` installs packages unless you select a [software pattern](https://doc.opensuse.org/documentation/leap/reference/html/book-reference/cha-sw-cl.html). Select one with `options: [--type=pattern]` (or `options: [-t, pattern]`, or `install_command: -t pattern NAME`). One type applies to every name in the entry, and `package` and `pattern` are the only types accepted. DevEx uses the selection for installation, `devex status` checks and removal.
+
+```yaml
+linux:
+  install_method: zypper
+  packages: [devel_basis]
+  options: [--type=pattern]
+```
+
+Removing a pattern removes only the pattern itself, as `zypper remove -t pattern` does; the packages it installed stay. Install, removal and upgrade run with `--non-interactive`. A reboot that a package asks for is reported as a notice, not as a failure. In the plugin, `update` refreshes repository metadata (`zypper refresh`) and `upgrade` upgrades installed packages (`zypper update`).
+
 ## Custom install hooks
 
 `pre_install` and `post_install` accept explicit `shell` scripts. Treat application YAML and any referenced scripts as trusted executable code: command validation is a pattern-based policy, not a shell sandbox. Both interactive and noninteractive installation validate the original script with the configured security level, global overrides, and the application's `app_overrides` before execution. A rejection names the application and points to `security.yaml`; review the hook first and use a narrowly scoped override only for code you trust.

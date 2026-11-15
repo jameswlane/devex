@@ -98,7 +98,6 @@ var _ = Describe("Plugin installation discovery", func() {
 			Expect(executor.args).To(BeNil())
 		},
 		Entry("pacman plugin", "pacman"),
-		Entry("zypper plugin", "zypper"),
 	)
 
 	It("allows removal when a list-only plugin's list operation would fail offline", func() {
