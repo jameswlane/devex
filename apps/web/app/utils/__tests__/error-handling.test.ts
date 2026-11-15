@@ -1,6 +1,16 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
+import {
+	afterAll,
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
+
 import {
 	AppError,
 	formatErrorMessage,
@@ -15,7 +25,7 @@ import {
 
 // Mock console methods
 const consoleSpy = {
-	error: jest.spyOn(console, "error").mockImplementation(() => {}),
+	error: vi.spyOn(console, "error").mockImplementation(() => {}),
 };
 
 afterEach(() => {
@@ -148,7 +158,7 @@ describe("logError", () => {
 
 describe("safeAsync", () => {
 	it("should return operation result on success", async () => {
-		const operation = jest.fn().mockResolvedValue("success");
+		const operation = vi.fn().mockResolvedValue("success");
 
 		const result = await safeAsync(operation);
 
@@ -157,7 +167,7 @@ describe("safeAsync", () => {
 	});
 
 	it("should return fallback on error", async () => {
-		const operation = jest.fn().mockRejectedValue(new Error("Failed"));
+		const operation = vi.fn().mockRejectedValue(new Error("Failed"));
 		const fallback = "fallback";
 
 		const result = await safeAsync(operation, fallback);
@@ -167,7 +177,7 @@ describe("safeAsync", () => {
 	});
 
 	it("should return undefined if no fallback provided", async () => {
-		const operation = jest.fn().mockRejectedValue(new Error("Failed"));
+		const operation = vi.fn().mockRejectedValue(new Error("Failed"));
 
 		const result = await safeAsync(operation);
 
@@ -177,7 +187,7 @@ describe("safeAsync", () => {
 
 	it("should log error with context", async () => {
 		const error = new Error("Operation failed");
-		const operation = jest.fn().mockRejectedValue(error);
+		const operation = vi.fn().mockRejectedValue(error);
 		const context = { userId: "123" };
 
 		await safeAsync(operation, undefined, context);
@@ -199,15 +209,15 @@ describe("safeAsync", () => {
 
 describe("withRetry", () => {
 	beforeEach(() => {
-		jest.useFakeTimers();
+		vi.useFakeTimers();
 	});
 
 	afterEach(() => {
-		jest.useRealTimers();
+		vi.useRealTimers();
 	});
 
 	it("should succeed on first attempt", async () => {
-		const operation = jest.fn().mockResolvedValue("success");
+		const operation = vi.fn().mockResolvedValue("success");
 
 		const result = await withRetry(operation, {
 			maxAttempts: 3,
@@ -219,7 +229,7 @@ describe("withRetry", () => {
 	});
 
 	it("should retry on failure and eventually succeed", async () => {
-		const operation = jest
+		const operation = vi
 			.fn()
 			.mockRejectedValueOnce(new Error("Fail 1"))
 			.mockRejectedValueOnce(new Error("Fail 2"))
@@ -231,7 +241,7 @@ describe("withRetry", () => {
 		});
 
 		// Fast-forward through retries
-		await jest.runAllTimersAsync();
+		await vi.runAllTimersAsync();
 		const result = await promise;
 
 		expect(result).toBe("success");
@@ -240,13 +250,13 @@ describe("withRetry", () => {
 
 	it("should fail after max attempts", async () => {
 		const error = new Error("Persistent failure");
-		const operation = jest.fn().mockRejectedValue(error);
+		const operation = vi.fn().mockRejectedValue(error);
 
 		const promise = withRetry(operation, { maxAttempts: 2, initialDelay: 100 });
 		// Attach the rejection handler before flushing timers so the
 		// rejection is never reported as unhandled.
 		const assertion = expect(promise).rejects.toThrow("Persistent failure");
-		await jest.runAllTimersAsync();
+		await vi.runAllTimersAsync();
 
 		await assertion;
 		expect(operation).toHaveBeenCalledTimes(2);
@@ -254,8 +264,8 @@ describe("withRetry", () => {
 	});
 
 	it("should use exponential backoff", async () => {
-		const setTimeoutSpy = jest.spyOn(global, "setTimeout");
-		const operation = jest
+		const setTimeoutSpy = vi.spyOn(global, "setTimeout");
+		const operation = vi
 			.fn()
 			.mockRejectedValueOnce(new Error("Fail 1"))
 			.mockRejectedValueOnce(new Error("Fail 2"))
@@ -268,12 +278,12 @@ describe("withRetry", () => {
 		});
 
 		// Verify timing of retries
-		await jest.advanceTimersByTimeAsync(0);
+		await vi.advanceTimersByTimeAsync(0);
 		expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 1000);
-		await jest.advanceTimersByTimeAsync(1000);
+		await vi.advanceTimersByTimeAsync(1000);
 
 		expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 2000);
-		await jest.advanceTimersByTimeAsync(2000);
+		await vi.advanceTimersByTimeAsync(2000);
 
 		const result = await promise;
 		expect(result).toBe("success");

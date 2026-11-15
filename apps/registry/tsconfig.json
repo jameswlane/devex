@@ -21,7 +21,7 @@
 			"@/*": ["./*"]
 		},
 		"target": "ES2023",
-		"types": ["node", "jest"],
+		"types": ["node"],
 		"rootDir": "."
 	},
 	"include": [

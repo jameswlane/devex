@@ -1,8 +1,13 @@
 import { PrismaPg } from "@prisma/adapter-pg";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prismaConnectionOptions } from "../../lib/prisma-connection";
 
-jest.mock("@prisma/adapter-pg", () => ({
-	PrismaPg: jest.fn().mockImplementation(() => ({ provider: "postgres" })),
+vi.mock("@prisma/adapter-pg", () => ({
+	PrismaPg: vi.fn(
+		class {
+			provider = "postgres";
+		},
+	),
 }));
 
 const originalUrl = process.env.PRISMA_DATABASE_URL;

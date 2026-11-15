@@ -1,24 +1,18 @@
 /**
- * @jest-environment jsdom
+ * @vitest-environment jsdom
  */
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	jest,
-} from "@jest/globals";
+
 import { act, render } from "@testing-library/react";
 import type { ComponentType, ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationsClient } from "@/app/applications/applications-client";
 import { PluginsClient } from "@/app/plugins/plugins-client";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/constants";
 
-const push = jest.fn<(url: string) => void>();
+const push = vi.fn<(url: string) => void>();
 let currentQuery = "";
 
-jest.mock("next/navigation", () => ({
+vi.mock("next/navigation", () => ({
 	useRouter: () => ({ push }),
 	useSearchParams: () => new URLSearchParams(currentQuery),
 }));
@@ -32,20 +26,20 @@ interface CapturedPanel {
 
 const panel: { current?: CapturedPanel } = {};
 
-jest.mock("@/components/filter-panel", () => ({
+vi.mock("@/components/filter-panel", () => ({
 	FilterPanel: (props: CapturedPanel) => {
 		panel.current = props;
 		return null;
 	},
 }));
-jest.mock("@/components/pagination", () => ({ Pagination: () => null }));
-jest.mock("@/components/error-boundary", () => ({
+vi.mock("@/components/pagination", () => ({ Pagination: () => null }));
+vi.mock("@/components/error-boundary", () => ({
 	APIErrorBoundary: ({ children }: { children: unknown }) => children,
 }));
-jest.mock("@/components/application-card", () => ({
+vi.mock("@/components/application-card", () => ({
 	ApplicationCard: () => null,
 }));
-jest.mock("@/components/plugin-card", () => ({ PluginCard: () => null }));
+vi.mock("@/components/plugin-card", () => ({ PluginCard: () => null }));
 
 type Params = Record<string, string>;
 
@@ -107,24 +101,24 @@ describe.each(cases)("$name search URL sync", (testCase) => {
 	function type(value: string) {
 		act(() => panel.current?.onSearchChange(value));
 		act(() => {
-			jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+			vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
 		});
 	}
 
 	beforeEach(() => {
-		jest.useFakeTimers();
+		vi.useFakeTimers();
 		push.mockClear();
 		panel.current = undefined;
 	});
 
 	afterEach(() => {
-		jest.useRealTimers();
+		vi.useRealTimers();
 	});
 
 	it("does not push on first render", () => {
 		renderClient("abc");
 		act(() => {
-			jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+			vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
 		});
 		expect(push).not.toHaveBeenCalled();
 	});
@@ -137,7 +131,7 @@ describe.each(cases)("$name search URL sync", (testCase) => {
 
 		navigate(rerender, "abc");
 		act(() => {
-			jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+			vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
 		});
 		expect(push).toHaveBeenCalledTimes(1);
 	});
@@ -149,13 +143,13 @@ describe.each(cases)("$name search URL sync", (testCase) => {
 
 		navigate(rerender, "");
 		act(() => {
-			jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+			vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
 		});
 		expect(panel.current?.searchQuery).toBe("");
 
 		navigate(rerender, "abc");
 		act(() => {
-			jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+			vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
 		});
 		expect(panel.current?.searchQuery).toBe("abc");
 		expect(push).toHaveBeenCalledTimes(1);
@@ -222,7 +216,7 @@ describe.each(cases)("$name search URL sync", (testCase) => {
 		act(() => panel.current?.onSearchChange("abcd"));
 		navigate(rerender, "");
 		act(() => {
-			jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+			vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
 		});
 
 		expect(push).toHaveBeenCalledTimes(1);

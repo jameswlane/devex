@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
 import { recordPluginRelease } from "@/lib/releases/record";
 import {
@@ -9,8 +9,8 @@ import {
 import { prismaConnectionOptions } from "../../../lib/prisma-connection";
 import { payload } from "./fixture";
 
-jest.mock("@/lib/cache-invalidation", () => ({
-	invalidateOnDataChange: jest.fn<typeof invalidateOnDataChange>(),
+vi.mock("@/lib/cache-invalidation", () => ({
+	invalidateOnDataChange: vi.fn<typeof invalidateOnDataChange>(),
 }));
 const db = new PrismaClient(prismaConnectionOptions());
 const date = new Date("2026-10-27T00:00:00Z");
@@ -60,12 +60,12 @@ const version: PluginVersion = {
 	createdAt: date,
 	updatedAt: date,
 };
-const upsertPlugin = jest.spyOn(db.plugin, "upsert");
-const updatePlugin = jest.spyOn(db.plugin, "update");
-const findVersion = jest.spyOn(db.pluginVersion, "findUnique");
-const upsertVersion = jest.spyOn(db.pluginVersion, "upsert");
-const lock = jest.spyOn(db, "$queryRaw");
-const transaction = jest.spyOn(db, "$transaction");
+const upsertPlugin = vi.spyOn(db.plugin, "upsert");
+const updatePlugin = vi.spyOn(db.plugin, "update");
+const findVersion = vi.spyOn(db.pluginVersion, "findUnique");
+const upsertVersion = vi.spyOn(db.pluginVersion, "upsert");
+const lock = vi.spyOn(db, "$queryRaw");
+const transaction = vi.spyOn(db, "$transaction");
 
 beforeEach(() => {
 	upsertPlugin.mockResolvedValue(plugin);
@@ -78,7 +78,7 @@ beforeEach(() => {
 			throw new Error("Expected interactive transaction");
 		return operation(db);
 	});
-	jest.mocked(invalidateOnDataChange).mockResolvedValue(undefined);
+	vi.mocked(invalidateOnDataChange).mockResolvedValue(undefined);
 });
 
 describe("recordPluginRelease", () => {

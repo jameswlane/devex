@@ -1,42 +1,52 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
 
 import { createHash } from "crypto";
+import {
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mocked,
+	type MockedFunction,
+	vi,
+} from "vitest";
 import {
 	BinaryMetadataService,
 	binaryMetadataService,
 } from "@/lib/binary-metadata";
 
 // Mock fs and crypto
-jest.mock("fs", () => ({
-	promises: {
-		readFile: jest.fn(),
-		stat: jest.fn(),
-	},
-}));
-jest.mock("crypto", () => ({
-	createHash: jest.fn(),
+vi.mock("fs", () => {
+	const promises = {
+		readFile: vi.fn(),
+		stat: vi.fn(),
+	};
+	return { default: { promises }, promises };
+});
+vi.mock("crypto", () => ({
+	createHash: vi.fn(),
 }));
 
 // Mock fetch globally
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 // Import mocked fs after mocking
 import fs from "fs";
 
-const mockFs = fs.promises as jest.Mocked<typeof fs.promises>;
-const mockCreateHash = createHash as jest.MockedFunction<typeof createHash>;
+const mockFs = fs.promises as Mocked<typeof fs.promises>;
+const mockCreateHash = createHash as MockedFunction<typeof createHash>;
 
 describe("BinaryMetadataService", () => {
 	let service: BinaryMetadataService;
 	const mockHash = {
-		update: jest.fn(),
-		digest: jest.fn().mockReturnValue("mock-hash-value"),
+		update: vi.fn(),
+		digest: vi.fn().mockReturnValue("mock-hash-value"),
 	};
 
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		service = BinaryMetadataService.getInstance();
 		mockCreateHash.mockReturnValue(mockHash as any);
 	});
@@ -111,7 +121,7 @@ describe("BinaryMetadataService", () => {
 	});
 
 	describe("fetchGitHubAssetMetadata", () => {
-		const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+		const mockFetch = global.fetch as MockedFunction<typeof fetch>;
 
 		it("should fetch asset metadata successfully", async () => {
 			const mockRelease = {
@@ -218,7 +228,7 @@ describe("BinaryMetadataService", () => {
 	});
 
 	describe("downloadAndValidateBinary", () => {
-		const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+		const mockFetch = global.fetch as MockedFunction<typeof fetch>;
 
 		it("should download and validate binary successfully", async () => {
 			const testData = Buffer.from("binary content");
@@ -275,7 +285,7 @@ describe("BinaryMetadataService", () => {
 	});
 
 	describe("generatePluginBinaryMetadata", () => {
-		const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+		const mockFetch = global.fetch as MockedFunction<typeof fetch>;
 
 		it("should generate metadata for valid GitHub repository", async () => {
 			const mockRelease = {

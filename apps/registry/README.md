@@ -406,6 +406,30 @@ interface SearchRequest {
 
 - Unknown `/api/*` paths return a `404` with the standard JSON error envelope (`{success: false, error: {code: "NOT_FOUND", message, timestamp, requestId}}`), so API clients always receive JSON rather than an HTML page.
 
+## 🧪 Testing
+
+Tests use [Vitest](https://vitest.dev). The default environment is Node; component tests opt into jsdom. Configuration lives in `vitest.config.mts`, and `vitest.setup.ts` mocks Prisma and quiets console output for every test.
+
+```bash
+pnpm db:generate     # once, so the Prisma client types exist
+pnpm test            # run once and exit (CI uses this)
+pnpm test:watch      # re-run on change
+pnpm test:coverage   # run with v8 coverage (text, lcov and html in coverage/)
+```
+
+### Vitest conventions
+
+The web and registry apps share these rules:
+
+- Import test APIs from `vitest` in each file (`describe`, `it`, `expect`, `vi`). Globals are off.
+- `vi.mock()` calls are hoisted above imports. A factory can't use top-level variables, so create shared mocks with `vi.hoisted()`.
+- To get the mocked module in a test, use `await import("@/lib/x")` or a static import. `require()` doesn't go through Vitest's mocks.
+- Partial mocks use an `async` factory with `await vi.importActual()`.
+- When code calls a mock with `new`, the mock implementation must be a `class` or `function`. Arrow functions throw "is not a constructor".
+- Use `vi.stubEnv()` and `vi.unstubAllEnvs()` to change `process.env` values. Vitest has no `replaceProperty`.
+- Set the environment per file with a `@vitest-environment node` or `@vitest-environment jsdom` docblock.
+- The setup file unmounts React Testing Library trees after each test. Don't add `cleanup()` to test files.
+
 ## 🚀 Deployment
 
 ### Vercel Configuration

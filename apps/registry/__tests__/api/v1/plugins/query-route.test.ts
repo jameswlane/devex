@@ -1,15 +1,15 @@
-import { expect, it, jest } from "@jest/globals";
+import { expect, it, vi } from "vitest";
 import { GET } from "@/app/api/v1/plugins/query/route";
 import type { Plugin } from "../../../../generated/prisma/client";
 
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
 		plugin: {
-			findMany: jest.fn<() => Promise<Plugin[]>>().mockResolvedValue([]),
+			findMany: vi.fn<() => Promise<Plugin[]>>().mockResolvedValue([]),
 		},
 	},
 }));
-jest.mock("@/lib/transformation-service", () => ({
+vi.mock("@/lib/transformation-service", () => ({
 	transformationService: {},
 }));
 

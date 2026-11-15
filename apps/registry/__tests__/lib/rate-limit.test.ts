@@ -1,12 +1,5 @@
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	jest,
-} from "@jest/globals";
 import { type NextRequest, NextResponse } from "next/server";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
 	checkRateLimitHealth,
 	RATE_LIMIT_CONFIGS,
@@ -14,22 +7,24 @@ import {
 } from "@/lib/rate-limit";
 
 // Mock Redis to simulate healthy Redis in tests
-jest.mock("@/lib/redis", () => ({
+vi.mock("@/lib/redis", () => ({
 	redis: {
-		get: jest.fn<() => Promise<null>>().mockResolvedValue(null),
-		set: jest.fn<() => Promise<string>>().mockResolvedValue("OK"),
-		incr: jest.fn(),
-		expire: jest.fn<() => Promise<number>>().mockResolvedValue(1),
-		del: jest.fn<() => Promise<number>>().mockResolvedValue(1),
-		exists: jest.fn<() => Promise<number>>().mockResolvedValue(0),
-		ping: jest.fn<() => Promise<string>>().mockResolvedValue("PONG"),
+		get: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+		set: vi.fn<() => Promise<string>>().mockResolvedValue("OK"),
+		incr: vi.fn(),
+		expire: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+		del: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+		exists: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+		ping: vi.fn<() => Promise<string>>().mockResolvedValue("PONG"),
 	},
-	checkRedisHealth: jest
+	checkRedisHealth: vi
 		.fn<() => Promise<{ status: string }>>()
 		.mockResolvedValue({
 			status: "healthy",
 		}),
 }));
+
+const { redis } = (await import("@/lib/redis")) as any;
 
 // Mock NextRequest
 const createMockRequest = (ip = "127.0.0.1", pathname = "/test") => {
@@ -47,19 +42,18 @@ const createMockRequest = (ip = "127.0.0.1", pathname = "/test") => {
 };
 
 const createMockHandler = (status = 200) => {
-	return jest
+	return vi
 		.fn<() => Promise<NextResponse>>()
 		.mockResolvedValue(NextResponse.json({ success: true }, { status }));
 };
 
 describe("rate-limit", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		// Reset redis mock to default behavior
-		const { redis } = require("@/lib/redis");
 		redis.incr.mockImplementation((key: string) => {
 			// Default behavior: first call returns 1, subsequent calls increment
-			const callCount = (redis.incr as jest.Mock).mock.calls.filter(
+			const callCount = (redis.incr as Mock).mock.calls.filter(
 				(call) => call[0] === key,
 			).length;
 			return Promise.resolve(callCount);
@@ -84,7 +78,6 @@ describe("rate-limit", () => {
 			const handler = createMockHandler();
 
 			// Mock redis.incr to return increasing counts
-			const { redis } = require("@/lib/redis");
 			let callCount = 0;
 			redis.incr.mockImplementation(() => Promise.resolve(++callCount));
 
@@ -105,8 +98,6 @@ describe("rate-limit", () => {
 			const rateLimiter = rateLimit({ windowMs: 100, maxRequests: 1 });
 			const req = createMockRequest();
 			const handler = createMockHandler();
-
-			const { redis } = require("@/lib/redis");
 
 			// First request should pass (count = 1)
 			redis.incr.mockResolvedValueOnce(1);
@@ -145,7 +136,6 @@ describe("rate-limit", () => {
 			const req = createMockRequest();
 			const handler = createMockHandler();
 
-			const { redis } = require("@/lib/redis");
 			redis.incr.mockResolvedValueOnce(1);
 
 			const response = await rateLimiter(req, handler);

@@ -1,6 +1,8 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
+import { describe, expect, it } from "vitest";
+
 import {
 	sanitizeHtmlContent,
 	validateAndSanitizeSearch,
@@ -66,7 +68,9 @@ describe("search sanitization", () => {
 
 	it("does not load jsdom", () => {
 		expect(
-			Object.keys(require.cache).some((path) => path.includes("jsdom")),
+			Object.keys(require.cache).some((path) =>
+				/[\\/]node_modules[\\/]jsdom[\\/]/.test(path),
+			),
 		).toBe(false);
 	});
 });

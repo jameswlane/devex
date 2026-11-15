@@ -1,35 +1,44 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
 
 import { NextRequest } from "next/server";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mock,
+	vi,
+} from "vitest";
 import { pluginCache } from "@/lib/plugin-cache";
 import { GET } from "./route";
 
 // Mock Prisma
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
 		plugin: {
-			findMany: jest.fn(),
-			count: jest.fn(),
+			findMany: vi.fn(),
+			count: vi.fn(),
 		},
 	},
 }));
 
 // Mock logger to suppress console output during tests
-jest.mock("@/lib/logger", () => ({
-	createApiError: jest.fn((error: any) => ({ error })),
-	logDatabaseError: jest.fn(),
+vi.mock("@/lib/logger", () => ({
+	createApiError: vi.fn((error: any) => ({ error })),
+	logDatabaseError: vi.fn(),
 	logger: {
-		info: jest.fn(),
-		error: jest.fn(),
-		warn: jest.fn(),
-		debug: jest.fn(),
+		info: vi.fn(),
+		error: vi.fn(),
+		warn: vi.fn(),
+		debug: vi.fn(),
 	},
 }));
 
 // Mock rate limiting
-jest.mock("@/lib/rate-limit", () => ({
+vi.mock("@/lib/rate-limit", () => ({
 	withRateLimit: (handler: any) => handler,
 	RATE_LIMIT_CONFIGS: {
 		registry: {},
@@ -37,7 +46,7 @@ jest.mock("@/lib/rate-limit", () => ({
 }));
 
 // Mock configuration
-jest.mock("@/lib/config", () => ({
+vi.mock("@/lib/config", () => ({
 	REGISTRY_CONFIG: {
 		BASE_URL: "https://registry.devex.sh",
 		DEFAULT_CACHE_DURATION: 3600,
@@ -47,11 +56,11 @@ jest.mock("@/lib/config", () => ({
 }));
 
 // Get the mocked prisma instance
-const { prisma } = require("@/lib/prisma");
+const { prisma } = (await import("@/lib/prisma")) as any;
 
 describe("/api/v1/registry.json", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		// Clear plugin cache between tests to prevent interference
 		if (pluginCache && typeof pluginCache.clear === "function") {
 			pluginCache.clear();
@@ -82,8 +91,8 @@ describe("/api/v1/registry.json", () => {
 			},
 		];
 
-		(prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
-		(prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
+		(prisma.plugin.findMany as Mock).mockResolvedValue(mockPlugins);
+		(prisma.plugin.count as Mock).mockResolvedValue(mockPlugins.length);
 
 		const request = new NextRequest(
 			"https://registry.devex.sh/api/v1/registry.json",
@@ -99,10 +108,10 @@ describe("/api/v1/registry.json", () => {
 	});
 
 	it("should handle database errors gracefully", async () => {
-		(prisma.plugin.findMany as jest.Mock).mockRejectedValue(
+		(prisma.plugin.findMany as Mock).mockRejectedValue(
 			new Error("Database error"),
 		);
-		(prisma.plugin.count as jest.Mock).mockRejectedValue(
+		(prisma.plugin.count as Mock).mockRejectedValue(
 			new Error("Database error"),
 		);
 
@@ -144,8 +153,8 @@ describe("/api/v1/registry.json", () => {
 			},
 		];
 
-		(prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
-		(prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
+		(prisma.plugin.findMany as Mock).mockResolvedValue(mockPlugins);
+		(prisma.plugin.count as Mock).mockResolvedValue(mockPlugins.length);
 
 		const request = new NextRequest(
 			"https://registry.devex.sh/api/v1/registry.json",
@@ -162,8 +171,8 @@ describe("/api/v1/registry.json", () => {
 	});
 
 	it("should include proper cache headers", async () => {
-		(prisma.plugin.findMany as jest.Mock).mockResolvedValue([]);
-		(prisma.plugin.count as jest.Mock).mockResolvedValue(0);
+		(prisma.plugin.findMany as Mock).mockResolvedValue([]);
+		(prisma.plugin.count as Mock).mockResolvedValue(0);
 
 		const request = new NextRequest(
 			"https://registry.devex.sh/api/v1/registry.json",
@@ -185,7 +194,7 @@ describe("/api/v1/registry.json", () => {
 // Test the helper functions separately
 describe("extractPluginNameFromPath", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		if (pluginCache && typeof pluginCache.clear === "function") {
 			pluginCache.clear();
 		}
@@ -193,7 +202,7 @@ describe("extractPluginNameFromPath", () => {
 
 	it("should handle null githubPath and fall back to plugin name", async () => {
 		// Test that null githubPath uses the short name as fallback
-		(prisma.plugin.findMany as jest.Mock).mockResolvedValue([
+		(prisma.plugin.findMany as Mock).mockResolvedValue([
 			{
 				id: "test-plugin-1",
 				name: "apt",
@@ -208,7 +217,7 @@ describe("extractPluginNameFromPath", () => {
 				binaries: null,
 			},
 		]);
-		(prisma.plugin.count as jest.Mock).mockResolvedValue(1);
+		(prisma.plugin.count as Mock).mockResolvedValue(1);
 
 		const request = new NextRequest(
 			"https://registry.devex.sh/api/v1/registry.json",
@@ -223,7 +232,7 @@ describe("extractPluginNameFromPath", () => {
 	});
 
 	it("should extract name from valid githubPath", async () => {
-		(prisma.plugin.findMany as jest.Mock).mockResolvedValue([
+		(prisma.plugin.findMany as Mock).mockResolvedValue([
 			{
 				id: "extract-path-test-plugin",
 				name: "test",
@@ -239,7 +248,7 @@ describe("extractPluginNameFromPath", () => {
 				binaries: null,
 			},
 		]);
-		(prisma.plugin.count as jest.Mock).mockResolvedValue(1);
+		(prisma.plugin.count as Mock).mockResolvedValue(1);
 
 		const request = new NextRequest(
 			`https://registry.devex.sh/api/v1/registry.json?test=extract-path&t=${Date.now()}`,
@@ -259,7 +268,7 @@ describe("extractPluginNameFromPath", () => {
 describe("version handling", () => {
 	beforeEach(() => {
 		// Ensure clean mocks for each test in this describe block
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		if (pluginCache && typeof pluginCache.clear === "function") {
 			pluginCache.clear();
 		}
@@ -283,8 +292,8 @@ describe("version handling", () => {
 			},
 		];
 
-		(prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
-		(prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
+		(prisma.plugin.findMany as Mock).mockResolvedValue(mockPlugins);
+		(prisma.plugin.count as Mock).mockResolvedValue(mockPlugins.length);
 
 		const request = new NextRequest(
 			`https://registry.devex.sh/api/v1/registry.json?test=version-extract&t=${Date.now()}`,
@@ -316,8 +325,8 @@ describe("version handling", () => {
 			},
 		];
 
-		(prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
-		(prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
+		(prisma.plugin.findMany as Mock).mockResolvedValue(mockPlugins);
+		(prisma.plugin.count as Mock).mockResolvedValue(mockPlugins.length);
 
 		const request = new NextRequest(
 			`https://registry.devex.sh/api/v1/registry.json?test=latest-version&t=${Date.now()}`,

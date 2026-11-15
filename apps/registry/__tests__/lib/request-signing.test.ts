@@ -1,33 +1,26 @@
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	jest,
-} from "@jest/globals";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock logger
-const mockLogger = {
-	warn: jest.fn(),
-	error: jest.fn(),
-	info: jest.fn(),
-};
-jest.mock("@/lib/logger", () => ({
+const mockLogger = vi.hoisted(() => ({
+	warn: vi.fn(),
+	error: vi.fn(),
+	info: vi.fn(),
+}));
+vi.mock("@/lib/logger", () => ({
 	logger: mockLogger,
 }));
 
 // Mock Redis
-const mockRedis = {
-	exists: jest.fn<() => Promise<number>>(),
-	set: jest.fn<(key: string, value: string, ttl?: number) => Promise<string>>(),
-	get: jest.fn<() => Promise<string | null>>(),
-	incr: jest.fn<(key: string) => Promise<number>>(),
-	expire: jest.fn<() => Promise<number>>(),
-};
-jest.mock("@/lib/redis", () => ({
+const mockRedis = vi.hoisted(() => ({
+	exists: vi.fn<() => Promise<number>>(),
+	set: vi.fn<(key: string, value: string, ttl?: number) => Promise<string>>(),
+	get: vi.fn<() => Promise<string | null>>(),
+	incr: vi.fn<(key: string) => Promise<number>>(),
+	expire: vi.fn<() => Promise<number>>(),
+}));
+vi.mock("@/lib/redis", () => ({
 	redis: mockRedis,
 }));
 
@@ -51,7 +44,7 @@ const TEST_NONCE = "1234567890abcdef1234567890abcdef";
 
 describe("Request Signing Module", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 
 		// Set test environment variables
 		process.env.REQUEST_SIGNING_SECRET = TEST_SECRET;
@@ -382,7 +375,7 @@ describe("Request Signing Module", () => {
 				headers: {
 					get: (name: string) => headers[name.toLowerCase()] || null,
 				},
-				text: jest
+				text: vi
 					.fn<() => Promise<string>>()
 					.mockResolvedValue(body ? JSON.stringify(body) : ""),
 			} as unknown as Request;
@@ -498,7 +491,7 @@ describe("Request Signing Module", () => {
 				headers: {
 					get: () => "valid-value",
 				},
-				text: jest
+				text: vi
 					.fn<() => Promise<string>>()
 					.mockResolvedValue("{ invalid json }"),
 			} as unknown as Request;
@@ -516,11 +509,11 @@ describe("Request Signing Module", () => {
 			const request = {
 				method: "POST",
 				headers: {
-					get: jest.fn<() => never>().mockImplementation(() => {
+					get: vi.fn<() => never>().mockImplementation(() => {
 						throw new Error("Header access failed");
 					}),
 				},
-				text: jest.fn(),
+				text: vi.fn(),
 			} as unknown as Request;
 
 			const result = await requireSignedRequest(
@@ -570,7 +563,7 @@ describe("Request Signing Module", () => {
 				"devex_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
 			// Generate the correct HMAC-SHA256 hash for this API key
 			const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
-			const expectedHash = require("bcrypt").hashSync(apiKey, saltRounds);
+			const expectedHash = bcrypt.hashSync(apiKey, saltRounds);
 
 			const result = await verifyApiKey(apiKey, expectedHash);
 
@@ -670,7 +663,7 @@ describe("Request Signing Module", () => {
 		it("should handle signature comparison errors gracefully", () => {
 			// Mock crypto.timingSafeEqual to throw an error
 			const originalTimingSafeEqual = crypto.timingSafeEqual;
-			crypto.timingSafeEqual = jest
+			crypto.timingSafeEqual = vi
 				.fn<typeof crypto.timingSafeEqual>()
 				.mockImplementation(() => {
 					throw new Error("Comparison failed");

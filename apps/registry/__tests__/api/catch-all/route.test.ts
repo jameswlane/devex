@@ -1,5 +1,5 @@
-import { describe, expect, it, jest } from "@jest/globals";
 import type { NextRequest } from "next/server";
+import { describe, expect, it, vi } from "vitest";
 
 import {
 	DELETE,
@@ -11,13 +11,13 @@ import {
 	PUT,
 } from "@/app/api/[...path]/route";
 
-jest.spyOn(console, "error").mockImplementation(() => {});
+vi.spyOn(console, "error").mockImplementation(() => {});
 
 const createMockRequest = (url: string, method = "GET") =>
 	({
 		url,
 		method,
-		headers: { get: jest.fn(() => null) },
+		headers: { get: vi.fn(() => null) },
 	}) as unknown as NextRequest;
 
 const createContext = (path: string[]) => ({

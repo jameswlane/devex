@@ -1,77 +1,77 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { NextRequest } from "next/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock Next.js cache
-jest.mock("next/cache", () => ({
-	unstable_cache: jest.fn((fn) => fn),
-	revalidateTag: jest.fn(),
-	revalidatePath: jest.fn(),
+vi.mock("next/cache", () => ({
+	unstable_cache: vi.fn((fn) => fn),
+	revalidateTag: vi.fn(),
+	revalidatePath: vi.fn(),
 }));
 
 // Mock all dependencies for integration testing
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
 		application: {
-			findMany: jest.fn(),
-			count: jest.fn(),
-			groupBy: jest.fn(),
-			aggregate: jest.fn(),
+			findMany: vi.fn(),
+			count: vi.fn(),
+			groupBy: vi.fn(),
+			aggregate: vi.fn(),
 		},
 		plugin: {
-			findMany: jest.fn(),
-			count: jest.fn(),
-			groupBy: jest.fn(),
-			aggregate: jest.fn(),
+			findMany: vi.fn(),
+			count: vi.fn(),
+			groupBy: vi.fn(),
+			aggregate: vi.fn(),
 		},
 		config: {
-			findMany: jest.fn(),
-			count: jest.fn(),
-			groupBy: jest.fn(),
-			aggregate: jest.fn(),
+			findMany: vi.fn(),
+			count: vi.fn(),
+			groupBy: vi.fn(),
+			aggregate: vi.fn(),
 		},
 		stack: {
-			findMany: jest.fn(),
-			count: jest.fn(),
-			aggregate: jest.fn(),
+			findMany: vi.fn(),
+			count: vi.fn(),
+			aggregate: vi.fn(),
 		},
-		$transaction: jest.fn(),
+		$transaction: vi.fn(),
 	},
-	ensurePrisma: jest.fn(),
+	ensurePrisma: vi.fn(),
 }));
 
-jest.mock("@/lib/transformation-service", () => ({
+vi.mock("@/lib/transformation-service", () => ({
 	transformationService: {
-		transformApplications: jest.fn(),
-		transformPlugins: jest.fn(),
-		transformRegistryResponse: jest.fn(),
+		transformApplications: vi.fn(),
+		transformPlugins: vi.fn(),
+		transformRegistryResponse: vi.fn(),
 	},
 }));
 
-jest.mock("@/lib/registry-service", () => ({
+vi.mock("@/lib/registry-service", () => ({
 	registryService: {
-		getPaginatedRegistry: jest.fn(),
+		getPaginatedRegistry: vi.fn(),
 	},
 }));
 
-jest.mock("@/lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
 	logger: {
-		info: jest.fn(),
-		warn: jest.fn(),
-		error: jest.fn(),
-		debug: jest.fn(),
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		debug: vi.fn(),
 	},
-	logPerformance: jest.fn(),
-	createApiError: jest.fn(() => new Response("Error", { status: 500 })),
-	logDatabaseError: jest.fn(),
+	logPerformance: vi.fn(),
+	createApiError: vi.fn(() => new Response("Error", { status: 500 })),
+	logDatabaseError: vi.fn(),
 }));
 
-jest.mock("@/lib/error-handler", () => ({
-	withErrorHandling: jest.fn((handler) => handler),
-	safeDatabase: jest.fn((fn: () => Promise<unknown>) => fn()),
+vi.mock("@/lib/error-handler", () => ({
+	withErrorHandling: vi.fn((handler) => handler),
+	safeDatabase: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 
-jest.mock("@/lib/response-optimization", () => ({
-	createOptimizedResponse: jest.fn(
+vi.mock("@/lib/response-optimization", () => ({
+	createOptimizedResponse: vi.fn(
 		(
 			data: unknown,
 			options?: Parameters<
@@ -125,7 +125,7 @@ jest.mock("@/lib/response-optimization", () => ({
 			});
 		},
 	),
-	createPaginatedResponse: jest.fn(
+	createPaginatedResponse: vi.fn(
 		(
 			items: unknown[],
 			pagination: { total: number; page: number; limit: number },
@@ -179,20 +179,22 @@ jest.mock("@/lib/response-optimization", () => ({
 	},
 }));
 
-const mockValidatePaginationParams = jest.fn(() => ({
-	success: true,
-	data: { page: 1, limit: 50 },
-}));
+const mockValidatePaginationParams = vi.hoisted(() =>
+	vi.fn(() => ({
+		success: true,
+		data: { page: 1, limit: 50 },
+	})),
+);
 
-jest.mock("@/lib/validation", () => ({
-	validateCategory: jest.fn((val) => val),
+vi.mock("@/lib/validation", () => ({
+	validateCategory: vi.fn((val) => val),
 	validatePaginationParams: mockValidatePaginationParams,
-	validatePlatform: jest.fn((val) => val),
-	validateSearchQuery: jest.fn((val) => val),
-	validatePluginType: jest.fn((val) => val),
+	validatePlatform: vi.fn((val) => val),
+	validateSearchQuery: vi.fn((val) => val),
+	validatePluginType: vi.fn((val) => val),
 }));
 
-jest.mock("@/lib/config", () => ({
+vi.mock("@/lib/config", () => ({
 	REGISTRY_CONFIG: {
 		pagination: {
 			defaultLimit: 50,
@@ -203,11 +205,11 @@ jest.mock("@/lib/config", () => ({
 		REGISTRY_SOURCE: "database",
 		REGISTRY_VERSION: "2.1.0",
 	},
-	getCorsOrigins: jest.fn(() => ["*"]),
+	getCorsOrigins: vi.fn(() => ["*"]),
 }));
 
-jest.mock("@/lib/rate-limit", () => ({
-	withRateLimit: jest.fn((handler) => handler),
+vi.mock("@/lib/rate-limit", () => ({
+	withRateLimit: vi.fn((handler) => handler),
 	RATE_LIMIT_CONFIGS: {
 		registry: { windowMs: 60000, maxRequests: 100 },
 	},
@@ -232,7 +234,7 @@ const createMockRequest = (
 		url: url.toString(),
 		nextUrl: url,
 		headers: {
-			get: jest.fn((header: string) => {
+			get: vi.fn((header: string) => {
 				const headers: Record<string, string> = {
 					"x-forwarded-for": "127.0.0.1",
 					"user-agent": "test-agent",
@@ -306,28 +308,28 @@ const mockData = {
 	},
 };
 
-describe("API Integration Flow", () => {
-	const { prisma: mockPrisma, ensurePrisma } = jest.requireMock(
-		"@/lib/prisma",
-	) as any;
-	const { transformationService } = jest.requireMock(
-		"@/lib/transformation-service",
-	) as any;
-	const { registryService } = jest.requireMock("@/lib/registry-service") as any;
+const { prisma: mockPrisma, ensurePrisma } = (await import(
+	"@/lib/prisma"
+)) as any;
+const { transformationService } = (await import(
+	"@/lib/transformation-service"
+)) as any;
+const { registryService } = (await import("@/lib/registry-service")) as any;
 
+describe("API Integration Flow", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 
 		// Setup stats endpoint mock (uses ensurePrisma)
 		const statsClient = {
 			application: {
-				count: jest
+				count: vi
 					.fn<() => Promise<number>>()
 					.mockResolvedValueOnce(100) // Total apps
 					.mockResolvedValueOnce(80) // Linux apps
 					.mockResolvedValueOnce(60) // macOS apps
 					.mockResolvedValueOnce(40), // Windows apps
-				groupBy: jest
+				groupBy: vi
 					.fn<
 						() => Promise<{ category: string; _count: { category: number } }[]>
 					>()
@@ -337,13 +339,13 @@ describe("API Integration Flow", () => {
 					]),
 			},
 			plugin: {
-				count: jest.fn<() => Promise<number>>().mockResolvedValue(50),
-				aggregate: jest
+				count: vi.fn<() => Promise<number>>().mockResolvedValue(50),
+				aggregate: vi
 					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 					.mockResolvedValue({
 						_sum: { downloadCount: 3000 },
 					}),
-				groupBy: jest
+				groupBy: vi
 					.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 					.mockResolvedValue([
 						{ type: "package-manager", _count: { type: 30 } },
@@ -351,13 +353,13 @@ describe("API Integration Flow", () => {
 					]),
 			},
 			config: {
-				count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
-				aggregate: jest
+				count: vi.fn<() => Promise<number>>().mockResolvedValue(25),
+				aggregate: vi
 					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 					.mockResolvedValue({
 						_sum: { downloadCount: 1000 },
 					}),
-				groupBy: jest
+				groupBy: vi
 					.fn<
 						() => Promise<{ category: string; _count: { category: number } }[]>
 					>()
@@ -367,8 +369,8 @@ describe("API Integration Flow", () => {
 					]),
 			},
 			stack: {
-				count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
-				aggregate: jest
+				count: vi.fn<() => Promise<number>>().mockResolvedValue(15),
+				aggregate: vi
 					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
 					.mockResolvedValue({
 						_sum: { downloadCount: 500 },
@@ -382,28 +384,28 @@ describe("API Integration Flow", () => {
 		mockPrisma.$transaction.mockImplementation(async (callback: any) => {
 			const tx = {
 				plugin: {
-					findMany: jest
+					findMany: vi
 						.fn<() => Promise<(typeof mockData.plugin)[]>>()
 						.mockResolvedValue([mockData.plugin]),
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 				application: {
-					findMany: jest
+					findMany: vi
 						.fn<() => Promise<(typeof mockData.application)[]>>()
 						.mockResolvedValue([mockData.application]),
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 				config: {
-					findMany: jest
+					findMany: vi
 						.fn<() => Promise<(typeof mockData.config)[]>>()
 						.mockResolvedValue([mockData.config]),
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 				stack: {
-					findMany: jest
+					findMany: vi
 						.fn<() => Promise<(typeof mockData.stack)[]>>()
 						.mockResolvedValue([mockData.stack]),
-					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 			};
 			return await callback(tx);
@@ -676,7 +678,7 @@ describe("API Integration Flow", () => {
 		});
 
 		it("should use Next.js caching for stats endpoint", async () => {
-			const { unstable_cache } = jest.requireMock("next/cache") as any;
+			const { unstable_cache } = (await import("next/cache")) as any;
 
 			const req = createMockRequest("/api/v1/stats");
 			await statsGet(req);

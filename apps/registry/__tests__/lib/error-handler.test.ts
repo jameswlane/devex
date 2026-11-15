@@ -1,15 +1,15 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { type NextRequest, NextResponse } from "next/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock logger
-const mockLogger = {
-	error: jest.fn(),
-	warn: jest.fn(),
-	info: jest.fn(),
-};
-jest.mock("@/lib/logger", () => ({
+const mockLogger = vi.hoisted(() => ({
+	error: vi.fn(),
+	warn: vi.fn(),
+	info: vi.fn(),
+}));
+vi.mock("@/lib/logger", () => ({
 	logger: mockLogger,
-	createApiError: jest.fn(
+	createApiError: vi.fn(
 		(
 			message: string,
 			status: number,
@@ -26,7 +26,7 @@ jest.mock("@/lib/logger", () => ({
 				{ status },
 			),
 	),
-	createDatabaseError: jest.fn((operation: string, context?: string) =>
+	createDatabaseError: vi.fn((operation: string, context?: string) =>
 		NextResponse.json(
 			{
 				success: false,
@@ -36,7 +36,7 @@ jest.mock("@/lib/logger", () => ({
 			{ status: 500 },
 		),
 	),
-	createValidationError: jest.fn(
+	createValidationError: vi.fn(
 		(message: string, details?: any, operation?: string) =>
 			NextResponse.json(
 				{
@@ -47,7 +47,7 @@ jest.mock("@/lib/logger", () => ({
 				{ status: 400 },
 			),
 	),
-	isProductionEnvironment: jest.fn(() => false),
+	isProductionEnvironment: vi.fn(() => false),
 	ERROR_CODES: {
 		NOT_FOUND: "NOT_FOUND",
 		CONFLICT: "CONFLICT",
@@ -77,7 +77,7 @@ class PrismaClientUnknownRequestError extends Error {
 	}
 }
 
-jest.mock("@prisma/client/runtime/client", () => ({
+vi.mock("@prisma/client/runtime/client", () => ({
 	PrismaClientKnownRequestError,
 	PrismaClientUnknownRequestError,
 }));
@@ -104,7 +104,7 @@ describe("Error Handler Module", () => {
 	};
 
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 	});
 
 	describe("RegistryErrorHandler.handleDatabaseError", () => {
@@ -423,7 +423,7 @@ describe("Error Handler Module", () => {
 
 	describe("withErrorHandling", () => {
 		it("should wrap handlers and catch errors", async () => {
-			const mockHandler = jest
+			const mockHandler = vi
 				.fn<(request: NextRequest) => Promise<never>>()
 				.mockRejectedValue(new Error("Handler failed"));
 			const wrappedHandler = withErrorHandling(
@@ -436,7 +436,7 @@ describe("Error Handler Module", () => {
 				method: "GET",
 				url: "https://example.com/api/test",
 				headers: {
-					get: jest.fn<Headers["get"]>().mockReturnValue(null),
+					get: vi.fn<Headers["get"]>().mockReturnValue(null),
 				},
 			} as unknown as NextRequest;
 
@@ -452,7 +452,7 @@ describe("Error Handler Module", () => {
 				{ success: true },
 				{ status: 200 },
 			);
-			const mockHandler = jest
+			const mockHandler = vi
 				.fn<() => Promise<NextResponse<{ success: boolean }>>>()
 				.mockResolvedValue(mockResponse);
 			const wrappedHandler = withErrorHandling(
@@ -465,7 +465,7 @@ describe("Error Handler Module", () => {
 				method: "GET",
 				url: "https://example.com/api/test",
 				headers: {
-					get: jest.fn<Headers["get"]>().mockReturnValue(null),
+					get: vi.fn<Headers["get"]>().mockReturnValue(null),
 				},
 			} as unknown as NextRequest;
 
@@ -485,7 +485,7 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should include request ID in error context when available", async () => {
-			const mockHandler = jest
+			const mockHandler = vi
 				.fn<() => Promise<never>>()
 				.mockRejectedValue(new Error("Test error"));
 			const wrappedHandler = withErrorHandling(
@@ -498,7 +498,7 @@ describe("Error Handler Module", () => {
 				method: "POST",
 				url: "https://example.com/api/test",
 				headers: {
-					get: jest
+					get: vi
 						.fn<Headers["get"]>()
 						.mockImplementation((header: string) =>
 							header === "x-request-id" ? "req-123" : null,
@@ -515,7 +515,7 @@ describe("Error Handler Module", () => {
 
 	describe("safeAsync", () => {
 		it("should return success result for successful operations", async () => {
-			const operation = jest
+			const operation = vi
 				.fn<() => Promise<{ data: string }>>()
 				.mockResolvedValue({ data: "success" });
 
@@ -528,7 +528,7 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should return error result for failed operations", async () => {
-			const operation = jest
+			const operation = vi
 				.fn<() => Promise<never>>()
 				.mockRejectedValue(new Error("Operation failed"));
 
@@ -543,7 +543,7 @@ describe("Error Handler Module", () => {
 
 	describe("safeCache", () => {
 		it("should return operation result when successful", async () => {
-			const operation = jest
+			const operation = vi
 				.fn<() => Promise<{ cached: boolean }>>()
 				.mockResolvedValue({ cached: true });
 			const fallback = { cached: false };
@@ -555,7 +555,7 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should return fallback when operation fails", async () => {
-			const operation = jest
+			const operation = vi
 				.fn<() => Promise<never>>()
 				.mockRejectedValue(new Error("Cache failed"));
 			const fallback = { cached: false };
@@ -569,15 +569,15 @@ describe("Error Handler Module", () => {
 
 	describe("safeDatabase", () => {
 		beforeEach(() => {
-			jest.useFakeTimers();
+			vi.useFakeTimers();
 		});
 
 		afterEach(() => {
-			jest.useRealTimers();
+			vi.useRealTimers();
 		});
 
 		it("should return result on successful operation", async () => {
-			const operation = jest
+			const operation = vi
 				.fn<() => Promise<{ data: string }>>()
 				.mockResolvedValue({ data: "success" });
 
@@ -605,7 +605,7 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should retry transient errors with exponential backoff", async () => {
-			const operation = jest
+			const operation = vi
 				.fn<() => Promise<{ data: string }>>()
 				.mockRejectedValueOnce(new Error("Transient error"))
 				.mockRejectedValueOnce(new Error("Transient error"))
@@ -614,8 +614,8 @@ describe("Error Handler Module", () => {
 			const resultPromise = safeDatabase(operation, mockContext, 3);
 
 			// Fast-forward through the retry delays
-			await jest.advanceTimersByTimeAsync(1000); // First retry delay
-			await jest.advanceTimersByTimeAsync(2000); // Second retry delay
+			await vi.advanceTimersByTimeAsync(1000); // First retry delay
+			await vi.advanceTimersByTimeAsync(2000); // Second retry delay
 
 			const result = await resultPromise;
 
@@ -629,9 +629,7 @@ describe("Error Handler Module", () => {
 				"Unique constraint",
 				"P2002",
 			);
-			const operation = jest
-				.fn<() => Promise<never>>()
-				.mockRejectedValue(error);
+			const operation = vi.fn<() => Promise<never>>().mockRejectedValue(error);
 
 			await expect(safeDatabase(operation, mockContext, 3)).rejects.toThrow(
 				error,
@@ -651,9 +649,7 @@ describe("Error Handler Module", () => {
 
 		it("should throw after max retries are exhausted", async () => {
 			const error = new Error("Persistent error");
-			const operation = jest
-				.fn<() => Promise<never>>()
-				.mockRejectedValue(error);
+			const operation = vi.fn<() => Promise<never>>().mockRejectedValue(error);
 
 			// Set up the expectation first to capture the rejection
 			const testPromise = expect(
@@ -661,7 +657,7 @@ describe("Error Handler Module", () => {
 			).rejects.toThrow("Persistent error");
 
 			// Fast-forward through the retry delay
-			await jest.advanceTimersByTimeAsync(1000); // First retry delay
+			await vi.advanceTimersByTimeAsync(1000); // First retry delay
 
 			// Wait for the assertion to complete
 			await testPromise;
@@ -671,7 +667,7 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should implement exponential backoff with max delay", async () => {
-			const operation = jest
+			const operation = vi
 				.fn<() => Promise<{ data: string }>>()
 				.mockRejectedValueOnce(new Error("Error 1"))
 				.mockRejectedValueOnce(new Error("Error 2"))
@@ -680,8 +676,8 @@ describe("Error Handler Module", () => {
 			const resultPromise = safeDatabase(operation, mockContext, 3);
 
 			// Fast-forward through retry delays
-			await jest.advanceTimersByTimeAsync(1000); // First retry
-			await jest.advanceTimersByTimeAsync(2000); // Second retry
+			await vi.advanceTimersByTimeAsync(1000); // First retry
+			await vi.advanceTimersByTimeAsync(2000); // Second retry
 
 			await resultPromise;
 

@@ -1,7 +1,17 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
+
 import { NextRequest } from "next/server";
+import {
+	afterAll,
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 import { GET } from "../route";
 
 // Raw registry payload as returned by https://registry.devex.sh/api/v1/registry
@@ -96,13 +106,13 @@ const expectedTools = [
 ];
 
 beforeEach(() => {
-	jest
-		.mocked(fetch)
-		.mockImplementation(async () => Response.json(mockRegistryResponse));
+	vi.mocked(fetch).mockImplementation(async () =>
+		Response.json(mockRegistryResponse),
+	);
 });
 
 // Mock console.error to avoid noise in tests
-const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 afterEach(() => {
 	consoleSpy.mockClear();

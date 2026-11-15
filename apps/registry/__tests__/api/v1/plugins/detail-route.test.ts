@@ -1,20 +1,20 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { NextRequest } from "next/server";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type {
 	Plugin,
 	PluginVersion,
 } from "../../../../generated/prisma/client";
 
-jest.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: jest.fn(), findFirst: jest.fn() },
-		pluginVersion: { findMany: jest.fn() },
+		plugin: { findUnique: vi.fn(), findFirst: vi.fn() },
+		pluginVersion: { findMany: vi.fn() },
 	},
 }));
 
-jest.mock("@/lib/error-handler", () => ({
-	safeDatabase: jest.fn((operation: () => Promise<unknown>) => operation()),
-	withErrorHandling: jest.fn((handler: unknown) => handler),
+vi.mock("@/lib/error-handler", () => ({
+	safeDatabase: vi.fn((operation: () => Promise<unknown>) => operation()),
+	withErrorHandling: vi.fn((handler: unknown) => handler),
 }));
 
 import { GET } from "@/app/api/v1/plugins/[id]/route";
@@ -26,15 +26,15 @@ type VersionSummary = Pick<
 
 type MockPrisma = {
 	plugin: {
-		findUnique: jest.Mock<
+		findUnique: Mock<
 			(args: { where: { name: string } }) => Promise<Plugin | null>
 		>;
-		findFirst: jest.Mock<
+		findFirst: Mock<
 			(args: { where: { shortName: string } }) => Promise<Plugin | null>
 		>;
 	};
 	pluginVersion: {
-		findMany: jest.Mock<
+		findMany: Mock<
 			(args: {
 				where: { pluginId: string; prerelease: boolean };
 				select: Record<string, boolean>;
@@ -43,7 +43,7 @@ type MockPrisma = {
 	};
 };
 
-const { prisma: mockPrisma } = jest.requireMock("@/lib/prisma") as {
+const { prisma: mockPrisma } = (await import("@/lib/prisma")) as unknown as {
 	prisma: MockPrisma;
 };
 
@@ -88,7 +88,7 @@ function params(id = plugin.name) {
 
 describe("GET /api/v1/plugins/[id]", () => {
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
 		mockPrisma.plugin.findFirst.mockResolvedValue(null);
 		mockPrisma.pluginVersion.findMany.mockResolvedValue([
@@ -137,8 +137,10 @@ describe("GET /api/v1/plugins/[id]", () => {
 	});
 
 	it("does not retry the best-effort version summary", async () => {
-		const { safeDatabase } = jest.requireMock("@/lib/error-handler") as {
-			safeDatabase: jest.Mock;
+		const { safeDatabase } = (await import(
+			"@/lib/error-handler"
+		)) as unknown as {
+			safeDatabase: Mock;
 		};
 
 		await GET(request(), params());

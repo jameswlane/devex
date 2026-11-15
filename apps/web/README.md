@@ -431,6 +431,29 @@ NEXT_PUBLIC_NEWSLETTER_ENABLED=true
 
 ## 🧪 Testing and Quality
 
+### Unit Tests
+
+Tests use [Vitest](https://vitest.dev) with jsdom and React Testing Library. Configuration lives in `vitest.config.mts`, and shared mocks in `vitest.setup.ts`.
+
+```bash
+pnpm test            # run once and exit (CI uses this)
+pnpm test:watch      # re-run on change
+pnpm test:coverage   # run with v8 coverage and the 80% thresholds
+```
+
+### Vitest conventions
+
+The web and registry apps share these rules:
+
+- Import test APIs from `vitest` in each file (`describe`, `it`, `expect`, `vi`). Globals are off.
+- `vi.mock()` calls are hoisted above imports. A factory can't use top-level variables, so create shared mocks with `vi.hoisted()`.
+- To get the mocked module in a test, use `await import("@/lib/x")` or a static import. `require()` doesn't go through Vitest's mocks.
+- Partial mocks use an `async` factory with `await vi.importActual()`.
+- When code calls a mock with `new`, the mock implementation must be a `class` or `function`. Arrow functions throw "is not a constructor".
+- Use `vi.stubEnv()` and `vi.unstubAllEnvs()` to change `process.env` values. Vitest has no `replaceProperty`.
+- Set the environment per file with a `@vitest-environment node` or `@vitest-environment jsdom` docblock.
+- The setup file unmounts React Testing Library trees after each test. Don't add `cleanup()` to test files.
+
 ### Performance Testing
 
 ```bash
