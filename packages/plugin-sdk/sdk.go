@@ -1299,6 +1299,29 @@ func (d *Downloader) validatePluginBinary(pluginName string, binary PlatformBina
 	return nil
 }
 
+// IsPluginUpToDate reports whether the installed plugin already matches the
+// registry payload checksum, so downloading it again would change nothing.
+// It returns false whenever a download would still run, such as when
+// signature verification is enabled or checksums are unavailable.
+func (d *Downloader) IsPluginUpToDate(pluginName, checksum string) bool {
+	if d.verifySignatures || validatePluginName(pluginName) != nil {
+		return false
+	}
+	root, err := d.openInstallStorage(false)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = root.Close() }()
+	pluginBase := "devex-plugin-" + pluginName
+	if runtime.GOOS == "windows" {
+		pluginBase += ".exe"
+	}
+	if rejectStorageSymlink(root, pluginBase) != nil {
+		return false
+	}
+	return d.isPluginUpToDate(root, pluginName, pluginBase, checksum)
+}
+
 // isPluginUpToDate checks if an installed plugin matches the registry's payload checksum.
 // The registry checksum describes the downloaded payload (often an archive), so the install
 // record is used to map it to the extracted executable. Installed files that are archives

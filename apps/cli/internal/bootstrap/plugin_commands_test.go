@@ -235,6 +235,21 @@ var _ = Describe("Registered plugin commands", func() {
 		Expect(filepath.Join(dir, "devex-plugin-recorder")).NotTo(BeAnExistingFile())
 		Expect(filepath.Join(dir, ".devex-plugin-recorder.install.json")).NotTo(BeAnExistingFile())
 	})
+	It("reports already-current plugins as up to date without downloading them again", func() {
+		Expect(execute(context.Background(), "install", "recorder")).To(Succeed())
+		path := filepath.Join(dir, "devex-plugin-recorder")
+		before, err := os.Stat(path)
+		Expect(err).NotTo(HaveOccurred())
+		requests = nil
+		for _, args := range [][]string{{"update", "recorder"}, {"--dry-run", "update", "recorder"}, {"update", "--all"}} {
+			Expect(execute(context.Background(), args...)).To(Succeed())
+			Expect(stdout.String()).To(Equal("recorder is up to date (2.0.0)\n"), "args: %v", args)
+		}
+		Expect(requests).NotTo(ContainElement(ContainSubstring("/binary")))
+		after, err := os.Stat(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(after.ModTime()).To(Equal(before.ModTime()))
+	})
 	It("retains the previous binary and record when an update fails checksum verification", func() {
 		path := install("recorder", "1.0.0")
 		record := filepath.Join(dir, ".devex-plugin-recorder.install.json")
