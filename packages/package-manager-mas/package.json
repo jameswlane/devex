@@ -1,0 +1,46 @@
+{
+	"name": "@devex/package-manager-mas",
+	"private": true,
+	"version": "0.1.0",
+	"description": "Mac App Store (mas) plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-mas .",
+		"dev": "go build -race -o devex-plugin-package-manager-mas .",
+		"test": "go test ./...",
+		"lint": "golangci-lint run --allow-parallel-runners",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"mas",
+		"app-store",
+		"macos"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-mas"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"darwin"
+			],
+			"dependencies": [
+				"mas"
+			],
+			"priority": 20,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": false,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}

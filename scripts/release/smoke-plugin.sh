@@ -2,9 +2,12 @@
 # Post-release smoke test for a plugin version.
 #
 # Polls the registry until it serves the version record (up to ~5 minutes),
-# downloads the linux-amd64 binary from the recorded URL, verifies its
-# SHA-256 and size against the record, extracts it when archived, and checks
-# that `<binary> --plugin-info` reports the released name and version.
+# downloads the linux-amd64 binary from the recorded URL (or, for a plugin
+# with no Linux build such as package-manager-mas, this host's binary or else
+# its first recorded platform), verifies its SHA-256 and size against the record, extracts it
+# when archived, and checks that `<binary> --plugin-info` reports the
+# released name and version. The binary only runs when its platform matches
+# this host; otherwise the run stops after verification.
 #
 # Usage: smoke-plugin.sh <plugin> <version> [registry_url]
 # Needs: bash, curl, node, sha256sum, tar (and unzip for zip-format plugins).
@@ -20,6 +23,12 @@ version="${2#v}" # accept both 1.2.3 and v1.2.3
 registry="${3:-https://registry.devex.sh}"
 registry="${registry%/}"
 platform="linux-amd64"
+host_arch="$(uname -m)"
+case "$host_arch" in
+x86_64) host_arch=amd64 ;;
+aarch64) host_arch=arm64 ;;
+esac
+host_platform="$(uname -s | tr '[:upper:]' '[:lower:]')-${host_arch}"
 timeout_seconds="${SMOKE_TIMEOUT_SECONDS:-300}"
 poll_interval="${SMOKE_POLL_INTERVAL:-15}"
 
@@ -60,24 +69,32 @@ mapfile -t fields < <(node -e '
 			parsed.data && typeof parsed.data === "object" && !Array.isArray(parsed.data)
 				? parsed.data
 				: parsed;
-		const binary = (record.binaries || {})[process.argv[1]];
+		const binaries = record.binaries || {};
+		// Prefer the requested platform, then the host platform; a plugin with
+		// neither (for example a macOS-only plugin on a Linux runner) is
+		// checked through its first recorded platform.
+		const [wanted, host] = process.argv.slice(1);
+		const platform = [wanted, host].find((name) => binaries[name]) ?? Object.keys(binaries).sort()[0];
+		const binary = binaries[platform];
 		if (!binary || typeof binary !== "object") {
 			console.error(`record has no binaries["${process.argv[1]}"] entry`);
 			process.exit(2);
 		}
+		console.log(platform);
 		for (const key of ["url", "checksum", "format", "archiveEntry", "size"]) {
 			console.log(binary[key] ?? "");
 		}
 	});
-' "$platform" <"$response") || {
+' "$platform" "$host_platform" <"$response") || {
 	echo "::error::Could not parse a binaries[\"$platform\"] entry from ${endpoint}"
 	exit 1
 }
-url="${fields[0]}"
-checksum="${fields[1]}"
-format="${fields[2]}"
-archive_entry="${fields[3]}"
-size="${fields[4]}"
+platform="${fields[0]}"
+url="${fields[1]}"
+checksum="${fields[2]}"
+format="${fields[3]}"
+archive_entry="${fields[4]}"
+size="${fields[5]}"
 
 if [ -z "$url" ] || [ -z "$checksum" ] || [ -z "$format" ]; then
 	echo "::error::Incomplete binary record from ${endpoint} (url/checksum/format missing): ${fields[*]}"
@@ -140,6 +157,12 @@ if [ ! -f "$binary" ]; then
 fi
 chmod +x "$binary"
 echo "::endgroup::"
+
+if [ "$platform" != "$host_platform" ]; then
+	echo "::notice::$plugin $version has no ${host_platform} binary; verified the ${platform} download without running it"
+	echo "Smoke test passed: $plugin $version ($platform, verified only)"
+	exit 0
+fi
 
 echo "::group::Run $plugin --plugin-info"
 # --plugin-info is the SDK protocol the CLI uses to identify a plugin.

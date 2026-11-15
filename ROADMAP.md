@@ -51,7 +51,7 @@ Based on implementation complexity and market share, platforms are prioritized a
 
 **🔴 Priority 5: macOS - PARTIAL SUPPORT**
 - [x] **Homebrew** - ✅ Basic implementation (needs testing) ([#109](https://github.com/jameswlane/devex/issues/109))
-- [ ] **Mac App Store (mas)** - ❌ Missing ([#110](https://github.com/jameswlane/devex/issues/110))
+- [x] **Mac App Store (mas)** - 🧪 Experimental plugin ([#110](https://github.com/jameswlane/devex/issues/110))
 
 **🔴 Priority 6: Windows - NO SUPPORT**
 - [ ] **Windows Package Manager (winget)** - ❌ Missing ([#111](https://github.com/jameswlane/devex/issues/111))
@@ -93,13 +93,13 @@ Based on implementation complexity and market share, platforms are prioritized a
 ### Package Managers Status
 - [x] **Homebrew** - ✅ Basic implementation **NEEDS TESTING** ([#109](https://github.com/jameswlane/devex/issues/109))
 - [ ] **MacPorts** - Alternative package manager (lower priority) ([#124](https://github.com/jameswlane/devex/issues/124))
-- [ ] **Mac App Store (mas)** - App Store installations **HIGH PRIORITY** ([#110](https://github.com/jameswlane/devex/issues/110))
+- [x] **Mac App Store (mas)** - 🧪 Experimental plugin for App Store installations ([#110](https://github.com/jameswlane/devex/issues/110))
 
 ### macOS Implementation Milestones
 
 **Milestone 2.1: Core macOS Package Management**
 - [ ] **Test and fix Homebrew installer** - Ensure compatibility with Intel/Apple Silicon Macs ([#109](https://github.com/jameswlane/devex/issues/109))
-- [ ] **Implement mas (Mac App Store) installer** - Essential for GUI applications ([#110](https://github.com/jameswlane/devex/issues/110))
+- [x] **Implement mas (Mac App Store) installer** - Essential for GUI applications ([#110](https://github.com/jameswlane/devex/issues/110))
 - [ ] **Add Homebrew Cask support** - GUI applications via Homebrew ([#109](https://github.com/jameswlane/devex/issues/109))
 - [ ] **Handle macOS permissions** - Admin privileges and security ([#126](https://github.com/jameswlane/devex/issues/126))
 

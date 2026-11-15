@@ -336,6 +336,8 @@ importers:
 
   packages/package-manager-flatpak: {}
 
+  packages/package-manager-mas: {}
+
   packages/package-manager-mise: {}
 
   packages/package-manager-nixflake: {}
