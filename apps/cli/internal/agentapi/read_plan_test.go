@@ -33,6 +33,9 @@ func (s *readSpy) AddApp(_ string) error                { s.writes++; return err
 func (s *readSpy) DeleteApp(_ string) error             { s.writes++; return errors.New("write forbidden") }
 
 var _ = Describe("Read and plan contracts", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var settings config.CrossPlatformSettings
 	var repo *readSpy
 	BeforeEach(func() {

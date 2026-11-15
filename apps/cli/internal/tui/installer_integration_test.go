@@ -199,8 +199,8 @@ func (m *MockCommandExecutor) ExecuteCommand(ctx context.Context, command string
 	}
 
 	// Return a fast, silent command that respects context cancellation
-	// Use /bin/true which exits immediately with success
-	cmd := exec.CommandContext(ctx, "/bin/true")
+	// true exits immediately with success (/bin/true on Linux, /usr/bin/true on macOS)
+	cmd := exec.CommandContext(ctx, "true")
 	return cmd, nil
 }
 
@@ -228,6 +228,8 @@ func (m *MockCommandExecutor) ValidateCommand(command string) error {
 }
 
 func TestStreamingInstaller_Integration(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	// Create test context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -341,6 +343,8 @@ func TestStreamingInstaller_ContextCancellationIntegration(t *testing.T) {
 }
 
 func TestStreamingInstaller_RepositoryError(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	ctx := context.Background()
 
 	// Create mock repo that always errors
@@ -367,6 +371,8 @@ func TestStreamingInstaller_RepositoryError(t *testing.T) {
 }
 
 func TestStreamingInstaller_PrePostInstallCommands(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
 	mockExecutor := NewMockCommandExecutor()
@@ -403,6 +409,8 @@ func TestStreamingInstaller_PrePostInstallCommands(t *testing.T) {
 }
 
 func TestStreamingInstaller_SleepCommand(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -481,6 +489,8 @@ func TestStreamingInstaller_SleepCancellation(t *testing.T) {
 }
 
 func TestStreamingInstaller_MultipleAppsWithErrors(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
 	mockExecutor := NewMockCommandExecutor()
@@ -559,6 +569,8 @@ func TestStartInstallation_Integration(t *testing.T) {
 }
 
 func TestStreamingInstaller_ConcurrentInstallations(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	const numInstallations = 3
 
 	ctx := context.Background()
@@ -599,6 +611,8 @@ func TestStreamingInstaller_ConcurrentInstallations(t *testing.T) {
 }
 
 func TestStreamingInstaller_LargeNumberOfApps(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
 	mockExecutor := NewMockCommandExecutor()

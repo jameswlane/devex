@@ -9,10 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 func TestTemplates(t *testing.T) {
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Templates Suite")
 }

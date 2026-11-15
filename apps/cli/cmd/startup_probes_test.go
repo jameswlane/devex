@@ -46,7 +46,7 @@ var _ = Describe("Presentation startup subprocesses", func() {
 			Expect(err).NotTo(HaveOccurred(), "%v: %s", args, output)
 			calls, err := os.ReadFile(record)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(strings.TrimSpace(string(calls))).To(BeEmpty(), "%v launched subprocesses", args)
+			Expect(unexpectedProbes(string(calls))).To(BeEmpty(), "%v launched subprocesses", args)
 			// The same presentation route must also work without dependencies.
 			cmd = exec.CommandContext(GinkgoT().Context(), binary, args...)
 			cmd.Env = append(os.Environ(), "HOME="+home, "PATH=", "CI=true")
@@ -55,6 +55,21 @@ var _ = Describe("Presentation startup subprocesses", func() {
 		}
 	})
 })
+
+// unexpectedProbes drops the one known darwin probe: rs/xid, linked through
+// minio-go, runs ioreg while the binary initializes (#431).
+func unexpectedProbes(calls string) string {
+	var unexpected []string
+	for _, line := range strings.Split(strings.TrimSpace(calls), "\n") {
+		if runtime.GOOS == "darwin" && strings.HasSuffix(line, "/ioreg -rd1 -c IOPlatformExpertDevice") {
+			continue
+		}
+		if line != "" {
+			unexpected = append(unexpected, line)
+		}
+	}
+	return strings.Join(unexpected, "\n")
+}
 
 var _ = Describe("Presentation route detection", func() {
 	It("respects flag values, command words and the flag terminator", func() {

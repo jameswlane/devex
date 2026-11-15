@@ -19,6 +19,8 @@ import (
 var templateResolverTestMu sync.Mutex
 
 func TestResolveAppsByNameAndCategory(t *testing.T) {
+	// The fixtures model Linux catalog entries.
+	defer types.PinCatalogOSForTesting("linux")()
 	settings := config.CrossPlatformSettings{
 		Terminal: config.TerminalApplicationsConfig{
 			Development: []types.CrossPlatformApp{

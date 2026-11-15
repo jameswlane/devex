@@ -10,6 +10,7 @@ import (
 )
 
 func TestSecurity(t *testing.T) {
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Security Suite")
 }

@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"runtime"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,6 +15,14 @@ import (
 )
 
 var _ = Describe("Default exclusion configuration", func() {
+	// Automated setup detects the host platform; these fixtures make bat and gh
+	// the Linux defaults, so the specs that name them need a Linux host.
+	linuxDefaults := func() {
+		if runtime.GOOS != "linux" {
+			Skip("fixtures model Linux defaults for automated setup on the host")
+		}
+	}
+
 	var settings config.CrossPlatformSettings
 
 	BeforeEach(func() {
@@ -46,6 +55,7 @@ var _ = Describe("Default exclusion configuration", func() {
 	})
 
 	It("seeds automated exclusions case-insensitively from setup.skip_defaults", func() {
+		linuxDefaults()
 		viper.Set("setup.skip_defaults", []string{"BAT"})
 
 		model, err := createAutomatedSetupModel(mocks.NewMockRepository(), settings)
@@ -65,6 +75,7 @@ var _ = Describe("Default exclusion configuration", func() {
 	})
 
 	It("rejects unknown or unavailable names with the valid platform defaults", func() {
+		linuxDefaults()
 		viper.Set("setup.skip_defaults", []string{"missing"})
 
 		_, err := createAutomatedSetupModel(mocks.NewMockRepository(), settings)
@@ -77,6 +88,7 @@ var _ = Describe("Default exclusion configuration", func() {
 	})
 
 	It("accepts the comma-separated value supplied through the environment", func() {
+		linuxDefaults()
 		viper.SetEnvPrefix("DEVEX")
 		viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 		viper.AutomaticEnv()

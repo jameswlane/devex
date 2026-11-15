@@ -12,6 +12,9 @@ import (
 )
 
 var _ = Describe("Artifact verification dispatch", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	BeforeEach(func() { viper.Set("no-cache", true) })
 	AfterEach(func() { viper.Set("no-cache", false) })
 	It("preserves YAML integrity metadata through OS conversion and plugin argv", func() {

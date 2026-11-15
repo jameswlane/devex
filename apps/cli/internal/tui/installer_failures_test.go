@@ -57,6 +57,9 @@ var _ = Describe("Installer failure reporting", func() {
 	})
 
 	It("creates and preserves the fd link with spaces in HOME and the executable path", func(ctx SpecContext) {
+		if runtime.GOOS != "linux" {
+			Skip("runs the Linux post-install hook, which uses GNU ln -T")
+		}
 		_, source, _, ok := runtime.Caller(0)
 		Expect(ok).To(BeTrue())
 		content, err := os.ReadFile(filepath.Join(filepath.Dir(source), "../../config/applications/development/fd-find.yaml"))

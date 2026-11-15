@@ -45,6 +45,9 @@ func aptApp(name string, packages ...string) types.CrossPlatformApp {
 }
 
 var _ = Describe("Inventory", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var (
 		repo    fakeRepo
 		options inventory.Options

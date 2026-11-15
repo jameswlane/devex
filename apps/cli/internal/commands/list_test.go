@@ -18,6 +18,9 @@ import (
 )
 
 var _ = Describe("List Command", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var (
 		mockRepo *mocks.MockRepository
 		settings config.CrossPlatformSettings

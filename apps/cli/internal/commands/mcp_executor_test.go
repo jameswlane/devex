@@ -55,6 +55,9 @@ type mcpAbsentInstaller struct{ *mcpRecordingInstaller }
 func (i *mcpAbsentInstaller) IsInstalled(string) (bool, error) { return false, nil }
 
 var _ = Describe("MCP executor", func() {
+	// The fixtures model Linux catalog entries; pin them so macOS hosts agree with CI.
+	BeforeEach(func() { DeferCleanup(types.PinCatalogOSForTesting("linux")) })
+
 	var (
 		ctx            context.Context
 		home           string

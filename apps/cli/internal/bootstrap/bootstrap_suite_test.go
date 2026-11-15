@@ -11,6 +11,7 @@ import (
 )
 
 func TestBootstrap(t *testing.T) {
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Bootstrap Suite")
 }
