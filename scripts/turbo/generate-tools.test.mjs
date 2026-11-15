@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	realpath,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
@@ -16,7 +25,9 @@ afterEach(async () => {
 	);
 });
 async function fixture() {
-	const root = await mkdtemp(path.join(os.tmpdir(), "devex-catalog-"));
+	const root = await realpath(
+		await mkdtemp(path.join(os.tmpdir(), "devex-catalog-")),
+	);
 	fixtures.push(root);
 	const inputDirectory = path.join(root, "input");
 	const outputDirectory = path.join(root, "output");
@@ -101,6 +112,21 @@ all_platforms:
 });
 
 for (const [name, invalid, expected] of [
+	...[
+		"tags: [1]",
+		"tags: scalar",
+		"tags: null",
+		"desktop_environments: [true]",
+		"desktop_environments: {}",
+		"official: 1",
+		"default: 'false'",
+		"default: null",
+		"  official_support: 'true'",
+	].map((metadata) => [
+		`invalid ${metadata}`,
+		`${application}${metadata}\n`,
+		/app.yaml: .*must be/,
+	]),
 	["malformed YAML", "name: [", /app.yaml/],
 	["empty YAML", "", /empty|nonempty name/],
 	["missing required metadata", "name: Example\n", /description/],
@@ -173,7 +199,10 @@ test("CLI generation resolves its paths independently of the working directory",
 		path.join(root, "apps/cli/config/applications/app.yaml"),
 		application,
 	);
-	const script = path.join(web, "scripts/generate-tools.mjs");
+	// Exercise a symlinked ancestor even on Linux, where tmpdir is usually canonical.
+	const alias = path.join(path.dirname(root), "linked-input");
+	await symlink(root, alias, "dir");
+	const script = path.join(alias, "apps/web/scripts/generate-tools.mjs");
 	const success = spawnSync(process.execPath, [script], {
 		cwd: os.tmpdir(),
 		encoding: "utf8",
@@ -195,4 +224,30 @@ test("CLI generation resolves its paths independently of the working directory",
 	});
 	assert.equal(failure.status, 1);
 	assert.match(failure.stderr, /app.yaml/);
+});
+
+test("concurrent generators publish a complete catalog and leave no temporary files", async () => {
+	const options = await fixture();
+	await writeFile(path.join(options.inputDirectory, "app.yaml"), application);
+	const results = await Promise.all(
+		Array.from({ length: 20 }, () => generateTools(options)),
+	);
+	assert.deepEqual(
+		JSON.parse(
+			await readFile(path.join(options.outputDirectory, "tools.json"), "utf8"),
+		),
+		results[0],
+	);
+	assert.deepEqual(await readdir(options.outputDirectory), ["tools.json"]);
+});
+
+test("a failed publication cleans up its temporary file", async () => {
+	const options = await fixture();
+	await writeFile(path.join(options.inputDirectory, "app.yaml"), application);
+	// A directory at the destination deterministically forces rename to fail.
+	await mkdir(path.join(options.outputDirectory, "tools.json"), {
+		recursive: true,
+	});
+	await assert.rejects(generateTools(options), /EISDIR|EPERM|EEXIST/);
+	assert.deepEqual(await readdir(options.outputDirectory), ["tools.json"]);
 });

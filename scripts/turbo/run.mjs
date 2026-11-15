@@ -29,11 +29,13 @@ try {
 		process.exit(plan.status || 1);
 	}
 	const tasks = JSON.parse(plan.stdout).tasks;
-	const goTasks = tasks.filter((task) =>
-		existsSync(path.join(root, task.directory, "go.mod")),
+	const goTasks = tasks.filter(
+		(task) =>
+			task.command !== "<NONEXISTENT>" &&
+			existsSync(path.join(root, task.directory, "go.mod")),
 	);
 	const env = toolchainEnv(root, {
-		go: goTasks.length > 0,
+		directories: goTasks.map((task) => path.join(root, task.directory)),
 		lint: goTasks.some((task) => task.task === "lint"),
 	});
 	const result = invoke(args, { env });
