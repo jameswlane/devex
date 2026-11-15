@@ -435,7 +435,7 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 				failures = append(failures, err)
 				continue
 			}
-			command := strings.TrimSpace(app.WithBrewSelector(app.UninstallCommand))
+			command := strings.TrimSpace(app.WithKindSelector(app.UninstallCommand))
 			if command == "" {
 				command = strings.TrimSpace(app.PackageQueryCommand())
 			}

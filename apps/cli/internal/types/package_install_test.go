@@ -37,6 +37,25 @@ all_platforms:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(output)).To(Equal("--channel=" + literal + "\nnvim\n"))
 	})
+	It("keeps the zypper pattern selection for install, removal and queries", func() {
+		config := types.AppConfig{InstallMethod: "zypper", Packages: []string{"devel_basis"}, Options: []string{"-t", "pattern"}}
+		Expect(config.PackageQueryCommand()).To(Equal("zypper install '--type=pattern' 'devel_basis'"))
+		request, err := types.ResolvePackageInstall("zypper", "-t pattern devel_basis", nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(request).To(Equal(types.PackageInstallRequest{Packages: []string{"devel_basis"}, Options: []string{"--type=pattern"}}))
+		arguments, err := types.OSConfig{InstallMethod: "zypper", Packages: []string{"devel_basis"}, Options: []string{"--type=pattern"}}.ShellPackageArguments()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(arguments).To(Equal("'--type=pattern' 'devel_basis'"))
+	})
+	DescribeTable("rejects zypper selections the plugin cannot honor",
+		func(command, message string) {
+			_, err := types.ResolvePackageInstall("zypper", command, nil, nil)
+			Expect(err).To(MatchError(ContainSubstring(message)))
+		},
+		Entry("unknown type", "--type product openSUSE", "must be package or pattern"),
+		Entry("missing value", "devel_basis -t", "requires a value"),
+		Entry("other zypper option", "--no-recommends git", "unsupported zypper package option"),
+	)
 	It("validates options on nested alternatives", func() {
 		app := types.CrossPlatformApp{Name: "editor", Linux: types.OSConfig{InstallMethod: "snap", Packages: []string{"nvim"}, Alternatives: []types.OSConfig{{InstallMethod: "snap", Packages: []string{"nvim"}, Options: []string{"--channel"}}}}}
 		Expect(app.Validate()).To(HaveOccurred())

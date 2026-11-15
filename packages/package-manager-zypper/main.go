@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -38,15 +39,21 @@ func NewZypperPlugin() *ZypperPlugin {
 			},
 			{
 				Name:        "install",
-				Description: "Install packages using Zypper",
-				Usage:       "Install one or more packages with dependency resolution (zypper --non-interactive install)",
+				Description: "Install packages or patterns using Zypper",
+				Usage:       "Install packages, or patterns with --type pattern (zypper --non-interactive install --type <type>)",
 				Privilege:   system,
 			},
 			{
 				Name:        "remove",
-				Description: "Remove packages using Zypper",
-				Usage:       "Remove one or more packages from the system (zypper --non-interactive remove)",
+				Description: "Remove packages or patterns using Zypper",
+				Usage:       "Remove packages, or patterns with --type pattern (zypper --non-interactive remove --type <type>)",
 				Privilege:   system,
+			},
+			{
+				Name:        "is-installed",
+				Description: "Check whether all requested packages or patterns are installed",
+				Usage:       "Exit 0 when every package (or pattern with --type pattern) is installed, 3 when any is absent",
+				Privilege:   user,
 			},
 			{
 				Name:        "update",
@@ -86,6 +93,8 @@ func (p *ZypperPlugin) ExecuteContext(ctx context.Context, command string, args 
 	}
 
 	switch command {
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	case "install":
 		return p.handleInstall(ctx, args)
 	case "remove":
@@ -104,23 +113,21 @@ func (p *ZypperPlugin) ExecuteContext(ctx context.Context, command string, args 
 }
 
 func (p *ZypperPlugin) handleInstall(ctx context.Context, args []string) error {
-	if err := validatePackages(args); err != nil {
+	sel, err := parseSelection(args)
+	if err != nil {
 		return err
 	}
-
-	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
-
-	return p.run(ctx, "install", append([]string{"--non-interactive", "install"}, args...)...)
+	fmt.Printf("Installing %ss: %s\n", sel.kind, strings.Join(sel.names, ", "))
+	return p.run(ctx, "install", append([]string{"--non-interactive", "install", "--type", sel.kind}, sel.names...)...)
 }
 
 func (p *ZypperPlugin) handleRemove(ctx context.Context, args []string) error {
-	if err := validatePackages(args); err != nil {
+	sel, err := parseSelection(args)
+	if err != nil {
 		return err
 	}
-
-	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
-	return p.run(ctx, "remove", append([]string{"--non-interactive", "remove"}, args...)...)
+	fmt.Printf("Removing %ss: %s\n", sel.kind, strings.Join(sel.names, ", "))
+	return p.run(ctx, "remove", append([]string{"--non-interactive", "remove", "--type", sel.kind}, sel.names...)...)
 }
 
 // handleUpgrade upgrades every installed package, or only the named packages.
@@ -171,7 +178,22 @@ func (p *ZypperPlugin) run(ctx context.Context, operation string, args ...string
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	return err
+	return rebootNotice(err)
+}
+
+// exitRebootNeeded is ZYPPER_EXIT_INF_REBOOT_NEEDED: the transaction succeeded
+// but a package asks for a reboot.
+const exitRebootNeeded = 102
+
+// rebootNotice turns zypper's informational reboot status into success with a
+// notice on stderr. Every other status stays an error with its native code.
+func rebootNotice(err error) error {
+	var auth *sdk.AuthorizationError
+	if err == nil || errors.As(err, &auth) || sdk.ExitStatus(err) != exitRebootNeeded {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "Notice: zypper finished, and a reboot is required to complete the changes")
+	return nil
 }
 
 func validatePackages(args []string) error {

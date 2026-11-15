@@ -40,7 +40,7 @@ var _ = Describe("Homebrew Cask dispatch", func() {
 			installed, err := installer.IsInstalled(legacy.PackageQueryCommand())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(installed).To(BeTrue())
-			Expect(installer.Uninstall(legacy.WithBrewSelector(legacy.UninstallCommand), nil)).To(Succeed())
+			Expect(installer.Uninstall(legacy.WithKindSelector(legacy.UninstallCommand), nil)).To(Succeed())
 		}
 		Expect(recorder.Calls("brew")).To(Equal([]sdktest.Call{
 			{Args: []string{"install", "--cask", "ghostty"}},

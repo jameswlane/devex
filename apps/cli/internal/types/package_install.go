@@ -70,6 +70,10 @@ func ResolvePackageInstall(method, command string, packages, options []string) (
 			continue
 		}
 		name, value, inline := strings.Cut(token, "=")
+		if method == "zypper" && name == "-t" {
+			// Zypper's short spelling; the plugin argv uses the long form.
+			name = "--type"
+		}
 		takesValue, ok := packageOption(method, name)
 		if !ok {
 			return request, fmt.Errorf("unsupported %s package option %q", method, name)
@@ -84,6 +88,9 @@ func ResolvePackageInstall(method, command string, packages, options []string) (
 			}
 			if value == "" || strings.ContainsAny(value, "\x00\n\r") {
 				return request, fmt.Errorf("option %s requires a nonempty single-line value", name)
+			}
+			if method == "zypper" && value != "package" && value != "pattern" {
+				return request, fmt.Errorf("zypper option --type must be package or pattern, not %q", value)
 			}
 			request.Options = append(request.Options, name+"="+value)
 		} else {
@@ -127,6 +134,11 @@ func packageOption(method, name string) (takesValue, supported bool) {
 	case "cargo":
 		if name == "--locked" {
 			return false, true
+		}
+	case "zypper":
+		// --type selects packages or SUSE software patterns.
+		if name == "--type" {
+			return true, true
 		}
 	}
 	return false, false
@@ -222,7 +234,7 @@ func isPackageManager(name string) bool {
 // interface. Installation options are never applied to a read operation.
 func (a AppConfig) PackageQueryCommand() string {
 	if len(a.Packages) == 0 {
-		return a.WithBrewSelector(a.InstallCommand)
+		return a.WithKindSelector(a.InstallCommand)
 	}
 	args := append([]string{}, a.Packages...)
 	if a.InstallMethod == "brew" {
@@ -232,47 +244,56 @@ func (a AppConfig) PackageQueryCommand() string {
 			}
 		}
 	}
+	if a.InstallMethod == "zypper" {
+		// Keep the package or pattern selection; it names what to query.
+		if request, err := ResolvePackageInstall(a.InstallMethod, "", a.Packages, a.Options); err == nil {
+			args = append(append([]string{}, request.Options...), args...)
+		}
+	}
 	for i, arg := range args {
 		args[i] = "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
 	}
 	return a.InstallMethod + " install " + strings.Join(args, " ")
 }
 
-// WithBrewSelector appends the app's typed --cask or --formula option to a
-// legacy Homebrew command string that does not select a kind itself, so query
-// and removal act on the same kind that installation chose. Appending keeps
-// "brew uninstall NAME" forms parseable.
-func (a AppConfig) WithBrewSelector(command string) string {
-	if a.InstallMethod != "brew" || strings.TrimSpace(command) == "" {
+// WithKindSelector appends the app's typed kind selection to a legacy command
+// string that does not select a kind itself, so query and removal act on the
+// same kind that installation chose: Homebrew's --cask or --formula, or
+// Zypper's --type. Appending keeps "brew uninstall NAME" forms parseable.
+func (a AppConfig) WithKindSelector(command string) string {
+	if (a.InstallMethod != "brew" && a.InstallMethod != "zypper") || strings.TrimSpace(command) == "" {
 		return command
 	}
-	selector := ""
-	for _, option := range a.Options {
-		if option == "--cask" || option == "--formula" {
-			selector = option
-		}
+	tokens, err := splitPackageCommand(command)
+	if err != nil || kindSelector(a.InstallMethod, tokens) != "" {
+		return command
 	}
+	selector := kindSelector(a.InstallMethod, a.Options)
 	if selector == "" && command != a.InstallCommand {
 		// A selector written only in install_command still applies to removal.
 		if installTokens, err := splitPackageCommand(a.InstallCommand); err == nil {
-			for _, token := range installTokens {
-				if token == "--cask" || token == "--formula" {
-					selector = token
-				}
-			}
+			selector = kindSelector(a.InstallMethod, installTokens)
 		}
 	}
 	if selector == "" {
 		return command
 	}
-	tokens, err := splitPackageCommand(command)
-	if err != nil {
-		return command
-	}
-	for _, token := range tokens {
-		if token == "--cask" || token == "--formula" {
-			return command
+	return command + " " + selector
+}
+
+// kindSelector returns the last kind selection in tokens, normalized to one
+// token, or "" when there is none.
+func kindSelector(method string, tokens []string) string {
+	selector := ""
+	for i, token := range tokens {
+		switch {
+		case method == "brew" && (token == "--cask" || token == "--formula"):
+			selector = token
+		case method == "zypper" && strings.HasPrefix(token, "--type="):
+			selector = token
+		case method == "zypper" && (token == "-t" || token == "--type") && i+1 < len(tokens):
+			selector = "--type=" + tokens[i+1]
 		}
 	}
-	return command + " " + selector
+	return selector
 }
