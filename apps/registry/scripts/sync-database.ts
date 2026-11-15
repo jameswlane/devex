@@ -1,6 +1,5 @@
 #!/usr/bin/env tsx
 
-import { withAccelerate } from "@prisma/extension-accelerate";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as yaml from "yaml";
@@ -11,10 +10,19 @@ import { prismaConnectionOptions } from "../lib/prisma-connection";
 const GITHUB_BASE_URL =
 	process.env.GITHUB_BASE_URL || "https://github.com/jameswlane/devex";
 
-// Initialize Prisma client with Accelerate and connection pooling
-const prisma = new PrismaClient(prismaConnectionOptions()).$extends(
-	withAccelerate(),
-);
+// No withAccelerate() extension: this script never uses cacheStrategy, and the
+// extension shares one Accelerate session token across concurrent requests.
+// With it, every upsert after the first few timed out with P6004 (#478).
+const defaultPrisma = new PrismaClient(prismaConnectionOptions());
+
+/** Throws when any record failed, so the caller can exit non-zero. */
+function assertNoFailures(kind: string, failed: string[], total: number) {
+	if (failed.length > 0) {
+		throw new Error(
+			`${failed.length} of ${total} ${kind} failed to sync: ${failed.join(", ")}`,
+		);
+	}
+}
 
 interface ApplicationConfig {
 	name: string;
@@ -102,8 +110,10 @@ async function loadYamlFile<T>(filePath: string): Promise<T> {
 	}
 }
 
-async function syncApplications() {
+async function syncApplications(prisma: PrismaClient = defaultPrisma) {
 	console.log("📦 Syncing applications...");
+	const failed: string[] = [];
+	let total = 0;
 
 	// Scan all application directories for individual YAML files
 	const applicationsBasePath = path.join(
@@ -122,6 +132,7 @@ async function syncApplications() {
 
 		for (const yamlFile of yamlFiles) {
 			if (!yamlFile.endsWith(".yaml")) continue;
+			total++;
 
 			try {
 				const filePath = path.join(categoryPath, yamlFile);
@@ -195,6 +206,7 @@ async function syncApplications() {
 
 				console.log(`  ✅ Synced application: ${app.name}`);
 			} catch (error) {
+				failed.push(yamlFile);
 				console.error(
 					`  ❌ Failed to sync application from ${yamlFile}:`,
 					error,
@@ -202,10 +214,13 @@ async function syncApplications() {
 			}
 		}
 	}
+
+	assertNoFailures("applications", failed, total);
 }
 
-async function syncConfigs() {
+async function syncConfigs(prisma: PrismaClient = defaultPrisma) {
 	console.log("⚙️ Syncing configs...");
+	const failed: string[] = [];
 
 	const configFiles = [
 		{ file: "plugins.yaml", category: "plugins", type: "yaml" },
@@ -264,13 +279,17 @@ async function syncConfigs() {
 
 			console.log(`  ✅ Synced config: ${configName}`);
 		} catch (error) {
+			failed.push(configFile.file);
 			console.error(`  ❌ Failed to sync config ${configFile.file}:`, error);
 		}
 	}
+
+	assertNoFailures("configs", failed, configFiles.length);
 }
 
-async function syncStacks() {
+async function syncStacks(prisma: PrismaClient = defaultPrisma) {
 	console.log("📚 Syncing stacks...");
+	const failed: string[] = [];
 
 	// Define some default stacks based on common development needs
 	const stacks = [
@@ -329,12 +348,15 @@ async function syncStacks() {
 
 			console.log(`  ✅ Synced stack: ${stack.name}`);
 		} catch (error) {
+			failed.push(stack.name);
 			console.error(`  ❌ Failed to sync stack ${stack.name}:`, error);
 		}
 	}
+
+	assertNoFailures("stacks", failed, stacks.length);
 }
 
-async function updateRegistryStats() {
+async function updateRegistryStats(prisma: PrismaClient = defaultPrisma) {
 	console.log("📊 Updating registry statistics...");
 
 	try {
@@ -392,6 +414,7 @@ async function updateRegistryStats() {
 		);
 	} catch (error) {
 		console.error(`  ❌ Failed to update registry statistics:`, error);
+		throw error;
 	}
 }
 
@@ -406,44 +429,29 @@ async function main() {
 		process.exit(1);
 	}
 
-	try {
-		// Run sync operations in parallel for better performance
-		const results = await Promise.allSettled([
-			syncApplications(),
-			syncConfigs(),
-			syncStacks(),
-		]);
-
-		// Check for any failures
-		const failures = results.filter((result) => result.status === "rejected");
-		if (failures.length > 0) {
-			console.error("\n⚠️  Some sync operations failed:");
-			failures.forEach((failure, index) => {
-				if (failure.status === "rejected") {
-					console.error(`  - Operation ${index + 1}: ${failure.reason}`);
-				}
-			});
+	// Run each step in turn; a failed step does not stop the others.
+	const failures: string[] = [];
+	for (const step of [
+		syncApplications,
+		syncConfigs,
+		syncStacks,
+		updateRegistryStats,
+	]) {
+		try {
+			await step();
+		} catch (error) {
+			failures.push(error instanceof Error ? error.message : String(error));
 		}
-
 		console.log("");
-		await updateRegistryStats();
-		console.log("");
-
-		if (failures.length === 0) {
-			console.log("✨ Database sync completed successfully!");
-		} else {
-			console.log("⚠️  Database sync completed with some failures");
-			await prisma.$disconnect();
-			process.exit(1);
-		}
-	} catch (error) {
-		console.error("❌ Database sync failed:", error);
-		await prisma.$disconnect();
-		process.exit(1);
-	} finally {
-		await prisma.$disconnect();
-		process.exit(0);
 	}
+	await defaultPrisma.$disconnect();
+
+	if (failures.length > 0) {
+		console.error("❌ Database sync failed:");
+		for (const failure of failures) console.error(`  - ${failure}`);
+		process.exit(1);
+	}
+	console.log("✨ Database sync completed successfully!");
 }
 
 // Run if executed directly
