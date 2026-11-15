@@ -5,12 +5,13 @@
 	"description": "LXQt desktop environment configuration plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-desktop-lxqt .",
-		"dev": "go build -race -o devex-plugin-desktop-lxqt .",
-		"test": "go test ./...",
-		"lint": "golangci-lint run --allow-parallel-runners",
-		"download": "go mod download",
-		"mod": "go mod tidy"
+		"build": "node ../../scripts/turbo/go-task.mjs go build -o devex-plugin-desktop-lxqt .",
+		"dev": "node ../../scripts/turbo/go-task.mjs go build -race -o devex-plugin-desktop-lxqt .",
+		"test": "node ../../scripts/turbo/go-task.mjs go test ./...",
+		"lint": "node ../../scripts/turbo/go-task.mjs golangci-lint run --allow-parallel-runners",
+		"download": "node ../../scripts/turbo/go-task.mjs go mod download",
+		"mod": "node ../../scripts/turbo/go-task.mjs go mod tidy",
+		"vulncheck": "node ../../scripts/turbo/go-task.mjs vulncheck"
 	},
 	"keywords": [
 		"devex",

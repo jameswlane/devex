@@ -291,6 +291,82 @@ pnpm biome:check
 
 ## Development
 
+### Workspace task orchestration
+
+Run `pnpm build`, `pnpm lint`, and `pnpm test` for the workspace, or use Turbo's
+real package task names for focused checks, for example
+`pnpm turbo:run run build --filter=@devex/cli`. The root `build:go`, `lint:go`,
+`test:go`, and `test:ginkgo` commands are convenience filters over `build`,
+`lint`, and `test`; they are not separate package tasks. CLI `task turbo:build`,
+`task turbo:test`, and `task turbo:lint` use those same real tasks.
+`pnpm typecheck` runs the registry's `typecheck` script.
+
+`pnpm generate` creates `apps/web/app/generated/tools.json` from the application
+YAML in `apps/cli/config/applications`, using
+`apps/web/scripts/generate-tools.mjs`. This application catalog supports registry
+seeding; the website's live catalog API reads the registry. Generation validates
+all sources before replacing the catalog and fails on malformed, duplicate, or
+empty input. Generated catalogs are ignored by Git. Turbo hashes both the YAML
+and generator script and restores the output on cache hits. The web Turbo build
+runs generation first; direct package builds (`pnpm --filter @devex/web build`)
+bypass that orchestration, so run `pnpm generate` first when using them.
+
+Registry Turbo `build`, `test`, `dev`, and `typecheck` run the registry's own
+`db:generate` first. Prisma generation does not require a database connection;
+commands that access the database still need their usual environment settings.
+
+Go packages extend `@devex/turbo-go`; Next.js apps extend `@devex/turbo-next`.
+These configuration-only workspaces hold shared settings, while package configs
+retain local generation dependencies and output overrides. Turbo 2.11.11 supports
+extending named workspace configurations after `"//"` (the installed schema's
+`extends` description still says only `"//"`; the executable and regression suite
+verify named inheritance).
+
+Go and Vitest tests compile from source and do not depend on application builds.
+Registry tests retain Prisma generation because they import generated runtime
+values. Go test/lint/build inputs include SDK sources, manifests and fixtures,
+module defaults (including YAML and test data), shared task scripts, and root mise
+pins. SDK changes therefore invalidate consumers without a build prerequisite.
+The root Biome config affects JavaScript linting. Plugin build caches retain the
+existing executable paths and exclude matching `.go` source files.
+
+Root Turbo commands use `scripts/turbo/run.mjs` to measure the active tools before
+hashing. It queries `go env GOVERSION` in every Go module, honoring module-selected
+Go toolchains and local/CI overrides; the sorted set of resolved versions affects
+Go tasks only. `golangci-lint version` affects Go lint tasks only. Next-only graphs
+need neither tool. Use `pnpm turbo:run run <task> [filters/options]` for custom
+cached Go runs. Raw `pnpm exec turbo` bypasses measurement; Go task scripts reject
+uncached runs without matching measured fingerprints. Direct package commands
+(`pnpm --filter @devex/cli test`) continue to run normally without Turbo caching.
+No versions are installed or tool pins changed by the runner.
+
+Environment files are scoped to each Next app and task mode, rather than hashed
+globally. Registry database, Redis, signing, GitHub and application settings are
+listed on its runtime tasks, including test and dev, for Turbo's strict environment
+mode. Next public variables and standard Next runtime settings are available to
+web/docs tasks. Database/Redis settings and Next `.env*` files do not invalidate
+Go tasks. Root `.env*` files are not inputs: Next loads env files from each app.
+
+`pnpm vulncheck` scans all Go modules; use
+`pnpm turbo:run run vulncheck --filter=@devex/cli` for a focused scan, or
+`task vulncheck` from the CLI directory. The runner uses
+`go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` without a global install.
+Turbo scanning is always uncached, and the CLI Taskfile has no source freshness
+shortcut: every invocation reads the current vulnerability database. Scanner
+findings and network/tool failures fail the command.
+
+Check task graphs, hash isolation/inheritance, measured tool versions, repeated
+scanning, cache restoration, and catalog generation with `pnpm turbo:test`
+(requires installed workspace dependencies, Git, and `tar` with Zstandard support).
+
+Unused Turbo-only aliases were removed: use `build`, `lint`, `test`, and
+`typecheck` as task names. The root `build:go`, `lint:go`, `test:go` and
+`test:ginkgo` scripts remain convenience filters. Taskfile operations such as
+local builds and installation remain available in the relevant Go module. The
+root `clean`, `lint:fix`, and `release:detect`/`release:version`/`release:changelog`/
+`release:build` wrappers had no matching scripts and were removed. Release
+commands are documented in [RELEASING.md](RELEASING.md).
+
 ### Testing
 
 Run CLI tests:

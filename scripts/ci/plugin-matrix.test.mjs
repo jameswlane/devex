@@ -42,6 +42,8 @@ before(() => {
 	write("packages/plain-plugin/main.go");
 	write("packages/plain-plugin/main_test.go", "package main\n");
 	write("packages/node-plugin/package.json", "{}");
+	write("packages/turbo-go/package.json", "{}");
+	write("packages/turbo-next/package.json", "{}");
 	write("packages/vendored/main.go");
 	write("packages/vendored/node_modules/x/a_test.go", adopterTest);
 	write("packages/vendored/notes.go", adopterTest);
@@ -163,4 +165,19 @@ describe("command line", () => {
 			);
 		}
 	});
+});
+
+it("excludes shared Turbo configuration workspaces from the executable plugin matrix", () => {
+	assert.deepEqual(
+		selectPlugins({
+			root,
+			sdkChanged: false,
+			changedFiles: [
+				"packages/turbo-go/turbo.json",
+				"packages/turbo-next/package.json",
+				"packages/plain-plugin/main.go",
+			],
+		}),
+		["plain-plugin"],
+	);
 });

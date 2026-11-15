@@ -9,11 +9,11 @@ import { fileURLToPath } from "node:url";
 
 export const SDKTEST_IMPORT =
 	'"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"';
-const SDK_DIR = "plugin-sdk";
+const NON_PLUGIN_DIRS = new Set(["plugin-sdk", "turbo-go", "turbo-next"]);
 const SKIPPED_DIRS = new Set(["node_modules", "dist", "vendor", "testdata"]);
 
 /**
- * Reports whether packages/<name> is a plugin module CI tests: not the SDK,
+ * Reports whether packages/<name> is a plugin module CI tests: not the SDK or a shared Turbo configuration workspace,
  * and it has a main.go or package.json.
  * @param {string} root Repository root.
  * @param {string} name Directory name under packages/.
@@ -22,7 +22,7 @@ const SKIPPED_DIRS = new Set(["node_modules", "dist", "vendor", "testdata"]);
 function isPlugin(root, name) {
 	const dir = path.join(root, "packages", name);
 	return (
-		name !== SDK_DIR &&
+		!NON_PLUGIN_DIRS.has(name) &&
 		(fs.existsSync(path.join(dir, "main.go")) ||
 			fs.existsSync(path.join(dir, "package.json")))
 	);

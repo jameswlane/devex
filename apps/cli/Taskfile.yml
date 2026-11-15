@@ -66,9 +66,8 @@ tasks:
   # === SECURITY ===
   vulncheck:
     desc: Run vulnerability checks on dependencies
-    sources: ['go.mod', 'go.sum']
     cmds:
-      - govulncheck ./...
+      - node ../../scripts/turbo/go-task.mjs vulncheck
   # === TESTING ===
   test:
     desc: Run the complete test suite using Ginkgo
@@ -192,12 +191,12 @@ tasks:
   turbo:build:
     desc: Build using TurboRepo
     cmds:
-      - cd ../../ && turbo build:go --filter=@devex/cli
+      - cd ../../ && pnpm turbo:run run build --filter=@devex/cli
   turbo:test:
-    desc: Test using TurboRepo (now uses Ginkgo)
+    desc: Test using TurboRepo
     cmds:
-      - cd ../../ && turbo test:go --filter=@devex/cli
+      - cd ../../ && pnpm turbo:run run test --filter=@devex/cli
   turbo:lint:
     desc: Lint using TurboRepo
     cmds:
-      - cd ../../ && turbo lint:go --filter=@devex/cli
+      - cd ../../ && pnpm turbo:run run lint --filter=@devex/cli
