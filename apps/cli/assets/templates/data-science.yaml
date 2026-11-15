@@ -1,0 +1,231 @@
+schema_version: devex.template/v1
+id: data-science
+name: Data Science
+version: 1.0.0
+description: Isolated Jupyter notebook (Python, R, or both) and MLflow tracking containers
+author: DevEx Team
+tags:
+  - data-science
+  - python
+  - r
+  - jupyter
+  - mlflow
+  - docker
+categories:
+  - science
+metadata:
+  init_profile: true
+  languages:
+    - python
+    - r
+  platforms:
+    - linux
+    - macos
+  limitations:
+    - Everything runs in Docker containers, so the system Python and R are never changed.
+    - Notebooks live in the devex-jupyter-work volume, and MLflow data in devex-mlflow-data.
+    - Docker Engine is installed only on Linux. On macOS, start Docker Desktop yourself first; its license terms apply.
+    - Jupyter generates a login token at start. Read it with docker logs on the notebook container.
+    - Ports are published on 127.0.0.1 only. GPU access is not configured.
+inputs:
+  components:
+    type: multiselect
+    prompt: Data science services to run
+    default:
+      - jupyter
+    options:
+      - label: JupyterLab notebook
+        value: jupyter
+      - label: MLflow tracking server
+        value: mlflow
+  notebook_stack:
+    type: select
+    prompt: Notebook languages
+    default: scipy
+    options:
+      - label: Python (scientific stack)
+        value: scipy
+      - label: R
+        value: r
+      - label: Python, R and Julia
+        value: datascience
+  jupyter_tag:
+    type: text
+    prompt: Jupyter Docker Stacks image tag
+    default: lab-4.6.6
+    validation: &tag
+      pattern: ^[A-Za-z0-9][A-Za-z0-9._-]*$
+      message: Image tags may contain only letters, numbers, dots, underscores, and hyphens.
+  mlflow_version:
+    type: text
+    prompt: MLflow image tag
+    default: v3.18.0
+    validation: *tag
+  jupyter_name:
+    type: text
+    prompt: Notebook container name
+    default: devex-jupyter
+    validation: &name
+      pattern: ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$
+      message: Container names may contain only letters, numbers, dots, underscores, and hyphens.
+  mlflow_name:
+    type: text
+    prompt: MLflow container name
+    default: devex-mlflow
+    validation: *name
+  jupyter_port:
+    type: text
+    prompt: JupyterLab port on 127.0.0.1
+    default: "8888"
+    validation: &port
+      pattern: ^[0-9]{2,5}$
+      message: Ports must be numeric.
+  mlflow_port:
+    type: text
+    prompt: MLflow port on 127.0.0.1
+    default: "5000"
+    validation: *port
+lifecycle:
+  install:
+    - id: docker-engine
+      order: 10
+      description: Install Docker Engine from the system package manager and add the user to the docker group
+      if: (contains(inputs.components, "jupyter") || contains(inputs.components, "mlflow")) && platform("linux")
+      plugin:
+        name: package-manager-docker
+        command: ensure-installed
+        args:
+          - --add-user
+    - id: jupyter
+      order: 20
+      depends_on:
+        - docker-engine
+      if: contains(inputs.components, "jupyter")
+      app:
+        name: JupyterLab
+        category: science
+        installer: docker
+        command: install
+        args:
+          - quay.io/jupyter/{{ inputs.notebook_stack }}-notebook:{{ inputs.jupyter_tag }}
+          - --name={{ inputs.jupyter_name }}
+          - --port=127.0.0.1:{{ inputs.jupyter_port }}:8888
+          - --volume=devex-jupyter-work:/home/jovyan/work
+          - --restart=unless-stopped
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.jupyter_name }}"
+          external_id: "{{ inputs.jupyter_name }}"
+          metadata:
+            image: quay.io/jupyter/{{ inputs.notebook_stack }}-notebook:{{ inputs.jupyter_tag }}
+    - id: mlflow
+      order: 30
+      depends_on:
+        - docker-engine
+      if: contains(inputs.components, "mlflow")
+      app:
+        name: MLflow
+        category: science
+        installer: docker
+        command: install
+        args:
+          - ghcr.io/mlflow/mlflow:{{ inputs.mlflow_version }}
+          - --name={{ inputs.mlflow_name }}
+          - --port=127.0.0.1:{{ inputs.mlflow_port }}:5000
+          - --volume=devex-mlflow-data:/mlflow
+          - --restart=unless-stopped
+          - --detach
+          - --
+          - mlflow
+          - server
+          - --host
+          - 0.0.0.0
+          - --port
+          - "5000"
+          - --backend-store-uri
+          - sqlite:////mlflow/mlflow.db
+          - --artifacts-destination
+          - /mlflow/artifacts
+      resources:
+        - type: container
+          name: "{{ inputs.mlflow_name }}"
+          external_id: "{{ inputs.mlflow_name }}"
+          metadata:
+            image: ghcr.io/mlflow/mlflow:{{ inputs.mlflow_version }}
+  maintain:
+    # Pull the image recorded at install time, then restart the container.
+    - id: jupyter-pull
+      order: 10
+      if: has_resource("jupyter")
+      plugin:
+        name: package-manager-docker
+        command: pull
+        args:
+          - "{{ resource.jupyter.metadata.image }}"
+    - id: jupyter-restart
+      order: 20
+      depends_on:
+        - jupyter-pull
+      if: has_resource("jupyter")
+      plugin:
+        name: package-manager-docker
+        command: restart
+        args:
+          - "{{ resource.jupyter.external_id }}"
+    - id: mlflow-pull
+      order: 30
+      if: has_resource("mlflow")
+      plugin:
+        name: package-manager-docker
+        command: pull
+        args:
+          - "{{ resource.mlflow.metadata.image }}"
+    - id: mlflow-restart
+      order: 40
+      depends_on:
+        - mlflow-pull
+      if: has_resource("mlflow")
+      plugin:
+        name: package-manager-docker
+        command: restart
+        args:
+          - "{{ resource.mlflow.external_id }}"
+  status:
+    - id: jupyter-status
+      order: 10
+      if: has_resource("jupyter")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.jupyter.external_id }}"
+    - id: mlflow-status
+      order: 20
+      if: has_resource("mlflow")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.mlflow.external_id }}"
+  remove:
+    # Containers are removed; the notebook and MLflow volumes are kept so
+    # work survives a reinstall. Remove them with docker volume rm.
+    - id: mlflow-remove
+      order: 10
+      if: has_resource("mlflow")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.mlflow.external_id }}"
+          - --force
+    - id: jupyter-remove
+      order: 20
+      if: has_resource("jupyter")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.jupyter.external_id }}"
+          - --force

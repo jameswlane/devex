@@ -1,0 +1,362 @@
+schema_version: devex.template/v1
+id: devops
+name: DevOps
+version: 1.0.0
+description: Docker, Kubernetes, infrastructure-as-code and AWS command-line tools with pinned versions
+author: DevEx Team
+tags:
+  - devops
+  - docker
+  - kubernetes
+  - terraform
+  - aws
+categories:
+  - infrastructure
+metadata:
+  init_profile: true
+  languages:
+    - go
+    - python
+  platforms:
+    - linux
+    - macos
+  limitations:
+    - Docker Engine is installed only on Linux. On macOS, install Docker Desktop yourself; its license terms apply.
+    - Terraform is released under the Business Source License. Pick opentofu for an open-source alternative.
+    - kind needs a running container runtime, so select docker with it on Linux.
+    - Cloud credentials are never configured. Run aws configure or aws sso login after install.
+inputs:
+  tools:
+    type: multiselect
+    prompt: DevOps tools to install
+    default:
+      - docker
+      - kubectl
+      - terraform
+      - awscli
+    options:
+      - label: Docker Engine (Linux only)
+        value: docker
+      - label: kubectl
+        value: kubectl
+      - label: Helm
+        value: helm
+      - label: kind (local Kubernetes in Docker)
+        value: kind
+      - label: Terraform
+        value: terraform
+      - label: OpenTofu
+        value: opentofu
+      - label: AWS CLI v2
+        value: awscli
+  kubectl_version:
+    type: text
+    prompt: kubectl version (mise version prefix)
+    default: "1.37"
+    validation: &version
+      pattern: ^[0-9][0-9A-Za-z.+_-]*$
+      message: Versions must start with a digit, then letters, numbers, dots, plus signs, underscores, or hyphens.
+  helm_version:
+    type: text
+    prompt: Helm version (mise version prefix)
+    default: "4"
+    validation: *version
+  kind_version:
+    type: text
+    prompt: kind version (mise version prefix)
+    default: "0.33"
+    validation: *version
+  terraform_version:
+    type: text
+    prompt: Terraform version (mise version prefix)
+    default: "1.17"
+    validation: *version
+  opentofu_version:
+    type: text
+    prompt: OpenTofu version (mise version prefix)
+    default: "1.13"
+    validation: *version
+  awscli_version:
+    type: text
+    prompt: AWS CLI version (mise version prefix)
+    default: "2"
+    validation: *version
+lifecycle:
+  install:
+    - id: docker-engine
+      order: 10
+      description: Install Docker Engine from the system package manager and add the user to the docker group
+      if: contains(inputs.tools, "docker") && platform("linux")
+      plugin:
+        name: package-manager-docker
+        command: ensure-installed
+        args:
+          - --add-user
+    - id: mise
+      order: 20
+      description: Install mise, which pins every command-line tool below
+      if: |-
+        contains(inputs.tools, "kubectl") || contains(inputs.tools, "helm") || contains(inputs.tools, "kind")
+        || contains(inputs.tools, "terraform") || contains(inputs.tools, "opentofu")
+        || contains(inputs.tools, "awscli")
+      plugin:
+        name: package-manager-mise
+        command: ensure-installed
+    - id: kubectl
+      order: 30
+      depends_on:
+        - mise
+      if: contains(inputs.tools, "kubectl")
+      app:
+        name: kubectl
+        category: infrastructure
+        installer: mise
+        command: install
+        args:
+          - kubectl@{{ inputs.kubectl_version }}
+      resources:
+        - type: tool
+          name: kubectl
+          external_id: kubectl@{{ inputs.kubectl_version }}
+          metadata:
+            tool: kubectl
+    - id: helm
+      order: 40
+      depends_on:
+        - mise
+      if: contains(inputs.tools, "helm")
+      app:
+        name: Helm
+        category: infrastructure
+        installer: mise
+        command: install
+        args:
+          - helm@{{ inputs.helm_version }}
+      resources:
+        - type: tool
+          name: helm
+          external_id: helm@{{ inputs.helm_version }}
+          metadata:
+            tool: helm
+    - id: kind
+      order: 50
+      depends_on:
+        - mise
+      if: contains(inputs.tools, "kind")
+      app:
+        name: kind
+        category: infrastructure
+        installer: mise
+        command: install
+        args:
+          - kind@{{ inputs.kind_version }}
+      resources:
+        - type: tool
+          name: kind
+          external_id: kind@{{ inputs.kind_version }}
+          metadata:
+            tool: kind
+    - id: terraform
+      order: 60
+      depends_on:
+        - mise
+      if: contains(inputs.tools, "terraform")
+      app:
+        name: Terraform
+        category: infrastructure
+        installer: mise
+        command: install
+        args:
+          - terraform@{{ inputs.terraform_version }}
+      resources:
+        - type: tool
+          name: terraform
+          external_id: terraform@{{ inputs.terraform_version }}
+          metadata:
+            tool: terraform
+    - id: opentofu
+      order: 70
+      depends_on:
+        - mise
+      if: contains(inputs.tools, "opentofu")
+      app:
+        name: OpenTofu
+        category: infrastructure
+        installer: mise
+        command: install
+        args:
+          - opentofu@{{ inputs.opentofu_version }}
+      resources:
+        - type: tool
+          name: opentofu
+          external_id: opentofu@{{ inputs.opentofu_version }}
+          metadata:
+            tool: opentofu
+    - id: awscli
+      order: 80
+      depends_on:
+        - mise
+      if: contains(inputs.tools, "awscli")
+      app:
+        name: AWS CLI
+        category: infrastructure
+        installer: mise
+        command: install
+        args:
+          - awscli@{{ inputs.awscli_version }}
+      resources:
+        - type: tool
+          name: awscli
+          external_id: awscli@{{ inputs.awscli_version }}
+          metadata:
+            tool: awscli
+  maintain:
+    # Re-running `mise use` moves each tool to the newest release that
+    # matches the version prefix recorded at install time.
+    - id: kubectl-update
+      order: 10
+      if: has_resource("kubectl")
+      plugin:
+        name: package-manager-mise
+        command: install
+        args:
+          - "{{ resource.kubectl.external_id }}"
+    - id: helm-update
+      order: 20
+      if: has_resource("helm")
+      plugin:
+        name: package-manager-mise
+        command: install
+        args:
+          - "{{ resource.helm.external_id }}"
+    - id: kind-update
+      order: 30
+      if: has_resource("kind")
+      plugin:
+        name: package-manager-mise
+        command: install
+        args:
+          - "{{ resource.kind.external_id }}"
+    - id: terraform-update
+      order: 40
+      if: has_resource("terraform")
+      plugin:
+        name: package-manager-mise
+        command: install
+        args:
+          - "{{ resource.terraform.external_id }}"
+    - id: opentofu-update
+      order: 50
+      if: has_resource("opentofu")
+      plugin:
+        name: package-manager-mise
+        command: install
+        args:
+          - "{{ resource.opentofu.external_id }}"
+    - id: awscli-update
+      order: 60
+      if: has_resource("awscli")
+      plugin:
+        name: package-manager-mise
+        command: install
+        args:
+          - "{{ resource.awscli.external_id }}"
+  status:
+    - id: kubectl-status
+      order: 10
+      if: has_resource("kubectl")
+      plugin:
+        name: package-manager-mise
+        command: is-installed
+        args:
+          - "{{ resource.kubectl.metadata.tool }}"
+    - id: helm-status
+      order: 20
+      if: has_resource("helm")
+      plugin:
+        name: package-manager-mise
+        command: is-installed
+        args:
+          - "{{ resource.helm.metadata.tool }}"
+    - id: kind-status
+      order: 30
+      if: has_resource("kind")
+      plugin:
+        name: package-manager-mise
+        command: is-installed
+        args:
+          - "{{ resource.kind.metadata.tool }}"
+    - id: terraform-status
+      order: 40
+      if: has_resource("terraform")
+      plugin:
+        name: package-manager-mise
+        command: is-installed
+        args:
+          - "{{ resource.terraform.metadata.tool }}"
+    - id: opentofu-status
+      order: 50
+      if: has_resource("opentofu")
+      plugin:
+        name: package-manager-mise
+        command: is-installed
+        args:
+          - "{{ resource.opentofu.metadata.tool }}"
+    - id: awscli-status
+      order: 60
+      if: has_resource("awscli")
+      plugin:
+        name: package-manager-mise
+        command: is-installed
+        args:
+          - "{{ resource.awscli.metadata.tool }}"
+  remove:
+    # Docker Engine is shared with other templates and is never removed here.
+    - id: kubectl-remove
+      order: 10
+      if: has_resource("kubectl")
+      plugin:
+        name: package-manager-mise
+        command: remove
+        args:
+          - "{{ resource.kubectl.external_id }}"
+    - id: helm-remove
+      order: 20
+      if: has_resource("helm")
+      plugin:
+        name: package-manager-mise
+        command: remove
+        args:
+          - "{{ resource.helm.external_id }}"
+    - id: kind-remove
+      order: 30
+      if: has_resource("kind")
+      plugin:
+        name: package-manager-mise
+        command: remove
+        args:
+          - "{{ resource.kind.external_id }}"
+    - id: terraform-remove
+      order: 40
+      if: has_resource("terraform")
+      plugin:
+        name: package-manager-mise
+        command: remove
+        args:
+          - "{{ resource.terraform.external_id }}"
+    - id: opentofu-remove
+      order: 50
+      if: has_resource("opentofu")
+      plugin:
+        name: package-manager-mise
+        command: remove
+        args:
+          - "{{ resource.opentofu.external_id }}"
+    - id: awscli-remove
+      order: 60
+      if: has_resource("awscli")
+      plugin:
+        name: package-manager-mise
+        command: remove
+        args:
+          - "{{ resource.awscli.external_id }}"

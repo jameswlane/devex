@@ -1,0 +1,223 @@
+schema_version: devex.template/v1
+id: game-development
+name: Game Development
+version: 1.0.0
+description: Opt-in Godot editor setup; Unity and Unreal need manual, account-bound installs
+author: DevEx Team
+tags:
+  - game-development
+  - godot
+categories:
+  - gaming
+metadata:
+  init_profile: true
+  opt_in: true
+  languages: []
+  platforms:
+    - linux
+    - macos
+  limitations:
+    - Only Godot is automated. Nothing is installed until you answer engine=godot.
+    - Unity is not automated. Unity Hub needs a Unity account sign-in and a license choice.
+    - Install Unity Hub from unity.com yourself.
+    - Unreal Engine is not automated. It needs an Epic Games account linked to GitHub.
+    - On Linux, Unreal Engine is built from source.
+    - On Linux Godot comes from Flathub. Its sandbox only reaches your home directory, so keep projects there.
+    - The .NET edition needs a .NET SDK on PATH to build C# projects. This template does not install one.
+    - The macOS steps use Homebrew, which must already be installed.
+inputs:
+  engine:
+    type: select
+    prompt: Game engine to install (opt-in)
+    required: true
+    options:
+      - label: Godot
+        value: godot
+        description: The only engine DevEx can install without an account
+  godot_edition:
+    type: select
+    prompt: Godot edition
+    default: standard
+    options:
+      - label: Standard (GDScript)
+        value: standard
+      - label: .NET (C# support)
+        value: dotnet
+lifecycle:
+  install:
+    - id: flatpak
+      order: 10
+      description: Install Flatpak and add Flathub for Godot
+      if: equals(inputs.engine, "godot") && platform("linux")
+      plugin:
+        name: package-manager-flatpak
+        command: ensure-installed
+    - id: flathub
+      order: 20
+      depends_on:
+        - flatpak
+      if: equals(inputs.engine, "godot") && platform("linux")
+      plugin:
+        name: package-manager-flatpak
+        command: add-flathub
+    - id: godot-linux
+      order: 30
+      depends_on:
+        - flathub
+      if: equals(inputs.engine, "godot") && equals(inputs.godot_edition, "standard") && platform("linux")
+      app:
+        name: Godot
+        category: gaming
+        installer: flatpak
+        command: install
+        args:
+          - org.godotengine.Godot
+      resources:
+        - type: package
+          name: godot
+          external_id: org.godotengine.Godot
+          metadata:
+            installer: flatpak
+    - id: godot-dotnet-linux
+      order: 30
+      depends_on:
+        - flathub
+      if: equals(inputs.engine, "godot") && equals(inputs.godot_edition, "dotnet") && platform("linux")
+      app:
+        name: Godot .NET
+        category: gaming
+        installer: flatpak
+        command: install
+        args:
+          - org.godotengine.GodotSharp
+      resources:
+        - type: package
+          name: godot-dotnet
+          external_id: org.godotengine.GodotSharp
+          metadata:
+            installer: flatpak
+    - id: godot-macos
+      order: 30
+      if: equals(inputs.engine, "godot") && equals(inputs.godot_edition, "standard") && platform("darwin")
+      app:
+        name: Godot
+        category: gaming
+        installer: brew
+        command: install
+        args:
+          - --cask
+          - godot
+      resources:
+        - type: package
+          name: godot
+          external_id: godot
+          metadata:
+            installer: brew
+    - id: godot-dotnet-macos
+      order: 30
+      if: equals(inputs.engine, "godot") && equals(inputs.godot_edition, "dotnet") && platform("darwin")
+      app:
+        name: Godot .NET
+        category: gaming
+        installer: brew
+        command: install
+        args:
+          - --cask
+          - godot-mono
+      resources:
+        - type: package
+          name: godot-dotnet
+          external_id: godot-mono
+          metadata:
+            installer: brew
+  maintain:
+    # Flatpak updates are left to `flatpak update`, which would also update
+    # every other Flatpak on the machine.
+    - id: godot-macos-upgrade
+      order: 10
+      if: has_resource("godot-macos")
+      plugin:
+        name: package-manager-brew
+        command: upgrade
+        args:
+          - --cask
+          - "{{ resource.godot-macos.external_id }}"
+    - id: godot-dotnet-macos-upgrade
+      order: 20
+      if: has_resource("godot-dotnet-macos")
+      plugin:
+        name: package-manager-brew
+        command: upgrade
+        args:
+          - --cask
+          - "{{ resource.godot-dotnet-macos.external_id }}"
+  status:
+    - id: godot-linux-status
+      order: 10
+      if: has_resource("godot-linux")
+      plugin:
+        name: package-manager-flatpak
+        command: is-installed
+        args:
+          - "{{ resource.godot-linux.external_id }}"
+    - id: godot-dotnet-linux-status
+      order: 20
+      if: has_resource("godot-dotnet-linux")
+      plugin:
+        name: package-manager-flatpak
+        command: is-installed
+        args:
+          - "{{ resource.godot-dotnet-linux.external_id }}"
+    - id: godot-macos-status
+      order: 30
+      if: has_resource("godot-macos")
+      plugin:
+        name: package-manager-brew
+        command: is-installed
+        args:
+          - --cask
+          - "{{ resource.godot-macos.external_id }}"
+    - id: godot-dotnet-macos-status
+      order: 40
+      if: has_resource("godot-dotnet-macos")
+      plugin:
+        name: package-manager-brew
+        command: is-installed
+        args:
+          - --cask
+          - "{{ resource.godot-dotnet-macos.external_id }}"
+  remove:
+    - id: godot-linux-remove
+      order: 10
+      if: has_resource("godot-linux")
+      plugin:
+        name: package-manager-flatpak
+        command: remove
+        args:
+          - "{{ resource.godot-linux.external_id }}"
+    - id: godot-dotnet-linux-remove
+      order: 20
+      if: has_resource("godot-dotnet-linux")
+      plugin:
+        name: package-manager-flatpak
+        command: remove
+        args:
+          - "{{ resource.godot-dotnet-linux.external_id }}"
+    - id: godot-macos-remove
+      order: 30
+      if: has_resource("godot-macos")
+      plugin:
+        name: package-manager-brew
+        command: remove
+        args:
+          - --cask
+          - "{{ resource.godot-macos.external_id }}"
+    - id: godot-dotnet-macos-remove
+      order: 40
+      if: has_resource("godot-dotnet-macos")
+      plugin:
+        name: package-manager-brew
+        command: remove
+        args:
+          - --cask
+          - "{{ resource.godot-dotnet-macos.external_id }}"

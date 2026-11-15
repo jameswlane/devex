@@ -34,7 +34,7 @@ type InstallResult struct {
 }
 
 // InstallTools installs multiple tools in parallel with error aggregation
-func (pi *ParallelInstaller) InstallTools(ctx context.Context, tools []string, globalFlag string) ([]InstallResult, error) {
+func (pi *ParallelInstaller) InstallTools(ctx context.Context, tools []string) ([]InstallResult, error) {
 	if len(tools) == 0 {
 		return nil, fmt.Errorf("no tools specified")
 	}
@@ -64,7 +64,7 @@ func (pi *ParallelInstaller) InstallTools(ctx context.Context, tools []string, g
 			defer func() { <-semaphore }()
 
 			// Install the tool with timeout
-			result := pi.installSingleTool(ctx, toolName, globalFlag)
+			result := pi.installSingleTool(ctx, toolName)
 			resultChan <- result
 		}(tool)
 	}
@@ -96,8 +96,11 @@ func (pi *ParallelInstaller) InstallTools(ctx context.Context, tools []string, g
 	return results, aggregatedError
 }
 
-// installSingleTool installs a single tool with proper timeout and error handling
-func (pi *ParallelInstaller) installSingleTool(ctx context.Context, tool string, globalFlag string) InstallResult {
+// installSingleTool downloads a single tool version with proper timeout and
+// error handling. It does not activate the tool; HandleInstall records all the
+// tools in one `mise use` afterwards, so parallel workers never race on the
+// mise config file.
+func (pi *ParallelInstaller) installSingleTool(ctx context.Context, tool string) InstallResult {
 	start := time.Now()
 	result := InstallResult{
 		Tool:    tool,
@@ -112,7 +115,7 @@ func (pi *ParallelInstaller) installSingleTool(ctx context.Context, tool string,
 	pi.logger.Info("Installing tool", "tool", tool)
 
 	// Execute installation
-	err := sdk.ExecCommandWithContext(installCtx, false, "mise", "install", globalFlag, tool)
+	err := sdk.ExecCommandWithContext(installCtx, false, "mise", "install", tool)
 
 	result.Duration = time.Since(start)
 
@@ -121,84 +124,7 @@ func (pi *ParallelInstaller) installSingleTool(ctx context.Context, tool string,
 		pi.logger.Error("Installation failed", result.Error, "tool", tool, "duration", result.Duration)
 	} else {
 		result.Success = true
-		pi.logger.Success("Installed tool: %s (took %v)", tool, result.Duration)
-	}
-
-	return result
-}
-
-// RemoveTools removes multiple tools in parallel
-func (pi *ParallelInstaller) RemoveTools(ctx context.Context, tools []string) ([]InstallResult, error) {
-	if len(tools) == 0 {
-		return nil, fmt.Errorf("no tools specified")
-	}
-
-	results := make([]InstallResult, 0, len(tools))
-	resultChan := make(chan InstallResult, len(tools))
-
-	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, pi.maxConcurrency)
-
-	for _, tool := range tools {
-		wg.Add(1)
-		go func(toolName string) {
-			defer wg.Done()
-
-			// Acquire semaphore slot
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			result := pi.removeSingleTool(ctx, toolName)
-			resultChan <- result
-		}(tool)
-	}
-
-	// Wait for completion
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	// Collect results
-	for result := range resultChan {
-		results = append(results, result)
-	}
-
-	// Check for failures
-	var aggregatedError error
-	for _, result := range results {
-		if !result.Success && aggregatedError == nil {
-			aggregatedError = fmt.Errorf("some tools failed to remove")
-		}
-	}
-
-	return results, aggregatedError
-}
-
-// removeSingleTool removes a single tool with proper error handling
-func (pi *ParallelInstaller) removeSingleTool(ctx context.Context, tool string) InstallResult {
-	start := time.Now()
-	result := InstallResult{
-		Tool:    tool,
-		Success: false,
-	}
-
-	// Create timeout context
-	removeCtx, cancel := context.WithTimeout(ctx, pi.timeout)
-	defer cancel()
-
-	pi.logger.Info("Removing tool", "tool", tool)
-
-	err := sdk.ExecCommandWithContext(removeCtx, false, "mise", "uninstall", tool)
-
-	result.Duration = time.Since(start)
-
-	if err != nil {
-		result.Error = fmt.Errorf("failed to remove tool '%s': %w", tool, err)
-		pi.logger.Warning("Failed to remove tool '%s': %v", tool, err)
-	} else {
-		result.Success = true
-		pi.logger.Success("Removed tool: %s (took %v)", tool, result.Duration)
+		pi.logger.Success("Downloaded tool: %s (took %v)", tool, result.Duration)
 	}
 
 	return result
@@ -270,7 +196,7 @@ func (bo *BatchOperation) GetProgress() (completed, failed, total int, inProgres
 }
 
 // InstallToolsWithProgress installs tools with progress tracking
-func (pi *ParallelInstaller) InstallToolsWithProgress(ctx context.Context, tools []string, globalFlag string, progressCallback func(completed, failed, total int)) ([]InstallResult, error) {
+func (pi *ParallelInstaller) InstallToolsWithProgress(ctx context.Context, tools []string, progressCallback func(completed, failed, total int)) ([]InstallResult, error) {
 	if len(tools) == 0 {
 		return nil, fmt.Errorf("no tools specified")
 	}
@@ -318,7 +244,7 @@ func (pi *ParallelInstaller) InstallToolsWithProgress(ctx context.Context, tools
 			defer func() { <-semaphore }()
 
 			batch.AddInProgress(toolName)
-			result := pi.installSingleTool(ctx, toolName, globalFlag)
+			result := pi.installSingleTool(ctx, toolName)
 			batch.UpdateProgress(toolName, result.Success)
 
 			resultChan <- result

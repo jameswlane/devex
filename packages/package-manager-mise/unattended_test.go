@@ -20,10 +20,36 @@ var _ = Describe("Unattended mise execution", func() {
 		Expect(plugin.HandleRemove(context.Background(), []string{"node@22"})).To(Succeed())
 		Expect(plugin.HandleUpdate(context.Background(), nil)).To(Succeed())
 		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
-			{Args: []string{"install", "--global", "node@22"}},
-			{Args: []string{"uninstall", "node@22"}},
+			{Args: []string{"use", "--global", "node@22"}},
+			{Args: []string{"unuse", "node@22"}},
 			{Args: []string{"plugins", "update"}},
 			{Args: []string{"upgrade"}},
 		}))
+	})
+
+	It("downloads several tools, then activates them in one mise use", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		GinkgoT().Setenv("MISE_LOCAL", "0")
+		plugin := main.NewMisePlugin()
+		Expect(plugin.HandleInstall(context.Background(), []string{"kubectl@1.31", "helm@3"})).To(Succeed())
+		calls := recorder.Calls("mise")
+		Expect(calls).To(HaveLen(3))
+		Expect(calls[:2]).To(ConsistOf(
+			sdktest.Call{Args: []string{"install", "kubectl@1.31"}},
+			sdktest.Call{Args: []string{"install", "helm@3"}},
+		))
+		Expect(calls[2]).To(Equal(sdktest.Call{Args: []string{"use", "--global", "kubectl@1.31", "helm@3"}}))
+	})
+
+	It("writes the local mise config when MISE_LOCAL is set", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		GinkgoT().Setenv("MISE_LOCAL", "1")
+		plugin := main.NewMisePlugin()
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@22"})).To(Succeed())
+		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{{Args: []string{"use", "node@22"}}}))
 	})
 })

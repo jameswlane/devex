@@ -26,6 +26,7 @@ import (
 // InitConfig represents the configuration created by init command
 type InitConfig struct {
 	Profile      string             `yaml:"profile"`
+	Template     string             `yaml:"template,omitempty"`
 	Platform     PlatformConfig     `yaml:"platform"`
 	Applications ApplicationsConfig `yaml:"applications"`
 	Environment  EnvironmentConfig  `yaml:"environment"`
@@ -77,8 +78,15 @@ type ProfileTemplate struct {
 	Categories  []string
 	Languages   []string
 	Tools       []string
+	// Template is the lifecycle template that installs this profile. It is set
+	// for profiles built from template metadata (see availableProfiles).
+	Template string
 }
 
+// profileTemplates are the profiles that have no lifecycle template. DevOps,
+// data science, mobile and game development profiles come from the lifecycle
+// templates marked init_profile (see availableProfiles), so their tool lists
+// live in one place.
 var profileTemplates = []ProfileTemplate{
 	{
 		Name:        "full-stack",
@@ -100,20 +108,6 @@ var profileTemplates = []ProfileTemplate{
 		Categories:  []string{"development", "browser"},
 		Languages:   []string{"node", "typescript"},
 		Tools:       []string{"git", "vscode", "chrome", "firefox-developer"},
-	},
-	{
-		Name:        "devops",
-		Description: "DevOps and infrastructure with containers and automation",
-		Categories:  []string{"development", "container", "infrastructure"},
-		Languages:   []string{"go", "python", "bash"},
-		Tools:       []string{"docker", "kubernetes", "terraform", "ansible", "git"},
-	},
-	{
-		Name:        "data-science",
-		Description: "Data science with Python, R, and Jupyter",
-		Categories:  []string{"development", "database", "science"},
-		Languages:   []string{"python", "r", "julia"},
-		Tools:       []string{"jupyter", "git", "postgresql", "mongodb"},
 	},
 	{
 		Name:        "minimal",
@@ -197,7 +191,7 @@ Examples:
 	}
 
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", true, "Run in interactive mode")
-	cmd.Flags().StringVarP(&profile, "profile", "p", "", "Use a predefined profile (full-stack, backend, frontend, devops, data-science, minimal)")
+	cmd.Flags().StringVarP(&profile, "profile", "p", "", "Use a predefined profile (full-stack, backend, frontend, minimal, or a lifecycle template profile: data-science, devops, game-development, mobile)")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing configuration")
 	cmd.Flags().BoolVar(&validate, "validate", false, "Validate existing configuration")
 	cmd.Flags().BoolVar(&export, "export", false, "Export current configuration")
@@ -255,20 +249,22 @@ func runInteractiveInit(settings config.CrossPlatformSettings, repo types.Reposi
 	// Profile selection
 	fmt.Println(cyan("\n👤 Profile Selection"))
 	fmt.Println("Choose a profile that best matches your needs:")
-	for i, prof := range profileTemplates {
+	profiles := availableProfiles(settings.HomeDir)
+	for i, prof := range profiles {
 		fmt.Printf("  %d. %s - %s\n", i+1, yellow(prof.Name), prof.Description)
 	}
-	fmt.Print("\nSelect profile (1-7): ")
+	fmt.Printf("\nSelect profile (1-%d): ", len(profiles))
 
 	var profileChoice int
 	_, _ = fmt.Scanln(&profileChoice)
 
-	if profileChoice < 1 || profileChoice > len(profileTemplates) {
-		profileChoice = len(profileTemplates) // Default to custom
+	if profileChoice < 1 || profileChoice > len(profiles) {
+		profileChoice = len(profiles) // Default to custom
 	}
 
-	selectedProfile := profileTemplates[profileChoice-1]
+	selectedProfile := profiles[profileChoice-1]
 	config.Profile = selectedProfile.Name
+	config.Template = selectedProfile.Template
 
 	// If not custom, apply profile defaults
 	if selectedProfile.Name != "custom" {
@@ -390,22 +386,16 @@ func runInteractiveInit(settings config.CrossPlatformSettings, repo types.Reposi
 	fmt.Println("  1. Review your configuration files")
 	fmt.Println("  2. Run 'devex install' to install selected applications")
 	fmt.Println("  3. Run 'devex system' to apply system settings")
+	printTemplateNextSteps(os.Stdout, selectedProfile)
 
 	return nil
 }
 
 func initWithProfile(profileName string, settings config.CrossPlatformSettings, repo types.Repository, force bool) error {
-	// Find the profile
-	var selectedProfile *ProfileTemplate
-	for _, prof := range profileTemplates {
-		if prof.Name == profileName {
-			selectedProfile = &prof
-			break
-		}
-	}
-
-	if selectedProfile == nil {
-		return fmt.Errorf("unknown profile: %s", profileName)
+	profiles := availableProfiles(settings.HomeDir)
+	selectedProfile, found := findProfile(profiles, profileName)
+	if !found {
+		return fmt.Errorf("unknown profile %q; available profiles: %s", profileName, strings.Join(profileNames(profiles), ", "))
 	}
 
 	// Check for existing configuration
@@ -417,7 +407,8 @@ func initWithProfile(profileName string, settings config.CrossPlatformSettings, 
 	// Create configuration from profile
 	p := platform.DetectPlatform()
 	config := InitConfig{
-		Profile: selectedProfile.Name,
+		Profile:  selectedProfile.Name,
+		Template: selectedProfile.Template,
 		Platform: PlatformConfig{
 			OS:           p.OS,
 			Distribution: p.Distribution,
@@ -456,6 +447,7 @@ func initWithProfile(profileName string, settings config.CrossPlatformSettings, 
 	green := color.New(color.FgGreen).SprintFunc()
 	fmt.Printf("%s Configuration created with '%s' profile!\n", green("✅"), profileName)
 	fmt.Printf("Configuration saved to: %s\n", settings.GetConfigDir())
+	printTemplateNextSteps(os.Stdout, selectedProfile)
 
 	return nil
 }

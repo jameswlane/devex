@@ -21,6 +21,9 @@ type InputResolverOptions struct {
 	EnvPrefix      string
 	NonInteractive bool
 	Prompt         InputPromptFunc
+	// NotRequired lists required inputs that this resolution does not
+	// enforce: they are neither prompted for nor treated as missing.
+	NotRequired map[string]bool
 }
 
 type InputPromptFunc func(ctx context.Context, key string, input TemplateInput) (any, error)
@@ -73,7 +76,7 @@ func ResolveInputs(ctx context.Context, spec TemplateSpec, opts InputResolverOpt
 	for key, input := range spec.Inputs {
 		value, ok := values[key]
 		if !ok || isEmptyInputValue(value) {
-			if input.Required {
+			if input.Required && !opts.NotRequired[key] {
 				if opts.NonInteractive {
 					return nil, fmt.Errorf("required input '%s' is missing in non-interactive mode", key)
 				}
