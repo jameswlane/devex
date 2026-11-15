@@ -13,7 +13,8 @@
 		"test:all": "vitest run",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
-		"test:ci": "vitest run --coverage"
+		"test:ci": "vitest run --coverage",
+		"generate": "node scripts/generate-tools.mjs"
 	},
 	"dependencies": {
 		"glob": "^14.0.4",

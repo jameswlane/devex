@@ -134,3 +134,6 @@ dist
 .idea/
 .vscode/
 .vercel
+
+# Catalog generated from CLI YAML via pnpm generate
+app/generated/
