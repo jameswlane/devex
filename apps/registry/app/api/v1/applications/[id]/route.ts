@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { platformDocuments } from "@/lib/application-platforms";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import {
 	invalidateOnDataChange,
@@ -36,15 +37,9 @@ async function handleGetApplication(
 		return createApiError("Application not found", 404);
 	}
 
-	// Transform the JSON platforms field to the expected format
-	const platforms = application.platforms as any;
 	const response = {
 		...application,
-		platforms: {
-			linux: platforms?.linux || null,
-			macos: platforms?.macos || null,
-			windows: platforms?.windows || null,
-		},
+		platforms: platformDocuments(application.platforms),
 	};
 
 	return NextResponse.json(response);
