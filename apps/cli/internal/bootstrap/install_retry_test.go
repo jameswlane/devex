@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var _ = Describe("APT retry execution boundary", func() {
+var _ = Describe("APT and DNF retry execution boundary", func() {
 	BeforeEach(func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
@@ -65,4 +65,30 @@ exit 100
 		Expect(string(data)).To(Equal("attempt\n"))
 		Expect(stderr.String()).NotTo(ContainSubstring("retrying"))
 	}, Entry("removal", []string{"remove", "git"}), Entry("update", []string{"update"}), Entry("destructive suffix", []string{"install", "git-"}))
+	It("retries a dnf5 transient download failure once and labels the notice", func() {
+		dir := GinkgoT().TempDir()
+		count := filepath.Join(dir, "attempts")
+		script := fmt.Sprintf(`#!/bin/sh
+if [ "${1-}" = --plugin-info ]; then
+ echo '{"name":"package-manager-dnf","version":"1.0.0"}'
+ exit 0
+fi
+echo attempt >> %q
+if [ "$(wc -l < %q)" -eq 1 ]; then
+ echo '>>> Status code: 503 for http://repo/git.rpm (IP: 127.0.0.1)' >&2
+ echo 'Failed to download packages' >&2
+ echo 'Error: exit status 1' >&2
+ exit 1
+fi
+`, count, count)
+		Expect(os.WriteFile(filepath.Join(dir, "devex-plugin-package-manager-dnf"), []byte(script), 0700)).To(Succeed())
+		bootstrap := &PluginBootstrap{manager: sdk.NewExecutableManager(dir)}
+		var stderr bytes.Buffer
+		Expect(bootstrap.ExecutePluginWithIO(context.Background(), "package-manager-dnf", []string{"install", "git"}, sdk.OperationIO{Stderr: &stderr})).To(Succeed())
+		data, err := os.ReadFile(count)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(data)).To(Equal("attempt\nattempt\n"))
+		Expect(stderr.String()).To(ContainSubstring("Status code: 503"))
+		Expect(stderr.String()).To(ContainSubstring("DNF install attempt 1/3 failed"))
+	})
 })
