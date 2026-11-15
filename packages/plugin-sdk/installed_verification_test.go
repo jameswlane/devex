@@ -29,7 +29,11 @@ var _ = Describe("Installed plugin verification", func() {
 		Expect(downloads).To(Equal(1))
 		Expect(downloader.downloadAndVerifyPlugin(context.Background(), "demo", "1.0.0", binary)).To(Succeed())
 		Expect(downloads).To(Equal(1))
+		Expect(downloader.IsPluginUpToDate("demo", binary.Checksum)).To(BeTrue())
+		Expect(downloader.IsPluginUpToDate("demo", strings.Repeat("0", 64))).To(BeFalse())
+		Expect(downloader.IsPluginUpToDate("../demo", binary.Checksum)).To(BeFalse())
 		downloader.verifySignatures = true
+		Expect(downloader.IsPluginUpToDate("demo", binary.Checksum)).To(BeFalse())
 		Expect(downloader.downloadAndVerifyPlugin(context.Background(), "demo", "1.0.0", binary)).To(HaveOccurred())
 		Expect(downloads).To(Equal(2))
 	})

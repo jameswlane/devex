@@ -799,12 +799,20 @@ func (b *PluginBootstrap) handleUpdatePlugins(cmd *cobra.Command, args []string)
 		if err := cmd.Context().Err(); err != nil {
 			return err
 		}
-		if dryRun {
-			version, checksum, err := b.previewPluginDownload(cmd, name)
-			if err != nil {
-				failures = append(failures, fmt.Errorf("preview update plugin %s: %w", name, err))
-				continue
+		version, checksum, err := b.previewPluginDownload(cmd, name)
+		if err != nil {
+			action := "update"
+			if dryRun {
+				action = "preview update"
 			}
+			failures = append(failures, fmt.Errorf("%s plugin %s: %w", action, name, err))
+			continue
+		}
+		if b.downloader.IsPluginUpToDate(name, checksum) {
+			cmd.Printf("%s is up to date (%s)\n", name, plugins[name].Version)
+			continue
+		}
+		if dryRun {
 			cmd.Printf("Would update %s from %s to %s\nChecksum: %s\nPath: %s\n", name, plugins[name].Version, version, checksum, plugins[name].Path)
 			continue
 		}
