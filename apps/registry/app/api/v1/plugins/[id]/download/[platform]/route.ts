@@ -33,7 +33,9 @@ export async function GET(
 		const requestedVersion = new URL(request.url).searchParams.get("version");
 		// A pinned release is checked against its own binaries below, since the
 		// current platform list may have dropped an OS that release supported.
-		const [os] = platform.split("-");
+		// Platform keys use Go's GOOS ("darwin"); platforms are stored as "macos"
+		const [goos] = platform.split("-");
+		const os = goos === "darwin" ? "macos" : goos;
 		if (requestedVersion === null && !plugin.platforms.includes(os)) {
 			return createApiError(
 				`Plugin ${plugin.name} does not support platform ${platform}`,

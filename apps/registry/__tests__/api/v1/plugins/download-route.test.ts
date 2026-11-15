@@ -248,4 +248,46 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 		expect(mockPrisma.pluginVersion.findUnique).not.toHaveBeenCalled();
 		expect(mockPrisma.plugin.update).not.toHaveBeenCalled();
 	});
+
+	describe("on macOS", () => {
+		const darwinUrl = "https://example.com/darwin-arm64.tar.gz";
+		const pinnedDarwinUrl = "https://example.com/pinned-darwin-arm64.tar.gz";
+		const darwinParams = {
+			params: Promise.resolve({ id: plugin.name, platform: "darwin-arm64" }),
+		};
+		const darwinBinary = (url: string) => ({
+			url,
+			checksum: "c".repeat(64),
+			size: 100,
+			format: "tar.gz",
+		});
+
+		beforeEach(() => {
+			// Platforms are stored as "macos"; the route key says "darwin"
+			mockPrisma.plugin.findUnique.mockResolvedValue({
+				...plugin,
+				platforms: ["macos", "linux"],
+				binaries: { "darwin-arm64": darwinBinary(darwinUrl) },
+			});
+			mockPrisma.pluginVersion.findUnique.mockResolvedValue({
+				...pinnedVersion,
+				binaries: { "darwin-arm64": darwinBinary(pinnedDarwinUrl) },
+			});
+		});
+
+		it("downloads the latest darwin binary without a pinned version", async () => {
+			const response = await GET(request(), darwinParams);
+
+			expect(response.status).toBe(302);
+			expect(response.headers.get("location")).toBe(darwinUrl);
+			expect(mockPrisma.plugin.update).toHaveBeenCalledTimes(1);
+		});
+
+		it("downloads a pinned darwin binary", async () => {
+			const response = await GET(request("1.9.0"), darwinParams);
+
+			expect(response.status).toBe(302);
+			expect(response.headers.get("location")).toBe(pinnedDarwinUrl);
+		});
+	});
 });
