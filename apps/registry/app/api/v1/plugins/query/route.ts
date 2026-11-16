@@ -96,10 +96,12 @@ export async function GET(request: Request) {
 			where.AND = andArray;
 			where.AND.push({
 				OR: [
-					// Desktop-specific plugins
-					{ type: { contains: `desktop-${desktop}`, mode: "insensitive" } },
-					// Plugins that support any desktop
-					{ type: { contains: "desktop-all", mode: "insensitive" } },
+					// Desktop plugins have type "desktop"; the environment is in
+					// the name (desktop-gnome).
+					{
+						type: "desktop",
+						name: { equals: `desktop-${desktop}`, mode: "insensitive" },
+					},
 					// Check supports JSON for desktop support
 					{
 						supports: {
