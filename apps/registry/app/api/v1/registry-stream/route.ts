@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
+import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import {
@@ -173,7 +174,7 @@ async function fetchPluginsForStreaming(
 
 	return prisma.plugin.findMany({
 		where,
-		orderBy: [{ priority: "asc" }, { name: "asc" }],
+		orderBy: PLUGIN_LIST_ORDER,
 		take: limit,
 		skip: offset,
 	});

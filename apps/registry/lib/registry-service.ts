@@ -2,6 +2,7 @@ import type { Prisma } from "../generated/prisma/client";
 import { dbCircuitBreaker } from "./db-health";
 import { getDailyDownloads } from "./download-stats";
 import { logger } from "./logger";
+import { PLUGIN_LIST_ORDER } from "./plugin-order";
 import { prisma } from "./prisma";
 import { computeRegistryStats } from "./registry-stats";
 import { transformationService } from "./transformation-service";
@@ -74,7 +75,7 @@ export class RegistryService {
 										where: { status: "active" },
 										skip,
 										take: limit,
-										orderBy: [{ priority: "desc" }, { name: "asc" }],
+										orderBy: PLUGIN_LIST_ORDER,
 										select: {
 											name: true,
 											description: true,
@@ -229,7 +230,7 @@ export class RegistryService {
 									status: "active",
 								},
 								take: limit,
-								orderBy: [{ priority: "desc" }, { downloadCount: "desc" }],
+								orderBy: [{ priority: "asc" }, { downloadCount: "desc" }],
 								select: {
 									name: true,
 									description: true,

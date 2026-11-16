@@ -153,7 +153,7 @@ export async function GET(request: Request) {
 		const plugins = await prisma.plugin.findMany({
 			where,
 			orderBy: [
-				{ priority: "asc" }, // Higher priority plugins first
+				{ priority: "asc" }, // Lower number = preferred plugin, first
 				{ downloadCount: "desc" }, // Popular plugins next
 				{ name: "asc" }, // Alphabetical as fallback
 			],

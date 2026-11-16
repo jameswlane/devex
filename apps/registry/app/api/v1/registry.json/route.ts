@@ -11,6 +11,7 @@ import {
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { CACHE_DURATION, pluginCache } from "@/lib/plugin-cache";
+import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import { transformationService } from "@/lib/transformation-service";
@@ -76,7 +77,7 @@ async function fetchPluginsInBatches(
 				where: {
 					status: "active",
 				},
-				orderBy: [{ priority: "asc" }, { name: "asc" }],
+				orderBy: PLUGIN_LIST_ORDER,
 				take: batchSize,
 				skip: currentOffset,
 			});
