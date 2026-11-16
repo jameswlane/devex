@@ -37,21 +37,23 @@ vi.mock("@/lib/prisma", () => ({
 		$transaction: vi.fn(),
 	},
 	ensurePrisma: vi.fn(),
+	executeWithRetry: vi.fn((operation: () => Promise<unknown>) => operation()),
 }));
 
-vi.mock("@/lib/transformation-service", () => ({
-	transformationService: {
-		transformApplications: vi.fn(),
-		transformPlugins: vi.fn(),
-		transformRegistryResponse: vi.fn(),
-	},
-}));
-
-vi.mock("@/lib/registry-service", () => ({
-	registryService: {
-		getPaginatedRegistry: vi.fn(),
-	},
-}));
+// The registry and transformation services run for real, so cross-endpoint
+// checks exercise their cache keys and field mapping (#498). Force the
+// in-memory cache store so the real cache path runs without Redis.
+vi.hoisted(() => {
+	for (const key of [
+		"KV_REST_API_URL",
+		"KV_REST_API_TOKEN",
+		"UPSTASH_REDIS_REST_URL",
+		"UPSTASH_REDIS_REST_TOKEN",
+		"REDIS_URL",
+	]) {
+		delete process.env[key];
+	}
+});
 
 vi.mock("@/lib/logger", () => ({
 	logger: {
@@ -260,18 +262,18 @@ const mockData = {
 		supportsLinux: true,
 		supportsMacOS: false,
 		supportsWindows: false,
-		linuxSupport: {
-			installMethod: "deb",
-			installCommand:
-				"wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg",
-			officialSupport: true,
+		// Stored as the YAML catalog writes it (scripts/sync-database.ts)
+		platforms: {
+			linux: {
+				install_method: "apt",
+				install_command: "code",
+				official_support: true,
+			},
 		},
-		macosSupport: null,
-		windowsSupport: null,
 	},
 	plugin: {
 		id: "plugin-1",
-		name: "apt",
+		name: "package-manager-apt",
 		description: "APT package manager plugin",
 		type: "package-manager",
 		priority: 10,
@@ -309,14 +311,31 @@ const mockData = {
 const { prisma: mockPrisma, ensurePrisma } = (await import(
 	"@/lib/prisma"
 )) as any;
-const { transformationService } = (await import(
-	"@/lib/transformation-service"
-)) as any;
-const { registryService } = (await import("@/lib/registry-service")) as any;
+
+// A transaction client for the real registry service. Each delegate
+// returns `rows[delegate]`, so a test can change what the "database" holds.
+let rows: Record<string, unknown[]> = {};
+const delegate = (name: string) => ({
+	findMany: vi.fn(async () => rows[name] ?? []),
+	count: vi.fn(async () => (rows[name] ?? []).length),
+	aggregate: vi.fn(async () => ({ _sum: { downloadCount: 0 } })),
+});
+const registryTx = () => ({
+	plugin: delegate("plugin"),
+	application: delegate("application"),
+	config: delegate("config"),
+	stack: delegate("stack"),
+});
 
 describe("API Integration Flow", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		rows = {
+			plugin: [mockData.plugin],
+			application: [mockData.application],
+			config: [mockData.config],
+			stack: [mockData.stack],
+		};
 
 		// Setup stats endpoint mock (uses ensurePrisma)
 		const statsClient = {
@@ -379,103 +398,15 @@ describe("API Integration Flow", () => {
 		ensurePrisma.mockReturnValue(statsClient);
 
 		// Registry endpoint mocks (uses prisma directly)
-		mockPrisma.$transaction.mockImplementation(async (callback: any) => {
-			const tx = {
-				plugin: {
-					findMany: vi
-						.fn<() => Promise<(typeof mockData.plugin)[]>>()
-						.mockResolvedValue([mockData.plugin]),
-					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
-				},
-				application: {
-					findMany: vi
-						.fn<() => Promise<(typeof mockData.application)[]>>()
-						.mockResolvedValue([mockData.application]),
-					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
-				},
-				config: {
-					findMany: vi
-						.fn<() => Promise<(typeof mockData.config)[]>>()
-						.mockResolvedValue([mockData.config]),
-					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
-				},
-				stack: {
-					findMany: vi
-						.fn<() => Promise<(typeof mockData.stack)[]>>()
-						.mockResolvedValue([mockData.stack]),
-					count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
-				},
-			};
-			return await callback(tx);
-		});
+		mockPrisma.$transaction.mockImplementation(async (callback: any) =>
+			callback(registryTx()),
+		);
 
 		// Individual endpoint mocks
 		mockPrisma.application.findMany.mockResolvedValue([mockData.application]);
 		mockPrisma.application.count.mockResolvedValue(1);
 		mockPrisma.plugin.findMany.mockResolvedValue([mockData.plugin]);
 		mockPrisma.plugin.count.mockResolvedValue(1);
-
-		// Transformation service mocks
-		transformationService.transformApplications.mockResolvedValue([
-			{
-				name: mockData.application.name,
-				description: mockData.application.description,
-				category: mockData.application.category,
-				platforms: {
-					linux: { supported: true, installMethod: "deb" },
-					macos: { supported: false },
-					windows: { supported: false },
-				},
-			},
-		]);
-
-		transformationService.transformPlugins.mockResolvedValue([
-			{
-				name: mockData.plugin.name,
-				description: mockData.plugin.description,
-				type: mockData.plugin.type,
-				priority: mockData.plugin.priority,
-				downloadCount: mockData.plugin.downloadCount,
-			},
-		]);
-
-		// Registry service mocks
-		registryService.getPaginatedRegistry.mockResolvedValue({
-			data: {
-				plugins: [mockData.plugin],
-				applications: [mockData.application],
-				configs: [mockData.config],
-				stacks: [mockData.stack],
-			},
-			totalCounts: {
-				plugins: 1,
-				applications: 1,
-				configs: 1,
-				stacks: 1,
-			},
-		});
-
-		transformationService.transformRegistryResponse.mockResolvedValue({
-			data: {
-				plugins: [mockData.plugin],
-				applications: [mockData.application],
-				configs: [mockData.config],
-				stacks: [mockData.stack],
-			},
-			pagination: {
-				page: 1,
-				limit: 50,
-				total: 4,
-				totalPages: 1,
-				hasNext: false,
-				hasPrevious: false,
-			},
-			meta: {
-				source: "database",
-				version: "2.1.0",
-				timestamp: new Date().toISOString(),
-			},
-		});
 	});
 
 	describe("Complete API Flow", () => {
@@ -516,7 +447,69 @@ describe("API Integration Flow", () => {
 
 			expect(pluginsResponse.status).toBe(200);
 			expect(pluginsData.items).toHaveLength(1);
-			expect(pluginsData.items[0].name).toBe("apt");
+			expect(pluginsData.items[0].name).toBe("package-manager-apt");
+		});
+
+		it("serves each application's install method and command from every endpoint (#479)", async () => {
+			const appsData = await (
+				await applicationsGet(createMockRequest("/api/v1/applications"))
+			).json();
+			const registryData = await (
+				await registryGet(createMockRequest("/api/v1/registry"))
+			).json();
+
+			const expected = expect.objectContaining({
+				install_method: "apt",
+				install_command: "code",
+			});
+			expect(appsData.items[0].platforms.linux).toEqual(expected);
+			expect(registryData.data.applications[0].platforms.linux).toEqual(
+				expected,
+			);
+		});
+
+		it("does not serve one page's cached transformation for another (#480)", async () => {
+			const otherPlugin = {
+				...mockData.plugin,
+				id: "plugin-2",
+				name: "dnf",
+				githubPath: "packages/package-manager-dnf",
+			};
+			const otherApp = {
+				...mockData.application,
+				id: "app-2",
+				name: "zed",
+				githubPath: "metadata/applications/zed.yaml",
+			};
+
+			const first = await Promise.all([
+				pluginsGet(createMockRequest("/api/v1/plugins", { page: "1" })),
+				applicationsGet(
+					createMockRequest("/api/v1/applications", { page: "1" }),
+				),
+				registryGet(createMockRequest("/api/v1/registry", { page: "1" })),
+			]).then((responses) => Promise.all(responses.map((r) => r.json())));
+
+			// Page 2 holds the same number of different items.
+			mockPrisma.plugin.findMany.mockResolvedValue([otherPlugin]);
+			mockPrisma.application.findMany.mockResolvedValue([otherApp]);
+			rows = { ...rows, plugin: [otherPlugin], application: [otherApp] };
+
+			const second = await Promise.all([
+				pluginsGet(createMockRequest("/api/v1/plugins", { page: "2" })),
+				applicationsGet(
+					createMockRequest("/api/v1/applications", { page: "2" }),
+				),
+				registryGet(createMockRequest("/api/v1/registry", { page: "2" })),
+			]).then((responses) => Promise.all(responses.map((r) => r.json())));
+
+			expect(first[0].items[0].name).toBe("package-manager-apt");
+			expect(first[1].items[0].name).toBe("vscode");
+			expect(first[2].data.plugins[0].name).toBe("package-manager-apt");
+			expect(second[0].items[0].name).toBe("package-manager-dnf");
+			expect(second[1].items[0].name).toBe("zed");
+			expect(second[2].data.plugins[0].name).toBe("package-manager-dnf");
+			expect(second[2].data.applications[0].name).toBe("zed");
 		});
 
 		it("should handle filtering and pagination consistently", async () => {
