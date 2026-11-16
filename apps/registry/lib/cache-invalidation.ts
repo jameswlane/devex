@@ -1,7 +1,6 @@
 import { CacheTags, revalidateCacheTags } from "./cache-revalidation";
 import { invalidateCdnTags, pluginCacheTags } from "./cdn-cache";
 import { logger } from "./logger";
-import { pluginCache } from "./plugin-cache";
 import { prisma } from "./prisma";
 import { redis } from "./redis";
 import { transformationService } from "./transformation-service";
@@ -282,7 +281,6 @@ export class CacheInvalidationService {
 		const origin = await Promise.allSettled([
 			this.invalidateRedisPatterns(patterns),
 			this.invalidateTransformationCache(options.resource),
-			this.invalidateProcessCaches(options.resource),
 			this.invalidateNextDataCache(options),
 			options.invalidateDatabase
 				? this.invalidateDatabaseCache(options)
@@ -345,9 +343,12 @@ export class CacheInvalidationService {
 	private getResourcePatterns(resource: string, id?: string): string[] {
 		const patterns: string[] = [];
 
-		// Base patterns for the resource
+		// Base patterns for the resource; "all" covers every cache namespace.
 		const basePatterns = CACHE_DEPENDENCIES[resource] || [];
 		patterns.push(...basePatterns);
+		if (resource === "all") {
+			patterns.push(...CACHE_NAMESPACES.map((ns) => `${ns}*`));
+		}
 
 		// Add specific ID patterns if provided
 		if (id) {
@@ -422,19 +423,10 @@ export class CacheInvalidationService {
 	}
 
 	/**
-	 * Clear caches held in this process's memory (registry.json plugin batches).
-	 */
-	private async invalidateProcessCaches(
-		resource?: InvalidationOptions["resource"],
-	): Promise<void> {
-		if (resource === "plugin" || resource === "all") {
-			pluginCache.clear();
-		}
-	}
-
-	/**
 	 * Revalidate Next.js data-cache tags. revalidateTag only works inside the
 	 * Next runtime; standalone scripts ask the deployed registry to purge instead.
+	 * Next flushes these when the route finishes, after the CDN purge. That is
+	 * safe: only /api/v1/stats reads the data cache and it has no CDN tag.
 	 */
 	private async invalidateNextDataCache(
 		options: InvalidationOptions,
@@ -545,7 +537,6 @@ export class CacheInvalidationService {
 			tags: [CACHE_TAGS.ALL],
 			invalidateCDN: true,
 			invalidateDatabase: true,
-			patterns: CACHE_NAMESPACES.map((ns) => `${ns}*`),
 			waitForCompletion: true,
 		});
 

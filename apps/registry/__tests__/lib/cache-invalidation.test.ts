@@ -32,9 +32,10 @@ vi.mock("../../lib/cdn-cache", async (importOriginal) => ({
 async function load() {
 	const invalidation = await import("../../lib/cache-invalidation");
 	const { redis } = await import("../../lib/redis");
-	const { pluginCache } = await import("../../lib/plugin-cache");
-	return { ...invalidation, redis, pluginCache };
+	return { ...invalidation, redis };
 }
+
+type CacheService = Awaited<ReturnType<typeof load>>["cacheInvalidation"];
 
 describe("cache invalidation (#493)", () => {
 	beforeEach(() => {
@@ -55,42 +56,56 @@ describe("cache invalidation (#493)", () => {
 		vi.resetModules();
 	});
 
-	it("clear all removes every cache key but keeps operational keys", async () => {
-		const { cacheInvalidation, redis } = await load();
-		const cacheKeys = [
-			"transform:plugins:3f9a1c",
-			"transform:applications:v2:77be01",
-			"transform:tracking:plugins",
-			"registry:paginated:page:7:limit:20",
-			"query:registry:abc",
-		];
-		const keptKeys = [
-			"rate:sliding:1.2.3.4",
-			"audit:count:admin_action:daily",
-			"downloads:daily:2026-11-15",
-		];
-		for (const key of [...cacheKeys, ...keptKeys]) {
-			await redis.set(key, "x");
-		}
+	it.each([
+		["clearAllCaches", (svc: CacheService) => svc.clearAllCaches()],
+		[
+			'invalidate({ resource: "all" })',
+			(svc: CacheService) =>
+				svc.invalidate({
+					resource: "all",
+					invalidateDatabase: true,
+					waitForCompletion: true,
+				}),
+		],
+	])(
+		"%s removes every cache key but keeps operational keys",
+		async (_name, run) => {
+			const { cacheInvalidation, redis } = await load();
+			const cacheKeys = [
+				"transform:plugins:3f9a1c",
+				"transform:applications:v2:77be01",
+				"transform:tracking:plugins",
+				"registry:paginated:page:7:limit:20",
+				"query:registry:abc",
+				"query:plugins:list",
+				"transform:stats:global",
+			];
+			const keptKeys = [
+				"rate:sliding:1.2.3.4",
+				"audit:count:admin_action:daily",
+				"downloads:daily:2026-11-15",
+			];
+			for (const key of [...cacheKeys, ...keptKeys]) {
+				await redis.set(key, "x");
+			}
 
-		await cacheInvalidation.clearAllCaches();
+			await run(cacheInvalidation);
 
-		for (const key of cacheKeys) {
-			expect(await redis.exists(key), key).toBe(false);
-		}
-		for (const key of keptKeys) {
-			expect(await redis.exists(key), key).toBe(true);
-		}
-		expect(mocks.accelerateInvalidateAll).toHaveBeenCalledTimes(1);
-	});
+			for (const key of cacheKeys) {
+				expect(await redis.exists(key), key).toBe(false);
+			}
+			for (const key of keptKeys) {
+				expect(await redis.exists(key), key).toBe(true);
+			}
+			expect(mocks.accelerateInvalidateAll).toHaveBeenCalledTimes(1);
+		},
+	);
 
-	it("a plugin write clears Accelerate, Next tags and the origin plugin cache before the CDN", async () => {
-		const { invalidateOnDataChange, pluginCache } = await load();
-		pluginCache.set("plugins_500_0", { data: [], expiry: Date.now() + 60000 });
+	it("a plugin write clears Accelerate and Next tags before the CDN", async () => {
+		const { invalidateOnDataChange } = await load();
 
 		await invalidateOnDataChange("delete", "plugin", "tool-git");
 
-		expect(pluginCache.size).toBe(0);
 		const tags = mocks.revalidateTag.mock.calls.map(([tag]) => tag);
 		expect(tags).toEqual(
 			expect.arrayContaining(["stats", "registry-stats", "plugins"]),

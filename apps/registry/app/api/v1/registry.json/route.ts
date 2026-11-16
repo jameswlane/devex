@@ -10,7 +10,6 @@ import {
 } from "@/lib/cdn-cache";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
-import { CACHE_DURATION, pluginCache } from "@/lib/plugin-cache";
 import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
@@ -51,60 +50,42 @@ interface RegistryResponse {
 // Batch size for plugin processing to optimize database queries
 const PLUGIN_BATCH_SIZE = 50;
 
-// Helper function to fetch plugins in batches for better performance
+// Fetch plugins in batches. No per-instance memory cache: a warm instance
+// would keep serving old rows after a write and refill the purged CDN (#493).
 async function fetchPluginsInBatches(
 	totalLimit: number,
 	offset: number,
 ): Promise<Plugin[]> {
-	const cacheKey = `plugins_${totalLimit}_${offset}`;
-	const cached = pluginCache.get(cacheKey);
-
-	// Check cache first
-	if (cached && Date.now() < cached.expiry) {
-		return cached.data;
-	}
-
 	const plugins: Plugin[] = [];
 	let processed = 0;
 	let currentOffset = offset;
 
-	try {
-		// Process plugins in smaller batches to reduce database load
-		while (processed < totalLimit) {
-			const batchSize = Math.min(PLUGIN_BATCH_SIZE, totalLimit - processed);
+	// Process plugins in smaller batches to reduce database load
+	while (processed < totalLimit) {
+		const batchSize = Math.min(PLUGIN_BATCH_SIZE, totalLimit - processed);
 
-			const batch = await prisma.plugin.findMany({
-				where: {
-					status: "active",
-				},
-				orderBy: PLUGIN_LIST_ORDER,
-				take: batchSize,
-				skip: currentOffset,
-			});
-
-			if (batch.length === 0) break;
-
-			plugins.push(...batch);
-			processed += batch.length;
-			currentOffset += batch.length;
-
-			// Add small delay between batches to prevent overwhelming the database
-			if (processed < totalLimit && batch.length === batchSize) {
-				await new Promise((resolve) => setTimeout(resolve, 10));
-			}
-		}
-
-		// Cache the result
-		pluginCache.set(cacheKey, {
-			data: plugins,
-			expiry: Date.now() + CACHE_DURATION,
+		const batch = await prisma.plugin.findMany({
+			where: {
+				status: "active",
+			},
+			orderBy: PLUGIN_LIST_ORDER,
+			take: batchSize,
+			skip: currentOffset,
 		});
 
-		return plugins;
-	} catch (error) {
-		// Re-throw database errors to ensure they bubble up properly
-		throw error;
+		if (batch.length === 0) break;
+
+		plugins.push(...batch);
+		processed += batch.length;
+		currentOffset += batch.length;
+
+		// Add small delay between batches to prevent overwhelming the database
+		if (processed < totalLimit && batch.length === batchSize) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
 	}
+
+	return plugins;
 }
 
 // Apply rate limiting to the GET handler

@@ -12,7 +12,6 @@ import {
 	type Mock,
 	vi,
 } from "vitest";
-import { pluginCache } from "@/lib/plugin-cache";
 import { GET } from "./route";
 
 // Mock Prisma
@@ -61,18 +60,9 @@ const { prisma } = (await import("@/lib/prisma")) as any;
 describe("/api/v1/registry.json", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		// Clear plugin cache between tests to prevent interference
-		if (pluginCache && typeof pluginCache.clear === "function") {
-			pluginCache.clear();
-		}
 	});
 
-	afterEach(() => {
-		// Also clear cache after each test to ensure clean state
-		if (pluginCache && typeof pluginCache.clear === "function") {
-			pluginCache.clear();
-		}
-	});
+	afterEach(() => {});
 
 	it("should return registry response with plugins", async () => {
 		const mockPlugins = [
@@ -195,9 +185,6 @@ describe("/api/v1/registry.json", () => {
 describe("extractPluginNameFromPath", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		if (pluginCache && typeof pluginCache.clear === "function") {
-			pluginCache.clear();
-		}
 	});
 
 	it("should handle null githubPath and fall back to plugin name", async () => {
@@ -269,9 +256,6 @@ describe("version handling", () => {
 	beforeEach(() => {
 		// Ensure clean mocks for each test in this describe block
 		vi.clearAllMocks();
-		if (pluginCache && typeof pluginCache.clear === "function") {
-			pluginCache.clear();
-		}
 	});
 
 	it("should use version from database field", async () => {
