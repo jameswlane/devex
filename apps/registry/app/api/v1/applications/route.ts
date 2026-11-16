@@ -238,7 +238,7 @@ async function handleCreateApplication(
 		{
 			type: ResponseType.REALTIME,
 			headers: {
-				Location: `/api/v1/applications/${application.id}`,
+				Location: `/api/v1/applications/${encodeURIComponent(application.name)}`,
 				"X-Created-Resource": "application",
 			},
 		},

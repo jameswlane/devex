@@ -172,36 +172,6 @@ function isValidPlatform(platform: string): boolean {
 	return validPlatforms.includes(platform);
 }
 
-// Helper function to extract version from GitHub path
-function extractVersionFromGithubPath(
-	githubPath: string | null,
-): string | null {
-	if (!githubPath) return null;
-
-	// Match @devex/plugin-name@1.6.0 pattern
-	const versionMatch = githubPath.match(/@devex\/[^@]+@(.+)$/);
-	return versionMatch ? versionMatch[1] : null;
-}
-
-// Helper function to build GitHub download URL
-function buildGithubDownloadUrl(
-	pluginName: string,
-	version: string,
-	platform: string,
-): string {
-	const [os, arch] = platform.split("-");
-	const fileExtension = os === "windows" ? "zip" : "tar.gz";
-
-	// Build the GitHub release tag
-	const releaseTag = `@devex/${pluginName}@${version}`;
-
-	// Build the asset filename
-	const assetName = `devex-plugin-${pluginName}_v${version}_${os}_${arch}.${fileExtension}`;
-
-	// Build the complete GitHub download URL
-	return `https://github.com/jameswlane/devex/releases/download/${releaseTag}/${assetName}`;
-}
-
 // Helper function to extract client information for logging
 function getClientInfo(request: NextRequest): string {
 	const userAgent = request.headers.get("user-agent") || "unknown";

@@ -94,3 +94,31 @@ describe("RegistryTransformationService cache keys", () => {
 		expect(stats.hits).toBe(1);
 	});
 });
+
+describe("RegistryTransformationService release_tag (#497)", () => {
+	beforeEach(() => {
+		delete process.env.KV_REST_API_URL;
+		delete process.env.KV_REST_API_TOKEN;
+		delete process.env.UPSTASH_REDIS_REST_URL;
+		delete process.env.UPSTASH_REDIS_REST_TOKEN;
+		delete process.env.REDIS_URL;
+		vi.resetModules();
+	});
+
+	it("uses the recorded tag, else the packages/<plugin>/v<version> format", async () => {
+		const { RegistryTransformationService } = await import(
+			"../../lib/transformation-service"
+		);
+		const service = new RegistryTransformationService();
+
+		const result = await service.transformPlugins([
+			plugin("tool-git", { releaseTag: "packages/tool-git/v1.0.0" }),
+			plugin("tool-shell", { version: "2.1.0", releaseTag: null }),
+		] as never);
+
+		expect(result.map((p) => p.release_tag)).toEqual([
+			"packages/tool-git/v1.0.0",
+			"packages/tool-shell/v2.1.0",
+		]);
+	});
+});

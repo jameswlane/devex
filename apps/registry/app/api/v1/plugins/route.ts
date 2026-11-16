@@ -5,6 +5,7 @@ import { REGISTRY_CONFIG } from "@/lib/config";
 import { listPluginTypes, matchFilterValue } from "@/lib/filter-values";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
+import { attachReleaseTags } from "@/lib/plugins/release-tags";
 import { prisma } from "@/lib/prisma";
 import {
 	createOptimizedResponse,
@@ -78,7 +79,7 @@ async function handleGetPlugins(request: Request) {
 		// Use optimized transformation service with caching
 		const transformStart = performance.now();
 		const pluginsFormatted = await transformationService.transformPlugins(
-			plugins.map((plugin) => ({
+			(await attachReleaseTags(plugins)).map((plugin) => ({
 				...plugin,
 				downloadCount: plugin.downloadCount || 0,
 				lastDownload: plugin.lastDownload,
@@ -155,7 +156,7 @@ async function handleCreatePlugin(request: Request) {
 		{
 			type: ResponseType.REALTIME,
 			headers: {
-				Location: `/api/v1/plugins/${plugin.id}`,
+				Location: `/api/v1/plugins/${encodeURIComponent(plugin.name)}`,
 				"X-Created-Resource": "plugin",
 			},
 		},
