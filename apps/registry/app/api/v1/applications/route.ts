@@ -163,6 +163,7 @@ async function handleGetApplications(
 			total,
 			page,
 			limit,
+			url: request.url,
 		},
 		{
 			// Additional metadata for applications endpoint

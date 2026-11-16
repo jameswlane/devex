@@ -94,6 +94,7 @@ async function handleGetPlugins(request: Request) {
 				total,
 				page,
 				limit,
+				url: request.url,
 			},
 			{
 				// Additional metadata for plugins endpoint
