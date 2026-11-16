@@ -229,6 +229,14 @@ export function parseMetadataYaml(
 					),
 				)
 			: undefined;
+	const linux = isRecord(parsed.platforms) ? parsed.platforms.linux : undefined;
+	const distributions = [
+		...new Set(
+			stringList(isRecord(linux) ? linux.distros : undefined).map((distro) =>
+				distro.toLowerCase(),
+			),
+		),
+	];
 	const sdkVersion =
 		parsed.sdk_version === undefined ? undefined : String(parsed.sdk_version);
 	const apiVersion =
@@ -255,6 +263,7 @@ export function parseMetadataYaml(
 			? { priority: parsed.priority }
 			: {}),
 		...(supports ? { supports } : {}),
+		...(distributions.length > 0 ? { distributions } : {}),
 		...(sdkVersion !== undefined ? { sdkVersion } : {}),
 		...(apiVersion !== undefined ? { apiVersion } : {}),
 		dependencies: stringList(parsed.dependencies),

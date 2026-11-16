@@ -17,8 +17,9 @@ async function recordInTransaction(
 	// Serialize even the first release of a plugin. All release writers use this
 	// transaction-scoped lock so concurrent older releases cannot regress latest.
 	await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${payload.plugin}, 0))::text`;
+	const { distributions, ...payloadMetadata } = payload.metadata;
 	const metadata = {
-		...payload.metadata,
+		...payloadMetadata,
 		shortName: payload.metadata.shortName ?? null,
 		author: payload.metadata.author ?? null,
 		license: payload.metadata.license ?? null,
@@ -26,7 +27,11 @@ async function recordInTransaction(
 		repository: payload.metadata.repository ?? null,
 		sdkVersion: payload.metadata.sdkVersion ?? null,
 		apiVersion: payload.metadata.apiVersion ?? null,
-		supports: payload.metadata.supports ?? {},
+		// Distros live in supports, where the query endpoint filters on them.
+		supports: {
+			...(payload.metadata.supports ?? {}),
+			...(distributions ? { distributions } : {}),
+		},
 		priority: payload.metadata.priority ?? 50,
 	};
 	const plugin = await db.plugin.upsert({

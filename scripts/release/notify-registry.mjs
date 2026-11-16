@@ -132,6 +132,12 @@ export function metadataFromYaml(plugin, doc, repo) {
 				)
 			: undefined;
 
+	const distributions = [
+		...new Set(
+			strings(doc.platforms?.linux?.distros).map((d) => d.toLowerCase()),
+		),
+	];
+
 	const metadata = {
 		description: doc.description,
 		type: doc.type,
@@ -144,6 +150,7 @@ export function metadataFromYaml(plugin, doc, repo) {
 		platforms,
 		priority: Number.isInteger(doc.priority) ? doc.priority : undefined,
 		supports,
+		distributions: distributions.length > 0 ? distributions : undefined,
 		sdkVersion:
 			doc.sdk_version === undefined ? undefined : String(doc.sdk_version),
 		apiVersion:

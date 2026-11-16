@@ -126,6 +126,26 @@ describe("recordPluginRelease", () => {
 			}),
 		});
 	});
+	it("stores distros in supports, where the query endpoint filters", async () => {
+		await recordPluginRelease(
+			db,
+			{
+				...payload,
+				metadata: {
+					...payload.metadata,
+					supports: { install: true },
+					distributions: ["debian", "ubuntu"],
+				},
+			},
+			"webhook",
+		);
+		const { data } = updatePlugin.mock.calls[0][0];
+		expect(data.supports).toEqual({
+			install: true,
+			distributions: ["debian", "ubuntu"],
+		});
+		expect(data).not.toHaveProperty("distributions");
+	});
 	it("retains an older release without changing latest or metadata", async () => {
 		upsertPlugin.mockResolvedValue({ ...plugin, latestVersion: "9.0.0" });
 		await expect(
