@@ -67,11 +67,12 @@ describe("sync-database", () => {
 
 	it("rejects when the registry stats update fails", async () => {
 		const count = vi.fn().mockRejectedValue(new Error("P6004"));
+		const aggregate = vi.fn().mockResolvedValue({ _sum: {} });
 		const db = {
 			application: { count },
-			plugin: { count },
-			config: { count },
-			stack: { count },
+			plugin: { count, aggregate },
+			config: { count, aggregate },
+			stack: { count, aggregate },
 		} as unknown as PrismaClient;
 
 		await expect(updateRegistryStats(db)).rejects.toThrow("P6004");

@@ -10,6 +10,7 @@ import { platformDocuments } from "./application-platforms";
 import { REGISTRY_CONFIG } from "./config";
 import { logger } from "./logger";
 import { redis } from "./redis";
+import type { RegistryStatsSnapshot } from "./registry-stats";
 import type {
 	ApplicationResponse,
 	ConfigResponse,
@@ -611,7 +612,8 @@ export class RegistryTransformationService {
 		applications: ApplicationWithSupport[];
 		configs: ConfigWithExtras[];
 		stacks: StackWithExtras[];
-		stats: any | null;
+		stats: RegistryStatsSnapshot;
+		dailyDownloads: number | null;
 		totalCounts: {
 			plugins: number;
 			applications: number;
@@ -669,30 +671,22 @@ export class RegistryTransformationService {
 				},
 			},
 
-			// Statistics
+			// Statistics: the shared definition used by /api/v1/stats (#483)
 			stats: {
 				total: {
-					applications: data.totalCounts.applications,
-					plugins: data.totalCounts.plugins,
-					configs: data.totalCounts.configs,
-					stacks: data.totalCounts.stacks,
+					...data.stats.totals,
 					all:
-						data.totalCounts.applications +
-						data.totalCounts.plugins +
-						data.totalCounts.configs +
-						data.totalCounts.stacks,
+						data.stats.totals.applications +
+						data.stats.totals.plugins +
+						data.stats.totals.configs +
+						data.stats.totals.stacks,
 				},
-				platforms: {
-					linux: data.stats?.linuxSupported || 0,
-					macos: data.stats?.macosSupported || 0,
-					windows: data.stats?.windowsSupported || 0,
-				},
+				platforms: data.stats.platforms,
 				activity: {
-					totalDownloads: data.stats?.totalDownloads || 0,
-					dailyDownloads: data.stats?.dailyDownloads || 0,
+					totalDownloads: data.stats.totalDownloads,
+					dailyDownloads: data.dailyDownloads,
 				},
-				lastUpdated:
-					data.stats?.date?.toISOString() || new Date().toISOString(),
+				lastUpdated: new Date().toISOString(),
 			},
 		};
 

@@ -700,12 +700,11 @@ describe("API Integration Flow", () => {
 
 			const statsClient = ensurePrisma();
 
-			// Verify Accelerate cacheStrategy was used
-			expect(statsClient.application.count).toHaveBeenCalledWith({
-				cacheStrategy: { swr: 600, ttl: 300 },
-			});
-			expect(statsClient.plugin.aggregate).toHaveBeenCalledWith({
-				_sum: { downloadCount: true },
+			// Breakdowns use Accelerate cacheStrategy; totals come from the
+			// shared computeRegistryStats behind unstable_cache (#483).
+			expect(statsClient.application.groupBy).toHaveBeenCalledWith({
+				by: ["category"],
+				_count: { category: true },
 				cacheStrategy: { swr: 600, ttl: 300 },
 			});
 		});

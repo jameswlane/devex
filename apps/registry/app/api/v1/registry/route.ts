@@ -18,6 +18,7 @@ type RegistryServiceResult = {
 	configs: any[];
 	stacks: any[];
 	stats: any;
+	dailyDownloads: number | null;
 	totalCounts: {
 		plugins: number;
 		applications: number;

@@ -220,30 +220,24 @@ describe("/api/v1/stats", () => {
 			});
 		});
 
-		it("should call all Prisma queries with Accelerate caching", async () => {
+		it("computes totals with the shared registry stats definition", async () => {
 			const req = createMockRequest();
 			await GET(req);
 
-			// Verify application counts (4 calls: total, linux, macos, windows)
+			// Totals, platforms and downloads come from computeRegistryStats,
+			// the same function /api/v1/registry uses (#483).
 			expect(mockPrismaClient.application.count).toHaveBeenCalledTimes(4);
 			expect(mockPrismaClient.application.count).toHaveBeenCalledWith({
-				cacheStrategy: { swr: 600, ttl: 300 },
-			});
-			expect(mockPrismaClient.application.count).toHaveBeenCalledWith({
 				where: { supportsLinux: true },
-				cacheStrategy: { swr: 600, ttl: 300 },
 			});
-
-			// Verify plugin queries
 			expect(mockPrismaClient.plugin.count).toHaveBeenCalledWith({
-				cacheStrategy: { swr: 600, ttl: 300 },
+				where: { status: "active" },
 			});
 			expect(mockPrismaClient.plugin.aggregate).toHaveBeenCalledWith({
 				_sum: { downloadCount: true },
-				cacheStrategy: { swr: 600, ttl: 300 },
 			});
 
-			// Verify groupBy queries
+			// Breakdowns keep Accelerate caching
 			expect(mockPrismaClient.application.groupBy).toHaveBeenCalledWith({
 				by: ["category"],
 				_count: { category: true },
