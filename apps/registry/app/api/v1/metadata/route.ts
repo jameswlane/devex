@@ -38,17 +38,18 @@ export async function GET(request: Request) {
 			}),
 
 			// Platform support statistics
-			prisma.$queryRaw`
+			// COUNT(*) is a BigInt, which JSON.stringify rejects, so cast it.
+			prisma.$queryRaw<{ platform: string; count: number }[]>`
 				SELECT
 					platform,
-					COUNT(*) as count
+					COUNT(*)::int as count
 				FROM (
 					SELECT unnest(platforms) as platform
-					FROM "Plugin"
+					FROM "plugins"
 					WHERE status = 'active'
 				) as p
 				GROUP BY platform
-				ORDER BY count DESC
+				ORDER BY count DESC, platform
 			`,
 
 			// Recently updated plugins
@@ -106,21 +107,22 @@ export async function GET(request: Request) {
 			categories[cat] = count;
 		});
 
-		// Get supported desktop environments
+		// Get supported desktop environments. Desktop plugins have type
+		// "desktop"; the environment is in the name (desktop-gnome).
 		const desktopPlugins = await prisma.plugin.findMany({
 			where: {
-				type: { contains: "desktop-" },
+				type: "desktop",
 			},
 			select: {
-				type: true,
+				name: true,
 				supports: true,
 			},
 		});
 
 		const desktopEnvironments = new Set<string>();
 		desktopPlugins.forEach((plugin) => {
-			// Extract from plugin type
-			const match = plugin.type.match(/desktop-(\w+)/);
+			// Extract from plugin name
+			const match = plugin.name.match(/^desktop-(\w+)$/);
 			if (match && match[1] !== "all") {
 				desktopEnvironments.add(match[1]);
 			}
@@ -142,13 +144,7 @@ export async function GET(request: Request) {
 			active_plugins: activePlugins,
 
 			// Platform information
-			platforms: [
-				"linux",
-				"darwin", // macOS
-				"windows",
-				"freebsd",
-				"openbsd",
-			],
+			platforms: ["linux", "macos", "windows", "freebsd", "openbsd"],
 
 			// Architecture support
 			architectures: ["amd64", "arm64", "386", "arm"],
@@ -179,7 +175,7 @@ export async function GET(request: Request) {
 			),
 
 			// Platform statistics
-			platform_statistics: pluginsByPlatform as any,
+			platform_statistics: pluginsByPlatform,
 
 			// Categories with counts
 			categories,
