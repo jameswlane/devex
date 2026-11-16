@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { platformDocuments } from "@/lib/application-platforms";
+import {
+	platformDocuments,
+	platformSupportFlags,
+} from "@/lib/application-platforms";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import {
 	invalidateOnDataChange,
@@ -63,7 +66,10 @@ async function handleUpdateApplication(
 		...(body.desktopEnvironments && {
 			desktopEnvironments: body.desktopEnvironments,
 		}),
-		...(body.platforms && { platforms: body.platforms }),
+		...(body.platforms && {
+			platforms: body.platforms,
+			...platformSupportFlags(body.platforms),
+		}),
 	};
 
 	const application = await safeDatabase(

@@ -1,5 +1,8 @@
 import type { NextRequest, NextResponse } from "next/server";
-import { platformDocuments } from "@/lib/application-platforms";
+import {
+	platformDocuments,
+	platformSupportFlags,
+} from "@/lib/application-platforms";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
 import {
@@ -197,6 +200,8 @@ async function handleCreateApplication(
 		);
 	}
 
+	const platforms = body.platforms || {};
+
 	// Create the application
 	const application = await safeDatabase(
 		async () => {
@@ -209,7 +214,8 @@ async function handleCreateApplication(
 					default: body.default || false,
 					tags: body.tags || [],
 					desktopEnvironments: body.desktopEnvironments || [],
-					platforms: body.platforms || {},
+					platforms,
+					...platformSupportFlags(platforms),
 					githubUrl: body.githubUrl,
 					githubPath: body.githubPath,
 				},

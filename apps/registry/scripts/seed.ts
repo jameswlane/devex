@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
 import { PrismaClient } from "../generated/prisma/client";
+import { platformSupportFlags } from "../lib/application-platforms";
 import { prismaConnectionOptions } from "../lib/prisma-connection";
 import { recordRegistryStatsSnapshot } from "../lib/registry-stats";
 
@@ -215,6 +216,7 @@ async function seedApplications() {
 					: null,
 			};
 
+			const supportFlags = platformSupportFlags(platforms);
 			const githubPath = await getGitHubPath("application", app.name);
 
 			await prisma.application.upsert({
@@ -227,6 +229,7 @@ async function seedApplications() {
 					tags: app.tags,
 					desktopEnvironments: app.desktopEnvironments || [],
 					platforms: platforms,
+					...supportFlags,
 					githubUrl: GITHUB_BASE_URL,
 					githubPath: githubPath,
 					lastSynced: new Date(),
@@ -240,6 +243,7 @@ async function seedApplications() {
 					tags: app.tags,
 					desktopEnvironments: app.desktopEnvironments || [],
 					platforms: platforms,
+					...supportFlags,
 					githubUrl: GITHUB_BASE_URL,
 					githubPath: githubPath,
 					lastSynced: new Date(),

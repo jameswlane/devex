@@ -52,31 +52,29 @@ export function platformDocuments(platforms: unknown): PlatformDocuments {
 	return documents;
 }
 
+/**
+ * Derives the supportsLinux/MacOS/Windows columns from a stored platforms
+ * object. Every writer of `platforms` sets these columns through this helper,
+ * so the platform filters and stats match the stored documents.
+ */
+export function platformSupportFlags(platforms: unknown) {
+	const stored = isObject(platforms) ? platforms : {};
+	const all = isObject(stored.all);
+	return {
+		supportsLinux: all || isObject(stored.linux),
+		supportsMacOS: all || isObject(stored.macos),
+		supportsWindows: all || isObject(stored.windows),
+	};
+}
+
 /** Builds the stored platform data for one YAML application definition. */
 export function applicationPlatformData(app: ApplicationYaml) {
 	const platforms: Record<string, unknown> = {};
-	let supportsLinux = false;
-	let supportsMacOS = false;
-	let supportsWindows = false;
 
-	if (isObject(app.all_platforms)) {
-		platforms.all = app.all_platforms;
-		supportsLinux = true;
-		supportsMacOS = true;
-		supportsWindows = true;
-	}
-	if (isObject(app.linux)) {
-		platforms.linux = app.linux;
-		supportsLinux = true;
-	}
-	if (isObject(app.macos)) {
-		platforms.macos = app.macos;
-		supportsMacOS = true;
-	}
-	if (isObject(app.windows)) {
-		platforms.windows = app.windows;
-		supportsWindows = true;
-	}
+	if (isObject(app.all_platforms)) platforms.all = app.all_platforms;
+	if (isObject(app.linux)) platforms.linux = app.linux;
+	if (isObject(app.macos)) platforms.macos = app.macos;
+	if (isObject(app.windows)) platforms.windows = app.windows;
 
 	const desktopEnvironments = Array.isArray(app.desktop_environments)
 		? app.desktop_environments.filter(
@@ -86,9 +84,7 @@ export function applicationPlatformData(app: ApplicationYaml) {
 
 	return {
 		platforms,
-		supportsLinux,
-		supportsMacOS,
-		supportsWindows,
+		...platformSupportFlags(platforms),
 		desktopEnvironments,
 	};
 }
