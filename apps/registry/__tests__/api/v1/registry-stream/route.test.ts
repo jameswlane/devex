@@ -66,4 +66,20 @@ describe("/api/v1/registry-stream", () => {
 			"https://registry.devex.sh/api/v1/plugins/package-manager-apt/download/linux-amd64",
 		);
 	});
+	it("advertises the same base_url in streamed metadata (#489)", async () => {
+		const response = await GET(
+			new NextRequest(
+				"https://registry.devex.sh/api/v1/registry-stream?format=ndjson",
+			),
+		);
+		const lines = (await response.text())
+			.trim()
+			.split("\n")
+			.map((l) => JSON.parse(l));
+
+		expect(response.status).toBe(200);
+		expect(lines.find((l) => l.base_url)?.base_url).toBe(
+			"https://registry.devex.sh/api/v1/plugins",
+		);
+	});
 });
