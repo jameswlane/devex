@@ -42,10 +42,14 @@ describe("/api/v1/registry-stream", () => {
 				githubUrl: "https://github.com/jameswlane/devex",
 				status: "active",
 				priority: 10,
-				supports: {},
+				// Decoys: the route must read the columns, not supports (#490)
+				supports: { dependencies: ["wrong"], conflicts: ["wrong"] },
+				dependencies: ["tool-git"],
+				conflicts: ["package-manager-dnf"],
 				// No stored URL, so the route builds the registry download URL
 				binaries: { "linux-amd64": { checksum: "", size: 0 } },
-				latestVersion: "1.0.0",
+				version: "1.2.3",
+				latestVersion: "1.2.3",
 			},
 		]);
 	});
@@ -81,5 +85,51 @@ describe("/api/v1/registry-stream", () => {
 		expect(lines.find((l) => l.base_url)?.base_url).toBe(
 			"https://registry.devex.sh/api/v1/plugins",
 		);
+	});
+
+	it("emits a parseable json-stream body with a real data array (#490)", async () => {
+		const response = await GET(
+			new NextRequest("https://registry.devex.sh/api/v1/registry-stream"),
+		);
+		const data = JSON.parse(await response.text());
+
+		expect(response.status).toBe(200);
+		expect(data.base_url).toBe("https://registry.devex.sh/api/v1/plugins");
+		expect(data.completed).toBe(true);
+		expect(Array.isArray(data.data)).toBe(true);
+		expect(data.data).toHaveLength(1);
+		expect(data.data[0]).toMatchObject({
+			name: "package-manager-apt",
+			version: "1.2.3",
+			dependencies: ["tool-git"],
+			conflicts: ["package-manager-dnf"],
+		});
+	});
+
+	it("emits a parseable json-stream body when no plugin matches (#490)", async () => {
+		(prisma.plugin.count as Mock).mockResolvedValue(0);
+		(prisma.plugin.findMany as Mock).mockResolvedValue([]);
+		const response = await GET(
+			new NextRequest(
+				"https://registry.devex.sh/api/v1/registry-stream?format=json-stream",
+			),
+		);
+		const data = JSON.parse(await response.text());
+
+		expect(data.data).toEqual([]);
+		expect(data.completed).toBe(true);
+	});
+
+	it("reports the stored version, dependencies and conflicts (#490)", async () => {
+		const response = await GET(
+			new NextRequest(
+				"https://registry.devex.sh/api/v1/registry-stream?format=json",
+			),
+		);
+		const plugin = (await response.json()).plugins["package-manager-apt"];
+
+		expect(plugin.version).toBe("1.2.3");
+		expect(plugin.dependencies).toEqual(["tool-git"]);
+		expect(plugin.conflicts).toEqual(["package-manager-dnf"]);
 	});
 });

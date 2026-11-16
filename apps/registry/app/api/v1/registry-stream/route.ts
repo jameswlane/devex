@@ -207,9 +207,6 @@ function buildWhereClause(filter: any): any {
 async function transformPluginForStreaming(
 	plugin: any,
 ): Promise<PluginMetadata> {
-	// Extract version from githubPath or default to latest
-	const version = extractVersionFromGithubPath(plugin.githubPath);
-
 	// Build platform binaries - simplified for streaming
 	const platforms: Record<string, PlatformBinary> = {};
 	const existingBinaries = plugin.binaries as any;
@@ -235,7 +232,7 @@ async function transformPluginForStreaming(
 
 	return {
 		name: normalizedName,
-		version,
+		version: plugin.version,
 		description: plugin.description,
 		author: "DevEx Team",
 		repository: plugin.githubUrl || "",
@@ -330,12 +327,6 @@ async function createRegularResponse(
 }
 
 // Helper functions (simplified versions of the main registry route)
-
-function extractVersionFromGithubPath(githubPath: string | null): string {
-	if (!githubPath) return "latest";
-	const versionMatch = githubPath.match(/@devex\/[^@]+@(.+)$/);
-	return versionMatch ? versionMatch[1] : "latest";
-}
 
 // Helper function to extract full plugin name from githubPath
 // The githubPath is the source of truth from the sync script
