@@ -220,7 +220,7 @@ async function transformPluginForStreaming(
 				platforms[platformKey] = {
 					url:
 						(binary as any).url ||
-						`https://registry.devex.sh/api/v1/plugins/${plugin.id}/download/${platformKey}`,
+						`${REGISTRY_CONFIG.PLUGINS_API_URL}/${plugin.id}/download/${platformKey}`,
 					checksum: (binary as any).checksum || "",
 					size: (binary as any).size || 0,
 				};
@@ -255,7 +255,7 @@ function createStreamingResponse(
 	options: StreamingRegistryOptions,
 ): Response {
 	const metadata = {
-		base_url: `${REGISTRY_CONFIG.BASE_URL}/api/v1/plugins`,
+		base_url: REGISTRY_CONFIG.PLUGINS_API_URL,
 		total_count: totalCount,
 		plugin_count: plugins.length,
 		format: options.format,
@@ -306,7 +306,7 @@ async function createRegularResponse(
 	}
 
 	const response = {
-		base_url: `${REGISTRY_CONFIG.BASE_URL}/api/v1/plugins`,
+		base_url: REGISTRY_CONFIG.PLUGINS_API_URL,
 		plugins: registryPlugins,
 		...(includeMetadata && {
 			metadata: {

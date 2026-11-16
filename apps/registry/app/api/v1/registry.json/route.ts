@@ -167,7 +167,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 		}
 
 		const response: RegistryResponse = {
-			base_url: `${REGISTRY_CONFIG.BASE_URL}/api/v1/plugins`,
+			base_url: REGISTRY_CONFIG.PLUGINS_API_URL,
 			plugins: registryPlugins,
 			last_updated: new Date().toISOString(),
 		};
@@ -236,7 +236,7 @@ async function transformPluginToMetadata(
 				const platformKey = `${platformName}-${arch}`;
 				platforms[platformKey] = {
 					// Registry download URL that will track and redirect
-					url: `https://registry.devex.sh/api/v1/plugins/${plugin.id}/download/${platformKey}`,
+					url: `${REGISTRY_CONFIG.PLUGINS_API_URL}/${plugin.id}/download/${platformKey}`,
 					checksum: "", // Will be populated by background job or GitHub Actions
 					size: 0, // Will be populated by background job or GitHub Actions
 				};

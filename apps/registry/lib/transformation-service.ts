@@ -637,7 +637,7 @@ export class RegistryTransformationService {
 		]);
 
 		const response: PaginatedResponse = {
-			base_url: REGISTRY_CONFIG.BASE_URL,
+			base_url: REGISTRY_CONFIG.PLUGINS_API_URL,
 			version: REGISTRY_CONFIG.REGISTRY_VERSION,
 			last_updated: new Date().toISOString(),
 			source: REGISTRY_CONFIG.REGISTRY_SOURCE,
