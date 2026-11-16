@@ -8,6 +8,7 @@ import {
 	streamLargeArray,
 	supportsStreaming,
 } from "@/lib/streaming";
+import { parseIntegerParams } from "@/lib/validation";
 
 interface StreamingRegistryOptions {
 	format: "json" | "ndjson" | "json-stream";
@@ -54,8 +55,20 @@ export const GET = withRateLimit(async function handler(
 		const includeMetadata = searchParams.get("metadata") !== "false";
 
 		// Parse pagination options
-		const limit = Math.min(parseInt(searchParams.get("limit") || "0"), 10000);
-		const offset = parseInt(searchParams.get("offset") || "0");
+		const params = parseIntegerParams(searchParams, {
+			limit: { defaultValue: 0, min: 0, max: 10000, clampMax: true },
+			offset: { defaultValue: 0, min: 0 },
+		});
+		if (!params.success) {
+			return createApiError(
+				"Invalid pagination parameters",
+				400,
+				undefined,
+				params.error,
+				new URL(request.url).pathname,
+			);
+		}
+		const { limit, offset } = params.data;
 
 		// Parse filter options
 		const platforms = searchParams.get("platforms")?.split(",").filter(Boolean);

@@ -29,74 +29,129 @@ const VALID_PLUGIN_TYPES = [
 	"tool",
 ] as const;
 
+type ParamIssue = { path: string[]; code: string; message: string };
+
+export type IntegerParamResult =
+	| { success: true; value: number }
+	| { success: false; issue: ParamIssue };
+
+/**
+ * Strictly parse an integer query parameter. A missing or empty value
+ * yields the default; anything other than an optionally signed run of
+ * digits is rejected, as is a value below `min`. Values above `max` are
+ * rejected unless `clampMax` is set, in which case they are capped.
+ */
+export function parseIntegerParam(
+	name: string,
+	raw: string | null | undefined,
+	options: {
+		defaultValue: number;
+		min: number;
+		max?: number;
+		clampMax?: boolean;
+	},
+): IntegerParamResult {
+	if (raw === null || raw === undefined || raw === "") {
+		return { success: true, value: options.defaultValue };
+	}
+	if (!/^[+-]?\d+$/.test(raw.trim())) {
+		return {
+			success: false,
+			issue: {
+				path: [name],
+				code: "invalid_type",
+				message: `${name} must be an integer`,
+			},
+		};
+	}
+	const value = Number(raw.trim());
+	if (value < options.min) {
+		return {
+			success: false,
+			issue: {
+				path: [name],
+				code: "too_small",
+				message: `${name} must be at least ${options.min}`,
+			},
+		};
+	}
+	if (options.max !== undefined && value > options.max) {
+		if (options.clampMax) {
+			return { success: true, value: options.max };
+		}
+		return {
+			success: false,
+			issue: {
+				path: [name],
+				code: "too_big",
+				message: `${name} cannot exceed ${options.max}`,
+			},
+		};
+	}
+	if (!Number.isSafeInteger(value)) {
+		return {
+			success: false,
+			issue: {
+				path: [name],
+				code: "too_big",
+				message: `${name} is too large`,
+			},
+		};
+	}
+	return { success: true, value };
+}
+
+/**
+ * Parse several integer params at once, collecting every issue so the
+ * caller can return a single 400.
+ */
+export function parseIntegerParams<K extends string>(
+	params: URLSearchParams,
+	specs: Record<
+		K,
+		{ defaultValue: number; min: number; max?: number; clampMax?: boolean }
+	>,
+):
+	| { success: true; data: Record<K, number> }
+	| { success: false; error: { issues: ParamIssue[] } } {
+	const data = {} as Record<K, number>;
+	const issues: ParamIssue[] = [];
+	for (const name of Object.keys(specs) as K[]) {
+		const result = parseIntegerParam(name, params.get(name), specs[name]);
+		if (result.success) {
+			data[name] = result.value;
+		} else {
+			issues.push(result.issue);
+		}
+	}
+	if (issues.length > 0) {
+		return { success: false, error: { issues } };
+	}
+	return { success: true, data };
+}
+
 export function validatePaginationParams(
 	params: Record<string, string> | URLSearchParams,
+	options: { clampLimit?: boolean } = {},
 ) {
-	// Handle both URLSearchParams and plain objects
-	const getParam = (key: string): string | null => {
-		if (params instanceof URLSearchParams) {
-			return params.get(key);
-		}
-		return params[key] || null;
-	};
+	const searchParams =
+		params instanceof URLSearchParams
+			? params
+			: new URLSearchParams(
+					Object.entries(params).filter(
+						(entry): entry is [string, string] => typeof entry[1] === "string",
+					),
+				);
 
-	const pageParam = getParam("page");
-	const limitParam = getParam("limit");
-
-	const page = pageParam ? parseInt(pageParam, 10) : 1;
-	const limit = limitParam ? parseInt(limitParam, 10) : 50;
-
-	// Validate page (must be >= 1)
-	if (page < 1) {
-		return {
-			success: false,
-			error: {
-				issues: [
-					{
-						path: ["page"],
-						code: "too_small",
-						message: "Page must be at least 1",
-					},
-				],
-			},
-		};
-	}
-
-	// Validate limit (must be between 1 and 100)
-	if (limit < 1) {
-		return {
-			success: false,
-			error: {
-				issues: [
-					{
-						path: ["limit"],
-						code: "too_small",
-						message: "Limit must be at least 1",
-					},
-				],
-			},
-		};
-	}
-
-	if (limit > 100) {
-		return {
-			success: false,
-			error: {
-				issues: [
-					{
-						path: ["limit"],
-						code: "too_big",
-						message: "Limit cannot exceed 100",
-					},
-				],
-			},
-		};
-	}
-
-	return {
-		success: true,
-		data: { page, limit },
-	};
+	return parseIntegerParams(searchParams, {
+		page: { defaultValue: 1, min: 1 },
+		limit: {
+			defaultValue: 50,
+			min: 1,
+			max: 100,
+			clampMax: options.clampLimit,
+		},
+	});
 }
 
 export function validateSearchQuery(query?: string | null): string | undefined {

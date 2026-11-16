@@ -14,6 +14,7 @@ import { CACHE_DURATION, pluginCache } from "@/lib/plugin-cache";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import { transformationService } from "@/lib/transformation-service";
+import { parseIntegerParams } from "@/lib/validation";
 import type { Plugin } from "../../../../generated/prisma/client";
 
 interface PluginMetadata {
@@ -110,8 +111,20 @@ export const GET = withRateLimit(async function handler(request: Request) {
 	try {
 		// Parse query parameters for pagination
 		const { searchParams } = new URL(request.url);
-		const limit = Math.min(parseInt(searchParams.get("limit") || "500"), 1000); // Max 1000 plugins
-		const offset = parseInt(searchParams.get("offset") || "0");
+		const params = parseIntegerParams(searchParams, {
+			limit: { defaultValue: 500, min: 1, max: 1000, clampMax: true },
+			offset: { defaultValue: 0, min: 0 },
+		});
+		if (!params.success) {
+			return createApiError(
+				"Invalid pagination parameters",
+				400,
+				undefined,
+				params.error,
+				new URL(request.url).pathname,
+			);
+		}
+		const { limit, offset } = params.data;
 
 		// Get total count for metadata
 		const totalCount = await prisma.plugin.count({

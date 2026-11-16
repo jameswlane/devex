@@ -41,7 +41,7 @@ async function handleGetApplications(
 			url.pathname,
 		);
 	}
-	const { page, limit } = paginationResult.data!;
+	const { page, limit } = paginationResult.data;
 	const offset = (page - 1) * limit;
 
 	// Build where clause with proper validation
