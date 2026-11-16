@@ -112,12 +112,12 @@ describe("RegistryTransformationService release_tag (#497)", () => {
 		const service = new RegistryTransformationService();
 
 		const result = await service.transformPlugins([
-			plugin("tool-git", { releaseTag: "packages/tool-git/v1.0.0" }),
+			plugin("tool-git", { releaseTag: "packages/tool-git/v1.0.0-recorded" }),
 			plugin("tool-shell", { version: "2.1.0", releaseTag: null }),
 		] as never);
 
 		expect(result.map((p) => p.release_tag)).toEqual([
-			"packages/tool-git/v1.0.0",
+			"packages/tool-git/v1.0.0-recorded",
 			"packages/tool-shell/v2.1.0",
 		]);
 	});
