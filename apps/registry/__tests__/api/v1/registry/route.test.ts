@@ -424,6 +424,33 @@ describe("/api/v1/registry", () => {
 			expect(response.headers.get("Cache-Control")).toContain("public");
 		});
 	});
+
+	describe("invalid query parameters (#484)", () => {
+		it.each([
+			[{ page: "abc" }],
+			[{ limit: "abc" }],
+			[{ page: "0" }],
+			[{ limit: "-1" }],
+			[{ resource: "bogus" }],
+		])("returns 400 for %o without querying the database", async (params) => {
+			const { createApiError } = (await import("@/lib/logger")) as any;
+			createApiError.mockReturnValueOnce(
+				new Response("Bad Request", { status: 400 }),
+			);
+
+			const response = await GET(createMockRequest(params));
+
+			expect(response.status).toBe(400);
+			expect(createApiError).toHaveBeenCalledWith(
+				expect.any(String),
+				400,
+				undefined,
+				expect.objectContaining({ issues: expect.any(Array) }),
+				"/api/v1/registry",
+			);
+			expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+		});
+	});
 });
 
 // Mock data for tests

@@ -11,6 +11,20 @@ import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import { registryService } from "@/lib/registry-service";
 import { transformationService } from "@/lib/transformation-service";
 import type { PaginatedResponse } from "@/lib/types/registry";
+import { validatePaginationParams } from "@/lib/validation";
+
+const REGISTRY_RESOURCES = [
+	"all",
+	"plugins",
+	"applications",
+	"configs",
+	"stacks",
+] as const;
+type RegistryResource = (typeof REGISTRY_RESOURCES)[number];
+
+function isRegistryResource(value: string): value is RegistryResource {
+	return (REGISTRY_RESOURCES as readonly string[]).includes(value);
+}
 
 type RegistryServiceResult = {
 	plugins: any[];
@@ -36,17 +50,38 @@ type TransformationInput = RegistryServiceResult & {
 export const GET = withRateLimit(async function handler(request: NextRequest) {
 	try {
 		const searchParams = request.nextUrl.searchParams;
-		const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-		const limit = Math.min(
-			100,
-			Math.max(1, parseInt(searchParams.get("limit") || "50", 10)),
-		);
-		const resource = (searchParams.get("resource") || "all") as
-			| "all"
-			| "plugins"
-			| "applications"
-			| "configs"
-			| "stacks";
+		const pagination = validatePaginationParams(searchParams, {
+			clampLimit: true,
+		});
+		if (!pagination.success) {
+			return createApiError(
+				"Invalid pagination parameters",
+				400,
+				undefined,
+				pagination.error,
+				request.nextUrl.pathname,
+			);
+		}
+		const { page, limit } = pagination.data;
+		const resourceParam = searchParams.get("resource") || "all";
+		if (!isRegistryResource(resourceParam)) {
+			return createApiError(
+				"Invalid resource parameter",
+				400,
+				undefined,
+				{
+					issues: [
+						{
+							path: ["resource"],
+							code: "invalid_enum_value",
+							message: `resource must be one of: ${REGISTRY_RESOURCES.join(", ")}`,
+						},
+					],
+				},
+				request.nextUrl.pathname,
+			);
+		}
+		const resource = resourceParam;
 
 		// Use the optimized registry service with circuit breaker and caching
 		const result = await registryService.getPaginatedRegistry({

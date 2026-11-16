@@ -339,4 +339,30 @@ describe("version handling", () => {
 		expect(data.plugins["package-manager-apt"]).toBeDefined();
 		expect(data.plugins["package-manager-apt"].version).toBe("latest");
 	});
+
+	it.each([
+		["limit=abc"],
+		["limit=-1"],
+		["limit=0"],
+		["offset=-5"],
+		["offset=abc"],
+	])("returns a 400 for %s without querying plugins (#484)", async (query) => {
+		const { createApiError } = (await import("@/lib/logger")) as any;
+
+		await GET(
+			new NextRequest(
+				`https://registry.devex.sh/api/v1/registry.json?${query}`,
+			),
+		);
+
+		expect(createApiError).toHaveBeenCalledWith(
+			"Invalid pagination parameters",
+			400,
+			undefined,
+			expect.objectContaining({ issues: expect.any(Array) }),
+			"/api/v1/registry.json",
+		);
+		expect(prisma.plugin.count).not.toHaveBeenCalled();
+		expect(prisma.plugin.findMany).not.toHaveBeenCalled();
+	});
 });
