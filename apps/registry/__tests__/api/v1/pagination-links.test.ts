@@ -48,6 +48,12 @@ vi.mock("@/lib/transformation-service", () => ({
 	},
 }));
 
+// Skip the route wrapper's Redis rate limiting; only the handler is under test.
+vi.mock("@/lib/error-handler", () => ({
+	withErrorHandling: vi.fn((handler: unknown) => handler),
+	safeDatabase: vi.fn((operation: () => Promise<unknown>) => operation()),
+}));
+
 import { GET as getApplications } from "@/app/api/v1/applications/route";
 import { GET as getPlugins } from "@/app/api/v1/plugins/route";
 
