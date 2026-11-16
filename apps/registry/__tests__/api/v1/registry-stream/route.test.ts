@@ -33,7 +33,7 @@ describe("/api/v1/registry-stream", () => {
 		(prisma.plugin.count as Mock).mockResolvedValue(1);
 		(prisma.plugin.findMany as Mock).mockResolvedValue([
 			{
-				id: "package-manager-apt",
+				id: "clx0abcplugincuid",
 				name: "package-manager-apt",
 				type: "package-manager",
 				description: "APT package manager",
@@ -131,5 +131,18 @@ describe("/api/v1/registry-stream", () => {
 		expect(plugin.version).toBe("1.2.3");
 		expect(plugin.dependencies).toEqual(["tool-git"]);
 		expect(plugin.conflicts).toEqual(["package-manager-dnf"]);
+	});
+
+	it("builds fallback download URLs from the plugin name, not its id (#497)", async () => {
+		const response = await GET(
+			new NextRequest(
+				"https://registry.devex.sh/api/v1/registry-stream?format=json",
+			),
+		);
+		const plugin = (await response.json()).plugins["package-manager-apt"];
+
+		expect(plugin.platforms["linux-amd64"].url).toMatch(
+			/\/package-manager-apt\/download\/linux-amd64$/,
+		);
 	});
 });

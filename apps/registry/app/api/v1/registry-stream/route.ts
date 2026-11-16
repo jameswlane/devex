@@ -217,7 +217,7 @@ async function transformPluginForStreaming(
 				platforms[platformKey] = {
 					url:
 						(binary as any).url ||
-						`${REGISTRY_CONFIG.PLUGINS_API_URL}/${plugin.id}/download/${platformKey}`,
+						`${REGISTRY_CONFIG.PLUGINS_API_URL}/${encodeURIComponent(plugin.name)}/download/${platformKey}`,
 					checksum: (binary as any).checksum || "",
 					size: (binary as any).size || 0,
 				};

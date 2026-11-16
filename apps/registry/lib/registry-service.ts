@@ -3,6 +3,7 @@ import { dbCircuitBreaker } from "./db-health";
 import { getDailyDownloads } from "./download-stats";
 import { logger } from "./logger";
 import { PLUGIN_LIST_ORDER } from "./plugin-order";
+import { attachReleaseTags } from "./plugins/release-tags";
 import { prisma } from "./prisma";
 import { computeRegistryStats } from "./registry-stats";
 import { transformationService } from "./transformation-service";
@@ -77,6 +78,7 @@ export class RegistryService {
 										take: limit,
 										orderBy: PLUGIN_LIST_ORDER,
 										select: {
+											id: true,
 											name: true,
 											description: true,
 											type: true,
@@ -199,7 +201,11 @@ export class RegistryService {
 			),
 		);
 
-		return { ...result, dailyDownloads: await dailyDownloadsPromise };
+		return {
+			...result,
+			plugins: await attachReleaseTags(result.plugins),
+			dailyDownloads: await dailyDownloadsPromise,
+		};
 	}
 
 	// Search across resources with full-text search

@@ -217,7 +217,7 @@ async function transformPluginToMetadata(
 				const platformKey = `${platformName}-${arch}`;
 				platforms[platformKey] = {
 					// Registry download URL that will track and redirect
-					url: `${REGISTRY_CONFIG.PLUGINS_API_URL}/${plugin.id}/download/${platformKey}`,
+					url: `${REGISTRY_CONFIG.PLUGINS_API_URL}/${encodeURIComponent(plugin.name)}/download/${platformKey}`,
 					checksum: "", // Will be populated by background job or GitHub Actions
 					size: 0, // Will be populated by background job or GitHub Actions
 				};

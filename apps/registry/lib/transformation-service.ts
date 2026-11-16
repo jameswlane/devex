@@ -9,6 +9,7 @@ import type {
 import { platformDocuments } from "./application-platforms";
 import { REGISTRY_CONFIG } from "./config";
 import { logger } from "./logger";
+import { pluginReleaseTag } from "./plugins/release-tag";
 import { redis } from "./redis";
 import type { RegistryStatsSnapshot } from "./registry-stats";
 import type {
@@ -64,6 +65,8 @@ type PluginWithExtras = {
 	githubPath: string | null;
 	downloadCount: number;
 	lastDownload: Date | null;
+	// Tag recorded for this version in plugin_versions, when known
+	releaseTag?: string | null;
 };
 
 // Application row with its stored platform documents (the JSON column, or
@@ -395,7 +398,9 @@ export class RegistryTransformationService {
 					>,
 					sdkVersion: plugin.sdkVersion,
 					apiVersion: plugin.apiVersion,
-					release_tag: `packages/${normalizedName}@${plugin.version}`,
+					release_tag:
+						plugin.releaseTag ??
+						pluginReleaseTag(normalizedName, plugin.version),
 					githubPath: plugin.githubPath,
 					downloadCount: plugin.downloadCount,
 					lastDownload: plugin.lastDownload?.toISOString(),
