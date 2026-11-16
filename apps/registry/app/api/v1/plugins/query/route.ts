@@ -155,7 +155,9 @@ export async function GET(request: Request) {
 					const distributions = pluginDistributions(plugin.supports);
 					return (
 						distributions.length === 0 ||
-						distributions.includes(wantedDistribution)
+						distributions.some(
+							(name) => name.toLowerCase() === wantedDistribution,
+						)
 					);
 				})
 			: matchingPlugins;

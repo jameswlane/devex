@@ -73,7 +73,7 @@ describe("distribution filter", () => {
 		findMany.mockResolvedValue([
 			plugin("package-manager-apt", {
 				install: true,
-				distributions: ["debian", "ubuntu"],
+				distributions: ["debian", "Ubuntu"],
 			}),
 			plugin("package-manager-dnf", { distributions: ["fedora", "rhel"] }),
 			plugin("package-manager-apk", { distributions: ["alpine"] }),
@@ -93,7 +93,7 @@ describe("distribution filter", () => {
 		expect(body.total).toBe(2);
 		expect(body.plugins[0].metadata.distributions).toEqual([
 			"debian",
-			"ubuntu",
+			"Ubuntu",
 		]);
 		expect(response.headers.get("X-Plugin-Count")).toBe("2");
 	});
