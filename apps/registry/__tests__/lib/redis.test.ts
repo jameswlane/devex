@@ -5,9 +5,41 @@ import {
 	warmupRedis,
 } from "../../lib/redis";
 
-// Mock the external Redis libraries
-vi.mock("@upstash/redis");
-vi.mock("ioredis");
+// Fake clients that record which backend each call reached, so the tests can
+// tell an Upstash or IORedis store from the in-memory fallback (#498).
+const backends = vi.hoisted(() => ({
+	calls: [] as { backend: string; method: string; args: unknown[] }[],
+	upstashOptions: [] as unknown[],
+	ioredisUrls: [] as unknown[],
+}));
+
+vi.mock("@upstash/redis", () => {
+	class Redis {
+		constructor(opts: unknown) {
+			backends.upstashOptions.push(opts);
+		}
+		static fromEnv(opts: unknown) {
+			return new Redis(opts);
+		}
+		async setex(...args: unknown[]) {
+			backends.calls.push({ backend: "upstash", method: "setex", args });
+			return "OK";
+		}
+	}
+	return { Redis };
+});
+vi.mock("ioredis", () => {
+	class IORedis {
+		constructor(url: unknown) {
+			backends.ioredisUrls.push(url);
+		}
+		async setex(...args: unknown[]) {
+			backends.calls.push({ backend: "ioredis", method: "setex", args });
+			return "OK";
+		}
+	}
+	return { default: IORedis };
+});
 vi.mock("../../lib/logger", () => ({
 	logger: {
 		info: vi.fn(),
@@ -16,6 +48,24 @@ vi.mock("../../lib/logger", () => ({
 		debug: vi.fn(),
 	},
 }));
+
+const REDIS_ENV = [
+	"KV_REST_API_URL",
+	"KV_REST_API_TOKEN",
+	"UPSTASH_REDIS_REST_URL",
+	"UPSTASH_REDIS_REST_TOKEN",
+	"REDIS_URL",
+];
+
+// The clients are created when lib/redis loads, so each case sets the
+// environment first and then imports a fresh copy of the module.
+async function freshStore(env: Record<string, string>) {
+	for (const key of REDIS_ENV) delete process.env[key];
+	Object.assign(process.env, env);
+	vi.resetModules();
+	const { createRedisStore: create } = await import("../../lib/redis");
+	return create();
+}
 
 describe("Redis Store System", () => {
 	const originalEnv = process.env;
@@ -30,32 +80,60 @@ describe("Redis Store System", () => {
 	});
 
 	describe("Store Creation and Fallback Behavior", () => {
-		it("should create in-memory store when no Redis config is provided", () => {
-			delete process.env.KV_REST_API_URL;
-			delete process.env.KV_REST_API_TOKEN;
-			delete process.env.REDIS_URL;
-			delete process.env.UPSTASH_REDIS_REST_URL;
-			delete process.env.UPSTASH_REDIS_REST_TOKEN;
-
-			const store = createRedisStore();
-			expect(store).toBeDefined();
+		beforeEach(() => {
+			backends.calls.length = 0;
+			backends.upstashOptions.length = 0;
+			backends.ioredisUrls.length = 0;
 		});
 
-		it("should attempt to create Upstash store when environment variables are present", () => {
-			process.env.KV_REST_API_URL = "https://test.upstash.io";
-			process.env.KV_REST_API_TOKEN = "test-token";
+		it("uses the in-memory store when no Redis config is provided", async () => {
+			const store = await freshStore({});
+			await store.set("k", "v", 5);
 
-			const store = createRedisStore();
-			expect(store).toBeDefined();
+			expect(await store.get("k")).toBe("v");
+			expect(backends.calls).toEqual([]);
+			expect(backends.upstashOptions).toEqual([]);
+			expect(backends.ioredisUrls).toEqual([]);
 		});
 
-		it("should attempt to create IORedis store when REDIS_URL is present", () => {
-			process.env.REDIS_URL = "redis://localhost:6379";
-			delete process.env.KV_REST_API_URL;
-			delete process.env.KV_REST_API_TOKEN;
+		it("writes through Upstash when the KV REST variables are present", async () => {
+			const store = await freshStore({
+				KV_REST_API_URL: "https://test.upstash.io",
+				KV_REST_API_TOKEN: "test-token",
+			});
+			await store.set("k", "v", 5);
 
-			const store = createRedisStore();
-			expect(store).toBeDefined();
+			expect(backends.upstashOptions).toEqual([
+				expect.objectContaining({
+					url: "https://test.upstash.io",
+					token: "test-token",
+				}),
+			]);
+			expect(backends.calls).toEqual([
+				{ backend: "upstash", method: "setex", args: ["k", 5, "v"] },
+			]);
+		});
+
+		it("writes through Upstash when the UPSTASH REST variables are present", async () => {
+			const store = await freshStore({
+				UPSTASH_REDIS_REST_URL: "https://test.upstash.io",
+				UPSTASH_REDIS_REST_TOKEN: "test-token",
+			});
+			await store.set("k", "v", 5);
+
+			expect(backends.calls).toEqual([
+				{ backend: "upstash", method: "setex", args: ["k", 5, "v"] },
+			]);
+		});
+
+		it("writes through IORedis when REDIS_URL is present", async () => {
+			const store = await freshStore({ REDIS_URL: "redis://cache:6379" });
+			await store.set("k", "v", 5);
+
+			expect(backends.ioredisUrls).toEqual(["redis://cache:6379"]);
+			expect(backends.calls).toEqual([
+				{ backend: "ioredis", method: "setex", args: ["k", 5, "v"] },
+			]);
 		});
 	});
 
@@ -77,19 +155,36 @@ describe("Redis Store System", () => {
 			expect(result).toBe("test-value");
 		});
 
-		it("should handle TTL operations", async () => {
-			await store.set("ttl-key", "ttl-value", 1); // 1 second TTL
-			const immediate = await store.get("ttl-key");
-			expect(immediate).toBe("ttl-value");
+		it("expires keys once their TTL passes", async () => {
+			vi.useFakeTimers();
+			try {
+				await store.set("ttl-key", "ttl-value", 1); // 1 second TTL
+				vi.advanceTimersByTime(999);
+				expect(await store.get("ttl-key")).toBe("ttl-value");
+				expect(await store.exists("ttl-key")).toBe(true);
 
-			// Since we're using an in-memory store, we can't easily test TTL expiration
-			// without actually waiting. For unit tests, we verify the TTL was set
-			// and trust the implementation handles it correctly
+				vi.advanceTimersByTime(2);
+				expect(await store.get("ttl-key")).toBeNull();
+				expect(await store.exists("ttl-key")).toBe(false);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
 
-			// Manually delete to simulate expiration for testing
-			await store.del("ttl-key");
-			const expired = await store.get("ttl-key");
-			expect(expired).toBeNull();
+		it("expire() shortens the life of an existing key", async () => {
+			vi.useFakeTimers();
+			try {
+				await store.set("expire-key", "value");
+				await store.expire("expire-key", 2);
+				vi.advanceTimersByTime(1500);
+				expect(await store.get("expire-key")).toBe("value");
+
+				vi.advanceTimersByTime(600);
+				expect(await store.get("expire-key")).toBeNull();
+				expect(await store.scan("expire-*")).toEqual([]);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should handle delete operations", async () => {
