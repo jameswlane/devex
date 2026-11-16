@@ -332,7 +332,7 @@ describe("/api/v1/stats", () => {
 			const etag = response1.headers.get("ETag");
 
 			expect(etag).toBeDefined();
-			expect(etag).toMatch(/^W\/"stats-100-\d+"$/);
+			expect(etag).toMatch(/^W\/"stats-[\w-]+"$/);
 
 			// Second request with matching ETag in if-none-match header
 			const req2 = createMockRequest({ "if-none-match": etag! });
@@ -341,6 +341,53 @@ describe("/api/v1/stats", () => {
 			expect(response2.status).toBe(304);
 			expect(response2.headers.get("ETag")).toBe(etag);
 			expect(response2.headers.get("Cache-Control")).toContain("public");
+		});
+
+		it("changes the ETag when data changes but totals do not (#495)", async () => {
+			const base = {
+				totals: {
+					all: 100,
+					applications: 50,
+					plugins: 25,
+					configs: 15,
+					stacks: 10,
+				},
+				platforms: { linux: 30, macos: 25, windows: 20 },
+				categories: {
+					applications: { "Development Tools": 30 },
+					plugins: { "package-manager": 15 },
+					configs: { Shell: 10 },
+				},
+				activity: { totalDownloads: 1100, dailyDownloads: 0 },
+				meta: { source: "database", version: "2.1.0", timestamp: "t1" },
+			};
+			let current: typeof base = base;
+			mockUnstableCache.mockImplementation(() => async () => current);
+
+			const etag = (await GET(createMockRequest())).headers.get("ETag") ?? "";
+
+			// Only meta changes: same data, same ETag.
+			current = { ...base, meta: { ...base.meta, timestamp: "t2" } };
+			const sameReq = createMockRequest({ "if-none-match": etag });
+			expect((await GET(sameReq)).status).toBe(304);
+
+			const variants = [
+				{
+					...base,
+					categories: {
+						...base.categories,
+						applications: { "Development Tools": 29, Utilities: 1 },
+					},
+				},
+				{ ...base, activity: { totalDownloads: 1200, dailyDownloads: 5 } },
+				{ ...base, platforms: { linux: 31, macos: 25, windows: 20 } },
+			];
+			for (const variant of variants) {
+				current = variant;
+				const res = await GET(createMockRequest({ "if-none-match": etag }));
+				expect(res.status).toBe(200);
+				expect(res.headers.get("ETag")).not.toBe(etag);
+			}
 		});
 
 		it("should handle zero download counts gracefully", async () => {
