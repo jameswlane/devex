@@ -27,6 +27,12 @@ interface PluginMetadata {
 	dependencies?: string[];
 	conflicts?: string[];
 	tags?: string[];
+	// Restored from the 2025 static registry.json shape (#512)
+	type: string;
+	priority: number;
+	status: string;
+	supports: Record<string, unknown>;
+	release_tag?: string;
 	requirements?: {
 		os_version?: string;
 		arch?: string[];
@@ -43,6 +49,7 @@ interface PlatformBinary {
 
 interface RegistryResponse {
 	base_url: string;
+	version: string;
 	plugins: Record<string, PluginMetadata>;
 	last_updated: string;
 }
@@ -149,6 +156,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 
 		const response: RegistryResponse = {
 			base_url: REGISTRY_CONFIG.PLUGINS_API_URL,
+			version: REGISTRY_CONFIG.REGISTRY_VERSION,
 			plugins: registryPlugins,
 			last_updated: new Date().toISOString(),
 		};
@@ -245,6 +253,15 @@ async function transformPluginToMetadata(
 		dependencies: plugin.dependencies,
 		conflicts: plugin.conflicts,
 		tags: extractTagsFromType(plugin.type),
+		type: plugin.type,
+		priority: plugin.priority,
+		status: plugin.status,
+		supports,
+		// Matches the tags release-please creates, e.g. packages/tool-shell/v0.2.4
+		release_tag:
+			version === "latest"
+				? undefined
+				: `packages/${normalizedName}/v${version.replace(/^v/, "")}`,
 		requirements: requirements,
 	};
 }

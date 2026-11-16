@@ -97,6 +97,59 @@ describe("/api/v1/registry.json", () => {
 		expect(data.plugins).toHaveProperty("package-manager-apt");
 	});
 
+	it("restores the registry version and per-plugin fields (#512)", async () => {
+		(prisma.plugin.findMany as Mock).mockResolvedValue([
+			{
+				id: "test-plugin-1",
+				name: "tool-shell",
+				type: "tool",
+				description: "Shell configuration plugin",
+				platforms: ["linux"],
+				version: "0.2.4",
+				githubPath: "packages/tool-shell",
+				githubUrl: "https://github.com/jameswlane/devex",
+				status: "active",
+				priority: 7,
+				supports: { setup: true, switch: true },
+				binaries: null,
+				dependencies: [],
+				conflicts: [],
+			},
+			{
+				id: "test-plugin-2",
+				name: "tool-git",
+				type: "tool",
+				description: "Git plugin",
+				platforms: ["linux"],
+				version: null,
+				githubPath: "packages/tool-git",
+				githubUrl: "https://github.com/jameswlane/devex",
+				status: "active",
+				priority: 5,
+				supports: {},
+				binaries: null,
+				dependencies: [],
+				conflicts: [],
+			},
+		]);
+		(prisma.plugin.count as Mock).mockResolvedValue(2);
+
+		const response = await GET(
+			new NextRequest("https://registry.devex.sh/api/v1/registry.json"),
+		);
+		const data = await response.json();
+
+		expect(data.version).toBe("1.0.0");
+		expect(data.plugins["tool-shell"]).toMatchObject({
+			type: "tool",
+			priority: 7,
+			status: "active",
+			supports: { setup: true, switch: true },
+			release_tag: "packages/tool-shell/v0.2.4",
+		});
+		expect(data.plugins["tool-git"]).not.toHaveProperty("release_tag");
+	});
+
 	it("should handle database errors gracefully", async () => {
 		(prisma.plugin.findMany as Mock).mockRejectedValue(
 			new Error("Database error"),
