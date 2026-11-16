@@ -3,10 +3,11 @@
 import { existsSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
-import { Prisma, PrismaClient } from "../generated/prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 import { binaryMetadataService } from "../lib/binary-metadata";
 import { isGitHubUrl } from "../lib/github-url";
 import { prismaConnectionOptions } from "../lib/prisma-connection";
+import { recordRegistryStatsSnapshot } from "../lib/registry-stats";
 
 // Path traversal protection utilities
 function sanitizePath(inputPath: string): string {
@@ -720,93 +721,16 @@ async function updateRegistryStats() {
 	console.log("📊 Updating registry statistics...");
 
 	try {
-		const [applicationsCount, pluginsCount, configsCount, stacksCount] =
-			await Promise.all([
-				prisma.application.count(),
-				prisma.plugin.count(),
-				prisma.config.count(),
-				prisma.stack.count(),
-			]);
-
-		// Count platform support using optimized JSON queries
-		const [linuxApps, macosApps, windowsApps] = await Promise.all([
-			prisma.application.count({
-				where: {
-					OR: [
-						{
-							platforms: {
-								path: ["linux"],
-								not: Prisma.JsonNull,
-							},
-						},
-						{ tags: { has: "linux" } },
-					],
-				},
-			}),
-			prisma.application.count({
-				where: {
-					OR: [
-						{
-							platforms: {
-								path: ["macos"],
-								not: Prisma.JsonNull,
-							},
-						},
-						{ tags: { has: "macos" } },
-					],
-				},
-			}),
-			prisma.application.count({
-				where: {
-					OR: [
-						{
-							platforms: {
-								path: ["windows"],
-								not: Prisma.JsonNull,
-							},
-						},
-						{ tags: { has: "windows" } },
-					],
-				},
-			}),
-		]);
-
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-
-		await prisma.registryStats.upsert({
-			where: { date: today },
-			update: {
-				totalApplications: applicationsCount,
-				totalPlugins: pluginsCount,
-				totalConfigs: configsCount,
-				totalStacks: stacksCount,
-				linuxSupported: linuxApps,
-				macosSupported: macosApps,
-				windowsSupported: windowsApps,
-			},
-			create: {
-				date: today,
-				totalApplications: applicationsCount,
-				totalPlugins: pluginsCount,
-				totalConfigs: configsCount,
-				totalStacks: stacksCount,
-				linuxSupported: linuxApps,
-				macosSupported: macosApps,
-				windowsSupported: windowsApps,
-				totalDownloads: 0,
-				dailyDownloads: 0,
-			},
-		});
+		const stats = await recordRegistryStatsSnapshot(prisma);
 
 		console.log("📊 Registry statistics updated:");
-		console.log(`   Applications: ${applicationsCount}`);
-		console.log(`   Plugins: ${pluginsCount}`);
-		console.log(`   Configs: ${configsCount}`);
-		console.log(`   Stacks: ${stacksCount}`);
-		console.log(`   Linux Support: ${linuxApps}`);
-		console.log(`   macOS Support: ${macosApps}`);
-		console.log(`   Windows Support: ${windowsApps}`);
+		console.log(`   Applications: ${stats.totals.applications}`);
+		console.log(`   Plugins: ${stats.totals.plugins}`);
+		console.log(`   Configs: ${stats.totals.configs}`);
+		console.log(`   Stacks: ${stats.totals.stacks}`);
+		console.log(`   Linux Support: ${stats.platforms.linux}`);
+		console.log(`   macOS Support: ${stats.platforms.macos}`);
+		console.log(`   Windows Support: ${stats.platforms.windows}`);
 	} catch (error) {
 		console.error("❌ Error updating registry statistics:", error);
 		throw error;

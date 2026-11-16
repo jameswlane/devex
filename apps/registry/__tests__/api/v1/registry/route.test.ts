@@ -13,7 +13,6 @@ vi.mock("@/lib/prisma", () => ({
 		application: { findMany: vi.fn(), count: vi.fn() },
 		config: { findMany: vi.fn(), count: vi.fn() },
 		stack: { findMany: vi.fn(), count: vi.fn() },
-		registryStats: { findFirst: vi.fn() },
 	},
 }));
 
@@ -99,21 +98,30 @@ describe("/api/v1/registry", () => {
 					plugin: {
 						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+						aggregate: vi
+							.fn()
+							.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 					},
 					application: {
 						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+						aggregate: vi
+							.fn()
+							.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 					},
 					config: {
 						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+						aggregate: vi
+							.fn()
+							.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 					},
 					stack: {
 						findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 						count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
-					},
-					registryStats: {
-						findFirst: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+						aggregate: vi
+							.fn()
+							.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 					},
 				});
 			},
@@ -133,29 +141,36 @@ describe("/api/v1/registry", () => {
 								.fn<() => Promise<(typeof mockPlugin)[]>>()
 								.mockResolvedValue([mockPlugin]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 1 } }),
 						},
 						application: {
 							findMany: vi
 								.fn<() => Promise<(typeof mockApplication)[]>>()
 								.mockResolvedValue([mockApplication]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 1 } }),
 						},
 						config: {
 							findMany: vi
 								.fn<() => Promise<(typeof mockConfig)[]>>()
 								.mockResolvedValue([mockConfig]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 1 } }),
 						},
 						stack: {
 							findMany: vi
 								.fn<() => Promise<(typeof mockStack)[]>>()
 								.mockResolvedValue([mockStack]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
-						},
-						registryStats: {
-							findFirst: vi
-								.fn<() => Promise<typeof mockStats>>()
-								.mockResolvedValue(mockStats),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 1 } }),
 						},
 					};
 					return await callback(tx);
@@ -177,6 +192,64 @@ describe("/api/v1/registry", () => {
 			expect(data.pagination.limit).toBe(50);
 		});
 
+		it("reports live stats with the same definition as /api/v1/stats (#483)", async () => {
+			const countWhere =
+				(values: Record<string, number>, fallback: number) =>
+				(args?: { where?: Record<string, unknown> }) =>
+					Promise.resolve(
+						args?.where ? (values[Object.keys(args.where)[0]] ?? 0) : fallback,
+					);
+			const sum = (n: number) =>
+				vi.fn().mockResolvedValue({ _sum: { downloadCount: n } });
+			mockPrisma.$transaction.mockImplementation(
+				async (callback: (tx: unknown) => Promise<unknown>) =>
+					callback({
+						plugin: {
+							findMany: vi.fn().mockResolvedValue([]),
+							count: vi.fn(countWhere({ status: 20 }, 25)),
+							aggregate: sum(38000),
+						},
+						application: {
+							findMany: vi.fn().mockResolvedValue([]),
+							count: vi.fn(
+								countWhere(
+									{ supportsLinux: 36, supportsMacOS: 17, supportsWindows: 14 },
+									40,
+								),
+							),
+							aggregate: sum(0),
+						},
+						config: {
+							findMany: vi.fn().mockResolvedValue([]),
+							count: vi.fn().mockResolvedValue(3),
+							aggregate: sum(100),
+						},
+						stack: {
+							findMany: vi.fn().mockResolvedValue([]),
+							count: vi.fn().mockResolvedValue(2),
+							aggregate: sum(58),
+						},
+					}),
+			);
+
+			const response = await GET(createMockRequest({ resource: "plugins" }));
+			const data = await response.json();
+
+			expect(data.stats.total).toEqual({
+				applications: 40,
+				plugins: 20,
+				configs: 3,
+				stacks: 2,
+				all: 65,
+			});
+			expect(data.stats.platforms).toEqual({
+				linux: 36,
+				macos: 17,
+				windows: 14,
+			});
+			expect(data.stats.activity.totalDownloads).toBe(38158);
+		});
+
 		it("should handle custom pagination parameters", async () => {
 			const req = createMockRequest({ page: "2", limit: "25" });
 
@@ -186,21 +259,30 @@ describe("/api/v1/registry", () => {
 						plugin: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						application: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						config: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						stack: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
-						},
-						registryStats: {
-							findFirst: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 					};
 
@@ -227,23 +309,30 @@ describe("/api/v1/registry", () => {
 								.fn<() => Promise<(typeof mockPlugin)[]>>()
 								.mockResolvedValue([mockPlugin]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 1 } }),
 						},
 						application: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						config: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						stack: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
-						},
-						registryStats: {
-							findFirst: vi
-								.fn<() => Promise<typeof mockStats>>()
-								.mockResolvedValue(mockStats),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 					};
 
@@ -265,21 +354,30 @@ describe("/api/v1/registry", () => {
 						plugin: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						application: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						config: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 						stack: {
 							findMany: vi.fn<() => Promise<never[]>>().mockResolvedValue([]),
 							count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
-						},
-						registryStats: {
-							findFirst: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+							aggregate: vi
+								.fn()
+								.mockResolvedValue({ _sum: { downloadCount: 0 } }),
 						},
 					};
 
@@ -301,7 +399,11 @@ describe("/api/v1/registry", () => {
 				applications: [],
 				configs: [],
 				stacks: [],
-				stats: null,
+				stats: {
+					totals: { applications: 0, plugins: 0, configs: 0, stacks: 0 },
+					platforms: { linux: 0, macos: 0, windows: 0 },
+					totalDownloads: 0,
+				},
 				totalCounts: { plugins: 0, applications: 0, configs: 0, stacks: 0 },
 			});
 
@@ -376,13 +478,4 @@ const mockStack = {
 	githubPath: "/path/to/stack",
 	downloadCount: 25,
 	lastDownload: new Date(),
-};
-
-const mockStats = {
-	linuxSupported: 10,
-	macosSupported: 8,
-	windowsSupported: 6,
-	totalDownloads: 1000,
-	dailyDownloads: 50,
-	date: new Date(),
 };

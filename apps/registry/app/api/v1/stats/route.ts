@@ -1,9 +1,11 @@
 import { unstable_cache } from "next/cache";
 import type { NextRequest, NextResponse } from "next/server";
+import type { PrismaClient } from "@/generated/prisma/client";
 import { getDailyDownloads } from "@/lib/download-stats";
 import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
 import { logPerformance } from "@/lib/logger";
 import { ensurePrisma } from "@/lib/prisma";
+import { computeRegistryStats } from "@/lib/registry-stats";
 import {
 	createOptimizedResponse,
 	ResponseType,
@@ -28,65 +30,18 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 
 				// Execute all queries in parallel with Prisma Accelerate caching
 				// This leverages Prisma's query optimization and Accelerate's edge cache
+				// Totals, platforms and downloads share one definition with
+				// /api/v1/registry (#483); only the breakdowns live here.
 				const [
-					applicationsCount,
-					pluginsCount,
-					configsCount,
-					stacksCount,
-					linuxApps,
-					macosApps,
-					windowsApps,
-					pluginDownloads,
-					configDownloads,
-					stackDownloads,
+					stats,
+					dailyDownloads,
 					appCategories,
 					pluginTypes,
 					configCategories,
-					dailyDownloads,
 				] = await Promise.all([
-					// Basic counts with Accelerate caching
-					prismaClient.application.count({
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-					prismaClient.plugin.count({
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-					prismaClient.config.count({
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-					prismaClient.stack.count({
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-
-					// Platform-specific counts
-					prismaClient.application.count({
-						where: { supportsLinux: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-					prismaClient.application.count({
-						where: { supportsMacOS: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-					prismaClient.application.count({
-						where: { supportsWindows: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-
-					// Download aggregations
-					prismaClient.plugin.aggregate({
-						_sum: { downloadCount: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-					prismaClient.config.aggregate({
-						_sum: { downloadCount: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-					prismaClient.stack.aggregate({
-						_sum: { downloadCount: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
-					}),
-
-					// Category breakdowns
+					computeRegistryStats(prismaClient as unknown as PrismaClient),
+					// Rolling 24h total from hourly buckets (null when unknown)
+					getDailyDownloads(),
 					prismaClient.application.groupBy({
 						by: ["category"],
 						_count: { category: true },
@@ -94,6 +49,7 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 					}),
 					prismaClient.plugin.groupBy({
 						by: ["type"],
+						where: { status: "active" },
 						_count: { type: true },
 						cacheStrategy: { swr: 600, ttl: 300 },
 					}),
@@ -102,16 +58,14 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 						_count: { category: true },
 						cacheStrategy: { swr: 600, ttl: 300 },
 					}),
-
-					// Rolling 24h total from hourly buckets (null when unknown)
-					getDailyDownloads(),
 				]);
-
-				// Calculate totals
-				const totalDownloads =
-					(pluginDownloads._sum.downloadCount || 0) +
-					(configDownloads._sum.downloadCount || 0) +
-					(stackDownloads._sum.downloadCount || 0);
+				const {
+					applications: applicationsCount,
+					plugins: pluginsCount,
+					configs: configsCount,
+					stacks: stacksCount,
+				} = stats.totals;
+				const totalDownloads = stats.totalDownloads;
 
 				const queryTime = Date.now() - startTime;
 				logPerformance("stats:aggregation", queryTime, {
@@ -131,11 +85,7 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 						stacks: stacksCount,
 						all: applicationsCount + pluginsCount + configsCount + stacksCount,
 					},
-					platforms: {
-						linux: linuxApps,
-						macos: macosApps,
-						windows: windowsApps,
-					},
+					platforms: stats.platforms,
 					categories: {
 						applications: appCategories.reduce(
 							(acc: Record<string, number>, cat: any) => {

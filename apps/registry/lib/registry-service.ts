@@ -1,6 +1,8 @@
+import type { Prisma } from "../generated/prisma/client";
 import { dbCircuitBreaker } from "./db-health";
 import { logger } from "./logger";
 import { prisma } from "./prisma";
+import { computeRegistryStats } from "./registry-stats";
 import { transformationService } from "./transformation-service";
 import type {
 	ApplicationResponse,
@@ -164,19 +166,8 @@ export class RegistryService {
 								: [],
 						]),
 
-						// Stats query with separate caching strategy
-						tx.registryStats.findFirst({
-							orderBy: { date: "desc" },
-							select: {
-								linuxSupported: true,
-								macosSupported: true,
-								windowsSupported: true,
-								totalDownloads: true,
-								dailyDownloads: true,
-								date: true,
-							},
-							...this.getCacheStrategy("stats"),
-						}),
+						// Same definition as /api/v1/stats (#483)
+						computeRegistryStats(tx as unknown as Prisma.TransactionClient),
 					]);
 
 					const [pluginCount, applicationCount, configCount, stackCount] =

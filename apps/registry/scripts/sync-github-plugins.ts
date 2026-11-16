@@ -12,6 +12,7 @@ import { PrismaClient } from "../generated/prisma/client";
 import { requestPluginCdnPurge } from "../lib/cdn-cache";
 import { githubApi } from "../lib/github-api";
 import { prismaConnectionOptions } from "../lib/prisma-connection";
+import { recordRegistryStatsSnapshot } from "../lib/registry-stats";
 import {
 	buildReleasePayload,
 	type GitHubRelease,
@@ -394,48 +395,9 @@ async function logSyncOperation(
  * Update registry statistics
  */
 async function updateRegistryStats(db: PrismaClient = defaultPrisma) {
-	const [pluginCount, applicationCount, configCount, stackCount] =
-		await Promise.all([
-			db.plugin.count({ where: { status: "active" } }),
-			db.application.count(),
-			db.config.count(),
-			db.stack.count(),
-		]);
-
-	const [linuxPlugins, macosPlugins, windowsPlugins] = await Promise.all([
-		db.plugin.count({ where: { platforms: { has: "linux" } } }),
-		db.plugin.count({ where: { platforms: { has: "macos" } } }),
-		db.plugin.count({ where: { platforms: { has: "windows" } } }),
-	]);
-
-	const today = new Date();
-	today.setHours(0, 0, 0, 0);
-
-	await db.registryStats.upsert({
-		where: { date: today },
-		update: {
-			totalPlugins: pluginCount,
-			totalApplications: applicationCount,
-			totalConfigs: configCount,
-			totalStacks: stackCount,
-			linuxSupported: linuxPlugins,
-			macosSupported: macosPlugins,
-			windowsSupported: windowsPlugins,
-		},
-		create: {
-			date: today,
-			totalPlugins: pluginCount,
-			totalApplications: applicationCount,
-			totalConfigs: configCount,
-			totalStacks: stackCount,
-			linuxSupported: linuxPlugins,
-			macosSupported: macosPlugins,
-			windowsSupported: windowsPlugins,
-		},
-	});
-
+	const stats = await recordRegistryStatsSnapshot(db);
 	console.log(
-		`📊 Updated registry stats: ${pluginCount} plugins, ${applicationCount} apps`,
+		`📊 Updated registry stats: ${stats.totals.plugins} plugins, ${stats.totals.applications} apps`,
 	);
 }
 

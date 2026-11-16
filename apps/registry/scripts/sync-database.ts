@@ -9,6 +9,7 @@ import {
 	applicationPlatformData,
 } from "../lib/application-platforms";
 import { prismaConnectionOptions } from "../lib/prisma-connection";
+import { recordRegistryStatsSnapshot } from "../lib/registry-stats";
 
 // Get GitHub URL from environment variable
 const GITHUB_BASE_URL =
@@ -341,58 +342,8 @@ async function updateRegistryStats(prisma: PrismaClient = defaultPrisma) {
 	console.log("📊 Updating registry statistics...");
 
 	try {
-		const [
-			applications,
-			plugins,
-			configs,
-			stacks,
-			linuxApps,
-			macosApps,
-			windowsApps,
-		] = await Promise.all([
-			prisma.application.count(),
-			prisma.plugin.count(),
-			prisma.config.count(),
-			prisma.stack.count(),
-			prisma.application.count({ where: { supportsLinux: true } }),
-			prisma.application.count({ where: { supportsMacOS: true } }),
-			prisma.application.count({ where: { supportsWindows: true } }),
-		]);
-
-		// Use today's date as the key for upsert (consistent with sync-github-plugins.ts)
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-
-		await prisma.registryStats.upsert({
-			where: { date: today },
-			update: {
-				totalApplications: applications,
-				totalPlugins: plugins,
-				totalConfigs: configs,
-				totalStacks: stacks,
-				linuxSupported: linuxApps,
-				macosSupported: macosApps,
-				windowsSupported: windowsApps,
-				totalDownloads: 0,
-				dailyDownloads: 0,
-			},
-			create: {
-				date: today,
-				totalApplications: applications,
-				totalPlugins: plugins,
-				totalConfigs: configs,
-				totalStacks: stacks,
-				linuxSupported: linuxApps,
-				macosSupported: macosApps,
-				windowsSupported: windowsApps,
-				totalDownloads: 0,
-				dailyDownloads: 0,
-			},
-		});
-
-		console.log(
-			`  ✅ Updated registry statistics for ${today.toISOString().split("T")[0]}`,
-		);
+		await recordRegistryStatsSnapshot(prisma);
+		console.log("  ✅ Updated registry statistics");
 	} catch (error) {
 		console.error(`  ❌ Failed to update registry statistics:`, error);
 		throw error;
