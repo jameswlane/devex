@@ -144,13 +144,15 @@ async function getGitHubPath(
 	}
 }
 
-function createPlatformInfo(platformData: any) {
+// Stores the same snake_case keys as scripts/sync-database.ts, which the API
+// serves unchanged (see lib/application-platforms.ts).
+export function createPlatformInfo(platformData: any) {
 	if (!platformData) return null;
 
 	return {
-		installMethod: platformData.installMethod,
-		installCommand: platformData.installCommand,
-		officialSupport: platformData.officialSupport || false,
+		install_method: platformData.installMethod,
+		install_command: platformData.installCommand,
+		official_support: platformData.officialSupport || false,
 		alternatives: platformData.alternatives || [],
 	};
 }
