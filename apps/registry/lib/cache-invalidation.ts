@@ -1,6 +1,8 @@
+import { CacheTags, revalidateCacheTags } from "./cache-revalidation";
 import { invalidateCdnTags, pluginCacheTags } from "./cdn-cache";
-import { dbCircuitBreaker } from "./db-health";
 import { logger } from "./logger";
+import { pluginCache } from "./plugin-cache";
+import { prisma } from "./prisma";
 import { redis } from "./redis";
 import { transformationService } from "./transformation-service";
 
@@ -136,22 +138,52 @@ export interface InvalidationOptions {
 	waitForCompletion?: boolean;
 }
 
+// Redis namespaces that hold derived cache data. Pattern deletion is limited to
+// these so "clear all" never wipes rate limits, nonces, audit logs or counters.
+export const CACHE_NAMESPACES = ["query:", "transform:", "registry:"] as const;
+
+// Prisma Accelerate tags set by RegistryService cache strategies.
+const ACCELERATE_TAGS: Record<string, string[]> = {
+	application: ["registry", "search", "stats", "popular"],
+	plugin: ["registry", "search", "stats", "popular"],
+	config: ["registry", "search", "stats", "popular"],
+	stack: ["registry", "search", "stats", "popular"],
+	stats: ["stats", "popular"],
+};
+const ACCELERATE_TAGS_PER_CALL = 5;
+
+// Next.js data-cache tags (unstable_cache) affected by each resource.
+const NEXT_LIST_TAGS: Record<string, string> = {
+	application: CacheTags.APPLICATIONS,
+	plugin: CacheTags.PLUGINS,
+	config: CacheTags.CONFIGS,
+	stack: CacheTags.STACKS,
+};
+
+const TRANSFORM_TYPES: Record<
+	string,
+	("plugins" | "applications" | "configs" | "stacks")[]
+> = {
+	plugin: ["plugins"],
+	application: ["applications"],
+	config: ["configs"],
+	stack: ["stacks"],
+	all: ["plugins", "applications", "configs", "stacks"],
+};
+
+// Shared across serverless instances; per-instance counters always read 0.
+const STATS_PREFIX = "cache_invalidation:stats:";
+const STATS_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 /**
  * Main cache invalidation service class with race condition prevention
  */
 export class CacheInvalidationService {
 	private invalidationInProgress = new Set<string>();
-	private invalidationStats = {
-		total: 0,
-		successful: 0,
-		failed: 0,
-		lastInvalidation: null as Date | null,
-	};
 
 	// Distributed locks to prevent race conditions
 	private lockPrefix = "cache_invalidation_lock:";
 	private lockTTL = 30000; // 30 seconds
-	private maxLockWait = 5000; // 5 seconds max wait for lock
 
 	/**
 	 * Invalidate caches based on specified options with race condition prevention
@@ -184,38 +216,19 @@ export class CacheInvalidationService {
 				lockKey,
 			});
 
-			// Build list of patterns to invalidate
 			const patterns = this.buildInvalidationPatterns(options);
+			const work = this.runInvalidation(options, patterns).then(
+				() => this.recordOutcome(true),
+				async (error) => {
+					await this.recordOutcome(false);
+					throw error;
+				},
+			);
 
-			// Execute invalidation in parallel for all patterns
-			const invalidationPromises: Promise<void>[] = [];
-
-			// 1. Invalidate Redis caches
-			invalidationPromises.push(this.invalidateRedisPatterns(patterns));
-
-			// 2. Invalidate transformation caches
-			if (options.resource && options.resource !== "all") {
-				invalidationPromises.push(
-					this.invalidateTransformationCache(options.resource),
-				);
-			}
-
-			// 3. Invalidate database query caches (if enabled)
-			if (options.invalidateDatabase) {
-				invalidationPromises.push(this.invalidateDatabaseCache(options));
-			}
-
-			// 4. Invalidate CDN caches (if enabled)
-			if (options.invalidateCDN) {
-				invalidationPromises.push(this.invalidateCDNCache(options));
-			}
-
-			// Wait for all invalidations if requested
 			if (options.waitForCompletion) {
-				await Promise.all(invalidationPromises);
+				await work;
 			} else {
-				// Fire and forget, but still log errors
-				Promise.all(invalidationPromises).catch((error) => {
+				work.catch((error) => {
 					logger.error("Background cache invalidation failed", {
 						error: error instanceof Error ? error.message : String(error),
 						invalidationId,
@@ -223,19 +236,13 @@ export class CacheInvalidationService {
 				});
 			}
 
-			// Update stats
-			this.invalidationStats.successful++;
-			this.invalidationStats.lastInvalidation = new Date();
-
-			const duration = Date.now() - startTime;
 			logger.info("Cache invalidation completed", {
 				options,
 				invalidationId,
-				duration,
+				duration: Date.now() - startTime,
 				patternsInvalidated: patterns.length,
 			});
 		} catch (error) {
-			this.invalidationStats.failed++;
 			logger.error(
 				"Cache invalidation failed",
 				{
@@ -249,7 +256,6 @@ export class CacheInvalidationService {
 			throw error;
 		} finally {
 			this.invalidationInProgress.delete(invalidationId);
-			this.invalidationStats.total++;
 
 			// Always release the lock
 			if (lockAcquired) {
@@ -261,6 +267,38 @@ export class CacheInvalidationService {
 					});
 				});
 			}
+		}
+	}
+
+	/**
+	 * Clear origin layers first, then the CDN. Purging the CDN while origin
+	 * caches still hold old data lets the next request refill it with stale data.
+	 * Every origin layer runs even if another fails; any failure is rethrown.
+	 */
+	private async runInvalidation(
+		options: InvalidationOptions,
+		patterns: string[],
+	): Promise<void> {
+		const origin = await Promise.allSettled([
+			this.invalidateRedisPatterns(patterns),
+			this.invalidateTransformationCache(options.resource),
+			this.invalidateProcessCaches(options.resource),
+			this.invalidateNextDataCache(options),
+			options.invalidateDatabase
+				? this.invalidateDatabaseCache(options)
+				: Promise.resolve(),
+		]);
+		const failures = origin
+			.filter((r): r is PromiseRejectedResult => r.status === "rejected")
+			.map((r) => r.reason);
+		if (failures.length > 0) {
+			throw failures.length === 1
+				? failures[0]
+				: new AggregateError(failures, "Cache invalidation failed");
+		}
+
+		if (options.invalidateCDN) {
+			await this.invalidateCDNCache(options);
 		}
 	}
 
@@ -317,7 +355,6 @@ export class CacheInvalidationService {
 				`query:${resource}:${id}:*`,
 				`transform:${resource}:${id}:*`,
 				`registry:${resource}:${id}:*`,
-				`${resource}:${id}:*`,
 			);
 		}
 
@@ -331,12 +368,12 @@ export class CacheInvalidationService {
 		if (patterns.length === 0) return;
 
 		try {
-			// Use Redis SCAN to find and delete matching keys
+			let deleted = 0;
 			for (const pattern of patterns) {
-				await this.deleteKeysByPattern(pattern);
+				deleted += await this.deleteKeysByPattern(pattern);
 			}
 
-			logger.debug("Redis cache patterns invalidated", { patterns });
+			logger.debug("Redis cache patterns invalidated", { patterns, deleted });
 		} catch (error) {
 			logger.error("Failed to invalidate Redis patterns", {
 				error: error instanceof Error ? error.message : String(error),
@@ -347,143 +384,93 @@ export class CacheInvalidationService {
 	}
 
 	/**
-	 * Delete Redis keys matching a pattern
+	 * Delete every Redis key matching a pattern inside a cache namespace.
 	 */
 	private async deleteKeysByPattern(pattern: string): Promise<number> {
-		let deletedCount = 0;
-
-		try {
-			// For Upstash Redis, we need to handle this differently
-			// since it doesn't support SCAN command directly
-
-			// Try to get all keys matching the pattern
-			// Note: This is a simplified implementation for Upstash
-			const keysToDelete: string[] = [];
-
-			// Common key prefixes based on our patterns
-			const prefixes = [
-				"query:",
-				"transform:",
-				"registry:",
-				"rate:",
-				"metrics:",
-			];
-
-			// For each prefix, try to find matching keys
-			for (const prefix of prefixes) {
-				if (pattern.startsWith(prefix) || pattern === "*") {
-					// Generate possible keys based on pattern
-					const baseKey = pattern.replace(/\*/g, "");
-
-					// Try to delete common variations
-					const variations = [
-						baseKey,
-						`${baseKey}1`,
-						`${baseKey}page:1`,
-						`${baseKey}limit:50`,
-						`${baseKey}all`,
-						`${baseKey}list`,
-						`${baseKey}detail`,
-					];
-
-					for (const key of variations) {
-						if (key && key !== "") {
-							keysToDelete.push(key);
-						}
-					}
-				}
-			}
-
-			// Delete keys in batches
-			const batchSize = 50;
-			for (let i = 0; i < keysToDelete.length; i += batchSize) {
-				const batch = keysToDelete.slice(i, i + batchSize);
-				const deletePromises = batch.map(async (key) => {
-					try {
-						await redis.del(key);
-						return 1;
-					} catch {
-						return 0;
-					}
-				});
-
-				const results = await Promise.all(deletePromises);
-				deletedCount += results.reduce<number>((sum, count) => sum + count, 0);
-			}
-
-			if (deletedCount > 0) {
-				logger.debug("Deleted Redis keys", { pattern, count: deletedCount });
-			}
-		} catch (error) {
-			logger.warn("Failed to delete keys by pattern", {
+		if (!CACHE_NAMESPACES.some((ns) => pattern.startsWith(ns))) {
+			logger.warn("Skipping pattern outside cache namespaces", {
 				pattern,
-				error: error instanceof Error ? error.message : String(error),
+				namespaces: CACHE_NAMESPACES,
 			});
+			return 0;
 		}
 
-		return deletedCount;
+		const keys = await redis.scan(pattern);
+		const batchSize = 50;
+		for (let i = 0; i < keys.length; i += batchSize) {
+			await Promise.all(
+				keys.slice(i, i + batchSize).map((key) => redis.del(key)),
+			);
+		}
+
+		if (keys.length > 0) {
+			logger.debug("Deleted Redis keys", { pattern, count: keys.length });
+		}
+		return keys.length;
 	}
 
 	/**
 	 * Invalidate transformation service caches
 	 */
-	private async invalidateTransformationCache(resource: string): Promise<void> {
-		try {
-			// Map resource to transformation service types
-			const typeMap: Record<
-				string,
-				("plugins" | "applications" | "configs" | "stacks")[]
-			> = {
-				plugin: ["plugins"],
-				application: ["applications"],
-				config: ["configs"],
-				stack: ["stacks"],
-				all: ["plugins", "applications", "configs", "stacks"],
-			};
+	private async invalidateTransformationCache(
+		resource?: InvalidationOptions["resource"],
+	): Promise<void> {
+		const types = resource ? TRANSFORM_TYPES[resource] : undefined;
+		if (!types) return;
+		await transformationService.invalidateTransformationCache(types);
+		logger.debug("Transformation cache invalidated", { resource, types });
+	}
 
-			const types = typeMap[resource];
-			if (types) {
-				await transformationService.invalidateTransformationCache(types);
-				logger.debug("Transformation cache invalidated", { resource, types });
-			}
-		} catch (error) {
-			logger.error("Failed to invalidate transformation cache", {
-				error: error instanceof Error ? error.message : String(error),
-				resource,
-			});
-			throw error;
+	/**
+	 * Clear caches held in this process's memory (registry.json plugin batches).
+	 */
+	private async invalidateProcessCaches(
+		resource?: InvalidationOptions["resource"],
+	): Promise<void> {
+		if (resource === "plugin" || resource === "all") {
+			pluginCache.clear();
 		}
 	}
 
 	/**
-	 * Invalidate database query caches (Prisma Accelerate)
+	 * Revalidate Next.js data-cache tags. revalidateTag only works inside the
+	 * Next runtime; standalone scripts ask the deployed registry to purge instead.
+	 */
+	private async invalidateNextDataCache(
+		options: InvalidationOptions,
+	): Promise<void> {
+		const tags = nextDataCacheTags(options);
+		if (tags.length === 0) return;
+		if (!process.env.NEXT_RUNTIME) {
+			logger.debug("Skipping Next.js tag revalidation outside Next runtime", {
+				tags,
+			});
+			return;
+		}
+		await revalidateCacheTags(tags);
+	}
+
+	/**
+	 * Invalidate Prisma Accelerate query caches by tag.
 	 */
 	private async invalidateDatabaseCache(
 		options: InvalidationOptions,
 	): Promise<void> {
-		try {
-			// Prisma Accelerate handles cache invalidation automatically
-			// when data is modified through Prisma operations
-			// This is a placeholder for manual invalidation if needed
+		if (!usesAccelerate()) return;
 
-			logger.debug("Database cache invalidation triggered", {
-				resource: options.resource,
-				id: options.id,
-			});
-
-			// If we need to force database cache invalidation,
-			// we could execute a dummy update query to trigger Prisma's invalidation
-			if (options.resource && options.id) {
-				// Example: Touch the updated_at field to trigger cache invalidation
-				// This would be resource-specific
-			}
-		} catch (error) {
-			logger.error("Failed to invalidate database cache", {
-				error: error instanceof Error ? error.message : String(error),
-				options,
-			});
-			// Don't throw - database cache invalidation is not critical
+		if (options.resource === "all") {
+			await prisma.$accelerate.invalidateAll();
+			logger.debug("Accelerate cache fully invalidated");
+			return;
 		}
+
+		const tags = accelerateTags(options);
+		for (let i = 0; i < tags.length; i += ACCELERATE_TAGS_PER_CALL) {
+			await prisma.$accelerate.invalidate({
+				tags: tags.slice(i, i + ACCELERATE_TAGS_PER_CALL),
+			});
+		}
+		logger.debug("Accelerate cache tags invalidated", { tags });
 	}
 
 	/** Invalidate Vercel CDN responses independently of Next.js data caches. */
@@ -498,12 +485,44 @@ export class CacheInvalidationService {
 		);
 	}
 
+	private async recordOutcome(success: boolean): Promise<void> {
+		try {
+			const keys = [
+				`${STATS_PREFIX}total`,
+				`${STATS_PREFIX}${success ? "successful" : "failed"}`,
+			];
+			for (const key of keys) {
+				await redis.incr(key);
+				await redis.expire(key, STATS_TTL_SECONDS);
+			}
+			await redis.set(
+				`${STATS_PREFIX}last`,
+				new Date().toISOString(),
+				STATS_TTL_SECONDS,
+			);
+		} catch (error) {
+			logger.warn("Failed to record cache invalidation stats", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
 	/**
-	 * Get invalidation statistics
+	 * Get invalidation statistics shared across instances
 	 */
-	getStats() {
+	async getStats() {
+		const [total, successful, failed, last] = await redis.mget(
+			`${STATS_PREFIX}total`,
+			`${STATS_PREFIX}successful`,
+			`${STATS_PREFIX}failed`,
+			`${STATS_PREFIX}last`,
+		);
+		const count = (value: string | null) => Number(value ?? 0) || 0;
 		return {
-			...this.invalidationStats,
+			total: count(total),
+			successful: count(successful),
+			failed: count(failed),
+			lastInvalidation: last ? new Date(last) : null,
 			inProgress: this.invalidationInProgress.size,
 		};
 	}
@@ -523,10 +542,10 @@ export class CacheInvalidationService {
 
 		await this.invalidate({
 			resource: "all",
-			tags: [CACHE_TAGS.ALL, CACHE_TAGS.GLOBAL],
+			tags: [CACHE_TAGS.ALL],
 			invalidateCDN: true,
 			invalidateDatabase: true,
-			patterns: ["*"],
+			patterns: CACHE_NAMESPACES.map((ns) => `${ns}*`),
 			waitForCompletion: true,
 		});
 
@@ -624,6 +643,42 @@ export class CacheInvalidationService {
 	}
 }
 
+function usesAccelerate(): boolean {
+	const url = process.env.PRISMA_DATABASE_URL;
+	return (
+		!!url &&
+		(url.startsWith("prisma://") || url.startsWith("prisma+postgres://"))
+	);
+}
+
+function accelerateTags(options: InvalidationOptions): string[] {
+	const tags = new Set<string>(
+		options.resource ? (ACCELERATE_TAGS[options.resource] ?? []) : [],
+	);
+	for (const tag of options.tags ?? []) {
+		if (Object.values(ACCELERATE_TAGS).some((known) => known.includes(tag))) {
+			tags.add(tag);
+		}
+	}
+	return [...tags];
+}
+
+function nextDataCacheTags(options: InvalidationOptions): string[] {
+	const { resource, id } = options;
+	if (!resource) return [];
+	const tags = new Set<string>([CacheTags.STATS, CacheTags.REGISTRY_STATS]);
+	if (resource === "all") {
+		for (const tag of Object.values(NEXT_LIST_TAGS)) tags.add(tag);
+		tags.add(CacheTags.SEARCH);
+		tags.add(CacheTags.CATEGORIES);
+		return [...tags];
+	}
+	const listTag = NEXT_LIST_TAGS[resource];
+	if (listTag) tags.add(listTag);
+	if (id && resource !== "stats") tags.add(`${resource}-${id}`);
+	return [...tags];
+}
+
 // Export singleton instance
 export const cacheInvalidation = new CacheInvalidationService();
 
@@ -647,7 +702,10 @@ export async function invalidateRegistryCache(
 }
 
 /**
- * Helper function for invalidating caches after data modification
+ * Helper function for invalidating caches after data modification.
+ * Waits for the origin layers so a caller's CDN purge afterwards cannot be
+ * refilled from stale origin data. The write has already committed, so
+ * invalidation failures are logged rather than failing the request.
  */
 export async function invalidateOnDataChange(
 	operation: "create" | "update" | "delete",
@@ -655,34 +713,36 @@ export async function invalidateOnDataChange(
 	id?: string,
 	affectedIds?: string[],
 ): Promise<void> {
-	const invalidationPromises: Promise<void>[] = [];
-
-	// Invalidate the main resource
-	invalidationPromises.push(
+	const wait = { waitForCompletion: true };
+	const results = await Promise.allSettled([
 		invalidateRegistryCache(resource, id, {
+			...wait,
 			invalidateCDN: operation === "delete", // Only invalidate CDN on delete
 		}),
-	);
+		...(affectedIds ?? []).map((affectedId) =>
+			invalidateRegistryCache(resource, affectedId, {
+				...wait,
+				invalidateCDN: false, // Skip CDN for related resources
+			}),
+		),
+		// Always invalidate stats and list views
+		invalidateRegistryCache("stats", undefined, wait),
+		invalidateRegistryCache(resource, undefined, wait),
+	]);
 
-	// Invalidate affected resources
-	if (affectedIds && affectedIds.length > 0) {
-		for (const affectedId of affectedIds) {
-			invalidationPromises.push(
-				invalidateRegistryCache(resource, affectedId, {
-					invalidateCDN: false, // Skip CDN for related resources
-				}),
-			);
+	for (const result of results) {
+		if (result.status === "rejected") {
+			logger.error("Cache invalidation after data change failed", {
+				operation,
+				resource,
+				id,
+				error:
+					result.reason instanceof Error
+						? result.reason.message
+						: String(result.reason),
+			});
 		}
 	}
-
-	// Always invalidate stats and list views
-	invalidationPromises.push(
-		invalidateRegistryCache("stats"),
-		invalidateRegistryCache(resource), // List view
-	);
-
-	// Execute all invalidations in parallel
-	await Promise.all(invalidationPromises);
 }
 
 /**

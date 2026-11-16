@@ -129,6 +129,39 @@ export interface RedisStore {
 	mset(keyValues: Record<string, string>, ttlSeconds?: number): Promise<void>;
 	ping(): Promise<string>;
 	disconnect(): Promise<void>;
+	/** Return every key matching a glob pattern, walking SCAN to completion. */
+	scan(pattern: string): Promise<string[]>;
+}
+
+const SCAN_COUNT = 500;
+
+// Walk a cursor-based SCAN to completion. Redis returns cursor "0" when done.
+async function scanAll(
+	step: (cursor: string) => Promise<[string | number, string[]]>,
+): Promise<string[]> {
+	const keys = new Set<string>();
+	let cursor = "0";
+	do {
+		const [next, batch] = await step(cursor);
+		for (const key of batch) keys.add(key);
+		cursor = String(next);
+	} while (cursor !== "0");
+	return [...keys];
+}
+
+// Glob matching for the in-memory store: `*`, `?` and literal characters.
+function globToRegExp(pattern: string): RegExp {
+	const escaped = pattern
+		.split("")
+		.map((ch) =>
+			ch === "*"
+				? ".*"
+				: ch === "?"
+					? "."
+					: ch.replace(/[.+^${}()|[\]\\]/g, "\\$&"),
+		)
+		.join("");
+	return new RegExp(`^${escaped}$`);
 }
 
 // Upstash returns numbers or parsed JSON when automatic deserialization is
@@ -199,6 +232,16 @@ class UpstashRedisStore implements RedisStore {
 	async disconnect(): Promise<void> {
 		// Upstash Redis doesn't need explicit disconnection
 	}
+
+	async scan(pattern: string): Promise<string[]> {
+		return scanAll(async (cursor) => {
+			const [next, keys] = await this.client.scan(cursor, {
+				match: pattern,
+				count: SCAN_COUNT,
+			});
+			return [next, keys.map(String)];
+		});
+	}
 }
 
 // IORedis implementation
@@ -259,6 +302,12 @@ class IORedisStore implements RedisStore {
 
 	async disconnect(): Promise<void> {
 		await this.client.quit();
+	}
+
+	async scan(pattern: string): Promise<string[]> {
+		return scanAll((cursor) =>
+			this.client.scan(cursor, "MATCH", pattern, "COUNT", SCAN_COUNT),
+		);
 	}
 }
 
@@ -323,6 +372,17 @@ class InMemoryStore implements RedisStore {
 
 	async disconnect(): Promise<void> {
 		this.store.clear();
+	}
+
+	async scan(pattern: string): Promise<string[]> {
+		const matcher = globToRegExp(pattern);
+		const now = Date.now();
+		return [...this.store.entries()]
+			.filter(
+				([key, item]) =>
+					(!item.expiry || item.expiry >= now) && matcher.test(key),
+			)
+			.map(([key]) => key);
 	}
 }
 

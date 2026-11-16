@@ -8,6 +8,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { REVALIDATE_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
+import { invalidateRegistryCache } from "@/lib/cache-invalidation";
 import {
 	CacheTags,
 	revalidateCachePath,
@@ -16,7 +17,6 @@ import {
 	revalidateEntity,
 	revalidateStatsCaches,
 } from "@/lib/cache-revalidation";
-import { invalidateCdnTags, pluginCacheTags } from "@/lib/cdn-cache";
 import { withErrorHandling } from "@/lib/error-handler";
 import { logger } from "@/lib/logger";
 
@@ -35,7 +35,11 @@ async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
 	try {
 		switch (type) {
 			case "plugin-cdn":
-				await invalidateCdnTags(pluginCacheTags());
+				// Standalone syncs can't reach this Function's caches; clear the
+				// origin layers before the CDN so it doesn't refill with stale data.
+				await invalidateRegistryCache("plugin", undefined, {
+					waitForCompletion: true,
+				});
 				break;
 			case "tag":
 				if (!tags || !Array.isArray(tags)) {
