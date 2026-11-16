@@ -613,6 +613,7 @@ export class RegistryTransformationService {
 		configs: ConfigWithExtras[];
 		stacks: StackWithExtras[];
 		stats: RegistryStatsSnapshot;
+		dailyDownloads: number | null;
 		totalCounts: {
 			plugins: number;
 			applications: number;
@@ -683,7 +684,7 @@ export class RegistryTransformationService {
 				platforms: data.stats.platforms,
 				activity: {
 					totalDownloads: data.stats.totalDownloads,
-					dailyDownloads: 0,
+					dailyDownloads: data.dailyDownloads,
 				},
 				lastUpdated: new Date().toISOString(),
 			},

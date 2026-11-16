@@ -1,5 +1,6 @@
 import type { Prisma } from "../generated/prisma/client";
 import { dbCircuitBreaker } from "./db-health";
+import { getDailyDownloads } from "./download-stats";
 import { logger } from "./logger";
 import { prisma } from "./prisma";
 import { computeRegistryStats } from "./registry-stats";
@@ -40,7 +41,10 @@ export class RegistryService {
 		const { page, limit, resource = "all" } = params;
 		const skip = (page - 1) * limit;
 
-		return await dbCircuitBreaker.execute(() =>
+		// Rolling 24h downloads, read the same way as /api/v1/stats (#483)
+		const dailyDownloadsPromise = getDailyDownloads();
+
+		const result = await dbCircuitBreaker.execute(() =>
 			prisma.$transaction(
 				async (tx) => {
 					// Use Promise.all for parallel execution with optimized queries
@@ -193,6 +197,8 @@ export class RegistryService {
 				},
 			),
 		);
+
+		return { ...result, dailyDownloads: await dailyDownloadsPromise };
 	}
 
 	// Search across resources with full-text search

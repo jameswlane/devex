@@ -99,7 +99,7 @@ export interface RegistryStats {
 	};
 	activity: {
 		totalDownloads: number;
-		dailyDownloads: number;
+		dailyDownloads: number | null;
 	};
 	lastUpdated: string;
 }

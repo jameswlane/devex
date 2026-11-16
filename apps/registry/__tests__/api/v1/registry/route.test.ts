@@ -46,6 +46,11 @@ vi.mock("@/lib/redis", () => ({
 	})),
 }));
 
+// Rolling 24h download total, shared with /api/v1/stats
+vi.mock("@/lib/download-stats", () => ({
+	getDailyDownloads: vi.fn().mockResolvedValue(42),
+}));
+
 // Mock db-health
 vi.mock("@/lib/db-health", () => ({
 	dbCircuitBreaker: {
@@ -247,7 +252,10 @@ describe("/api/v1/registry", () => {
 				macos: 17,
 				windows: 14,
 			});
-			expect(data.stats.activity.totalDownloads).toBe(38158);
+			expect(data.stats.activity).toEqual({
+				totalDownloads: 38158,
+				dailyDownloads: 42,
+			});
 		});
 
 		it("should handle custom pagination parameters", async () => {
