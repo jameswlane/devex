@@ -326,4 +326,21 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 			expect(response.headers.get("location")).toBe(pinnedDarwinUrl);
 		});
 	});
+
+	it.each([
+		"https://registry.devex.sh/api/v1/plugins/package-manager-apt/download/linux-amd64",
+		"http://localhost/api/v1/plugins/apt/download/linux-amd64?version=1.0.0",
+	])("refuses to redirect back into the download route (%s)", async (url) => {
+		mockPrisma.plugin.findUnique.mockResolvedValue({
+			...plugin,
+			binaries: { "linux-amd64": { url, checksum: "", size: 1 } },
+		});
+
+		const response = await GET(request(), params);
+
+		expect(response.status).toBe(502);
+		expect(response.headers.get("location")).toBeNull();
+		expect(mockPrisma.plugin.update).not.toHaveBeenCalled();
+		expect(recordDownload).not.toHaveBeenCalled();
+	});
 });

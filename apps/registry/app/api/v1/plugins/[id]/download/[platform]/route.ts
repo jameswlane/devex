@@ -84,6 +84,18 @@ export async function GET(
 
 		const githubDownloadUrl = binary.url;
 
+		// Legacy seeding stored this route's own URL as the binary; redirecting
+		// there would loop forever
+		if (isRegistryDownloadUrl(githubDownloadUrl, request)) {
+			console.error(
+				`Plugin ${plugin.name}@${version} ${platform} binary points back at the registry: ${githubDownloadUrl}`,
+			);
+			return createApiError(
+				`Binary for ${plugin.name} on ${platform} is misconfigured`,
+				502,
+			);
+		}
+
 		// CI (our e2e suite) marks its requests so they don't inflate public counts
 		const automated = isAutomatedDownload(request);
 		if (!automated) {
@@ -130,6 +142,21 @@ export async function GET(
 function isAutomatedDownload(request: NextRequest): boolean {
 	const marker = request.headers.get("x-devex-ci")?.trim().toLowerCase();
 	return marker === "1" || marker === "true";
+}
+
+// True when url is a registry download route, on this host or the public one
+function isRegistryDownloadUrl(url: string, request: NextRequest): boolean {
+	let target: URL;
+	try {
+		target = new URL(url, request.url);
+	} catch {
+		return false;
+	}
+	const registryHosts = [new URL(request.url).host, "registry.devex.sh"];
+	return (
+		registryHosts.includes(target.host) &&
+		/^\/api\/v1\/plugins\/[^/]+\/download\//.test(target.pathname)
+	);
 }
 
 // Helper function to validate platform format

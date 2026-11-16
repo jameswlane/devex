@@ -4,8 +4,6 @@ import { existsSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
 import { PrismaClient } from "../generated/prisma/client";
-import { binaryMetadataService } from "../lib/binary-metadata";
-import { isGitHubUrl } from "../lib/github-url";
 import { prismaConnectionOptions } from "../lib/prisma-connection";
 import { recordRegistryStatsSnapshot } from "../lib/registry-stats";
 
@@ -463,27 +461,6 @@ async function seedPlugins() {
 					}
 				}
 
-				// Generate binary metadata for the plugin
-				let binariesMetadata = {};
-				try {
-					if (plugin.repository && isGitHubUrl(plugin.repository)) {
-						binariesMetadata =
-							await binaryMetadataService.generatePluginBinaryMetadata(
-								plugin.name,
-								plugin.repository,
-								plugin.version,
-							);
-						console.log(
-							`    Generated binary metadata for ${plugin.name}: ${Object.keys(binariesMetadata).length} platforms`,
-						);
-					}
-				} catch (error) {
-					console.warn(
-						`    Could not generate binary metadata for ${plugin.name}:`,
-						error instanceof Error ? error.message : String(error),
-					);
-				}
-
 				// Add timeout to database operations
 				const upsertPromise = prisma.plugin.upsert({
 					where: { name: plugin.name },
@@ -496,7 +473,8 @@ async function seedPlugins() {
 						platforms: platforms,
 						githubUrl: plugin.repository,
 						githubPath: githubPath,
-						binaries: binariesMetadata,
+						// binaries are owned by recordPluginRelease (sync-github-plugins
+						// runs after this); a reseed must never replace them
 						lastSynced: new Date(),
 					},
 					create: {
@@ -509,7 +487,7 @@ async function seedPlugins() {
 						platforms: platforms,
 						githubUrl: plugin.repository,
 						githubPath: githubPath,
-						binaries: binariesMetadata,
+						binaries: {},
 						downloadCount: 0,
 						lastSynced: new Date(),
 					},
