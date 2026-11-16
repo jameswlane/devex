@@ -21,6 +21,9 @@ vi.mock("@/lib/prisma", () => ({
 			findMany: vi.fn(),
 			count: vi.fn(),
 		},
+		pluginVersion: {
+			findMany: vi.fn().mockResolvedValue([]),
+		},
 	},
 }));
 
@@ -148,6 +151,37 @@ describe("/api/v1/registry.json", () => {
 			release_tag: "packages/tool-shell/v0.2.4",
 		});
 		expect(data.plugins["tool-git"]).not.toHaveProperty("release_tag");
+	});
+
+	it("reports the recorded release tag over the fallback (#512)", async () => {
+		(prisma.plugin.findMany as Mock).mockResolvedValue([
+			{
+				id: "test-plugin-1",
+				name: "tool-shell",
+				type: "tool",
+				description: "Shell configuration plugin",
+				platforms: ["linux"],
+				version: "0.2.4",
+				githubPath: "packages/tool-shell",
+				status: "active",
+				priority: 7,
+				supports: {},
+				binaries: null,
+				dependencies: [],
+				conflicts: [],
+			},
+		]);
+		(prisma.plugin.count as Mock).mockResolvedValue(1);
+		(prisma.pluginVersion.findMany as Mock).mockResolvedValueOnce([
+			{ pluginId: "test-plugin-1", version: "0.2.4", tag: "recorded-tag" },
+		]);
+
+		const response = await GET(
+			new NextRequest("https://registry.devex.sh/api/v1/registry.json"),
+		);
+		const data = await response.json();
+
+		expect(data.plugins["tool-shell"].release_tag).toBe("recorded-tag");
 	});
 
 	it("should handle database errors gracefully", async () => {

@@ -11,6 +11,8 @@ import {
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
+import { pluginReleaseTag } from "@/lib/plugins/release-tag";
+import { attachReleaseTags } from "@/lib/plugins/release-tags";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import { transformationService } from "@/lib/transformation-service";
@@ -53,6 +55,8 @@ interface RegistryResponse {
 	plugins: Record<string, PluginMetadata>;
 	last_updated: string;
 }
+
+type PluginWithTag = Plugin & { releaseTag: string | null };
 
 // Batch size for plugin processing to optimize database queries
 const PLUGIN_BATCH_SIZE = 50;
@@ -121,14 +125,16 @@ export const GET = withRateLimit(async function handler(request: Request) {
 		});
 
 		// Fetch active plugins with batched processing for better performance
-		const plugins = await fetchPluginsInBatches(limit, offset);
+		const plugins = await attachReleaseTags(
+			await fetchPluginsInBatches(limit, offset),
+		);
 
 		// Transform plugins into registry.json format with parallel processing
 		const registryPlugins: Record<string, PluginMetadata> = {};
 
 		// Process plugins in parallel batches for better performance
 		const transformBatch = async (
-			batch: Plugin[],
+			batch: PluginWithTag[],
 		): Promise<[string, PluginMetadata][]> => {
 			return Promise.all(
 				batch.map(async (plugin) => {
@@ -139,7 +145,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 		};
 
 		// Split plugins into batches for parallel processing
-		const batches: Plugin[][] = [];
+		const batches: PluginWithTag[][] = [];
 		for (let i = 0; i < plugins.length; i += PLUGIN_BATCH_SIZE) {
 			batches.push(plugins.slice(i, i + PLUGIN_BATCH_SIZE));
 		}
@@ -189,7 +195,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 
 // Helper function to transform a single plugin to metadata format
 async function transformPluginToMetadata(
-	plugin: Plugin,
+	plugin: PluginWithTag,
 ): Promise<PluginMetadata> {
 	// Use version from database, fall back to "latest" if not set
 	const version = plugin.version || "latest";
@@ -257,11 +263,12 @@ async function transformPluginToMetadata(
 		priority: plugin.priority,
 		status: plugin.status,
 		supports,
-		// Matches the tags release-please creates, e.g. packages/tool-shell/v0.2.4
+		// Recorded tag first, else the real format (packages/<plugin>/v<version>)
 		release_tag:
-			version === "latest"
+			plugin.releaseTag ??
+			(version === "latest"
 				? undefined
-				: `packages/${normalizedName}/v${version.replace(/^v/, "")}`,
+				: pluginReleaseTag(normalizedName, version)),
 		requirements: requirements,
 	};
 }
