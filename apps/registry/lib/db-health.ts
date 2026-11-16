@@ -1,27 +1,21 @@
 import { createApiError, logger } from "./logger";
 import {
-	checkDatabaseHealth,
 	connectPrisma,
 	disconnectPrisma,
 	executeWithRetry,
 	prisma,
 } from "./prisma";
-import { checkRedisHealth, redis } from "./redis";
+import { checkRedisHealth, type RedisBackend } from "./redis";
 
 // Database health monitoring and connection management
 export interface DatabaseHealth {
 	status: "healthy" | "degraded" | "unhealthy";
-	connections: {
-		active: number;
-		idle: number;
-		total: number;
-	};
 	latency: {
 		read: number;
-		write: number;
 	};
 	redis?: {
 		status: "healthy" | "unhealthy";
+		backend?: RedisBackend;
 		latency: number;
 	};
 	timestamp: string;
@@ -66,30 +60,20 @@ export class DatabaseHealthMonitor {
 
 		try {
 			// Test database connectivity and measure latency
-			const [readLatency, writeLatency, redisHealth] = await Promise.allSettled(
-				[
-					this.measureReadLatency(),
-					this.measureWriteLatency(),
-					this.checkRedisHealth(),
-				],
-			);
+			const [readLatency, redisHealth] = await Promise.allSettled([
+				this.measureReadLatency(),
+				this.checkRedisHealth(),
+			]);
 
-			// Process read latency result
+			// Process read latency result. The registry cannot serve anything
+			// without its database, so a failed read is unhealthy, not degraded.
 			let readTime = 0;
+			let databaseDown = false;
 			if (readLatency.status === "fulfilled") {
 				readTime = readLatency.value;
 			} else {
 				errors.push(`Read test failed: ${readLatency.reason}`);
-				status = "degraded";
-			}
-
-			// Process write latency result
-			let writeTime = 0;
-			if (writeLatency.status === "fulfilled") {
-				writeTime = writeLatency.value;
-			} else {
-				errors.push(`Write test failed: ${writeLatency.reason}`);
-				status = "degraded";
+				databaseDown = true;
 			}
 
 			// Process Redis health result
@@ -104,25 +88,20 @@ export class DatabaseHealthMonitor {
 				status = "degraded";
 			}
 
-			// Get connection pool metrics if available
-			const connections = await this.getConnectionMetrics();
-
 			// Determine overall status
-			if (readTime > 1000 || writeTime > 2000) {
+			if (readTime > 1000) {
 				status = status === "healthy" ? "degraded" : status;
 				errors.push("High database latency detected");
 			}
 
-			if (errors.length > 2) {
+			if (databaseDown) {
 				status = "unhealthy";
 			}
 
 			const health: DatabaseHealth = {
 				status,
-				connections,
 				latency: {
 					read: readTime,
-					write: writeTime,
 				},
 				redis: redisResult,
 				timestamp: new Date().toISOString(),
@@ -137,8 +116,7 @@ export class DatabaseHealthMonitor {
 		} catch (error) {
 			const health: DatabaseHealth = {
 				status: "unhealthy",
-				connections: { active: 0, idle: 0, total: 0 },
-				latency: { read: 0, write: 0 },
+				latency: { read: 0 },
 				timestamp: new Date().toISOString(),
 				errors: [
 					`Health check failed: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -168,37 +146,15 @@ export class DatabaseHealthMonitor {
 		}
 	}
 
-	// Measure database write latency using enhanced connection management
-	private async measureWriteLatency(): Promise<number> {
-		try {
-			return await executeWithRetry(async () => {
-				const start = Date.now();
-
-				// Create a simple health check entry using available table
-				// Since we don't have a health_checks table, use a simpler approach
-				const healthId = `health_${Date.now()}`;
-
-				// Use a lightweight write operation that doesn't require specific tables
-				await prisma.$executeRaw`SELECT pg_sleep(0.001)`; // Minimal write-like operation
-
-				return Date.now() - start;
-			}, "write_latency_test");
-		} catch (error) {
-			throw new Error(
-				`Write latency test failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-			);
-		}
-	}
-
 	// Check Redis connectivity and latency using centralized health check
-	private async checkRedisHealth(): Promise<{
-		status: "healthy" | "unhealthy";
-		latency: number;
-	}> {
+	private async checkRedisHealth(): Promise<
+		NonNullable<DatabaseHealth["redis"]>
+	> {
 		try {
 			const redisHealth = await checkRedisHealth();
 			return {
 				status: redisHealth.status,
+				backend: redisHealth.backend,
 				latency: redisHealth.latency || 0,
 			};
 		} catch (error) {
@@ -209,51 +165,10 @@ export class DatabaseHealthMonitor {
 		}
 	}
 
-	// Get connection pool metrics using enhanced database health check
-	private async getConnectionMetrics(): Promise<DatabaseHealth["connections"]> {
-		try {
-			const dbHealth = await checkDatabaseHealth();
-
-			if (dbHealth.status === "healthy" && dbHealth.metrics) {
-				return {
-					active: dbHealth.metrics.activeConnections,
-					idle: dbHealth.metrics.idle,
-					total: dbHealth.metrics.totalConnections,
-				};
-			}
-
-			// Fallback to estimated values
-			return {
-				active: 5, // Estimated active connections
-				idle: 10, // Estimated idle connections
-				total: 15, // Total pool size
-			};
-		} catch {
-			return { active: 0, idle: 0, total: 0 };
-		}
-	}
-
 	// Clear health cache (useful for forced refresh)
 	clearCache(): void {
 		this.healthCache = null;
 		this.lastCheck = 0;
-	}
-
-	// Get connection pool status
-	async getPoolStatus(): Promise<{
-		size: number;
-		available: number;
-		borrowed: number;
-		pending: number;
-	}> {
-		// This would require custom connection pool monitoring
-		// For serverless environments, this might not be as relevant
-		return {
-			size: 15,
-			available: 10,
-			borrowed: 5,
-			pending: 0,
-		};
 	}
 }
 
@@ -276,7 +191,6 @@ export async function handleHealthCheck(includeSensitive = false) {
 			latency: health.latency,
 			redis: health.redis,
 			...(includeSensitive && {
-				connections: health.connections,
 				errors: health.errors,
 			}),
 		};

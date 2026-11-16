@@ -437,11 +437,14 @@ export async function checkRateLimitHealth(): Promise<{
 		await store.reset(testKey);
 
 		const latency = Date.now() - start;
-		const redisHealth = await checkRedisHealth();
+		// The Redis store swallows its own failures, so ask Redis directly.
+		const isRedis = store instanceof RedisRateLimitStore;
+		const redisHealthy =
+			isRedis && (await checkRedisHealth()).status === "healthy";
 
 		return {
-			status: redisHealth.status === "healthy" ? "healthy" : "degraded",
-			storeType: redisHealth.status === "healthy" ? "redis" : "memory",
+			status: redisHealthy ? "healthy" : "degraded",
+			storeType: isRedis ? "redis" : "memory",
 			latency,
 		};
 	} catch (error) {

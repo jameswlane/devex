@@ -162,5 +162,19 @@ describe("rate-limit", () => {
 			expect(["healthy", "degraded", "unhealthy"]).toContain(health.status);
 			expect(["redis", "memory"]).toContain(health.storeType);
 		});
+
+		it("reports degraded when Redis fails after the store was chosen", async () => {
+			await checkRateLimitHealth(); // selects the Redis store while healthy
+			const { checkRedisHealth } = (await import("@/lib/redis")) as any;
+			checkRedisHealth.mockResolvedValueOnce({
+				status: "unhealthy",
+				backend: "upstash",
+				error: "connection refused",
+			});
+
+			const health = await checkRateLimitHealth();
+
+			expect(health).toMatchObject({ status: "degraded", storeType: "redis" });
+		});
 	});
 });
