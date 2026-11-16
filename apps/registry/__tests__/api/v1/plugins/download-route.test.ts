@@ -12,7 +12,12 @@ vi.mock("@/lib/prisma", () => ({
 	},
 }));
 
+vi.mock("@/lib/download-stats", () => ({
+	recordDownload: vi.fn(),
+}));
+
 import { GET } from "@/app/api/v1/plugins/[id]/download/[platform]/route";
+import { recordDownload } from "@/lib/download-stats";
 
 type MockPrisma = {
 	plugin: {
@@ -178,6 +183,8 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 		expect(response.headers.get("X-Download-Count")).toBe("11");
 		expect(mockPrisma.pluginVersion.findUnique).not.toHaveBeenCalled();
 		expect(mockPrisma.plugin.update).toHaveBeenCalledTimes(1);
+		// Counted toward the rolling 24-hour total too
+		expect(recordDownload).toHaveBeenCalledTimes(1);
 	});
 
 	it.each(["1", "true"])(
@@ -192,6 +199,7 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 			expect(response.headers.get("location")).toBe(latestUrl);
 			expect(response.headers.get("X-Download-Count")).toBe("10");
 			expect(mockPrisma.plugin.update).not.toHaveBeenCalled();
+			expect(recordDownload).not.toHaveBeenCalled();
 		},
 	);
 
