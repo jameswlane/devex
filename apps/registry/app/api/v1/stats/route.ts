@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { unstable_cache } from "next/cache";
 import type { NextRequest, NextResponse } from "next/server";
 import type { PrismaClient } from "@/generated/prisma/client";
@@ -20,7 +21,6 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 
 	// Check If-None-Match for conditional requests (304 optimization)
 	const clientEtag = request.headers.get("if-none-match");
-	const currentTimeBucket = Math.floor(Date.now() / 300000); // 5min buckets
 
 	// Function to fetch stats from database
 	const fetchStatsFromDB = async () => {
@@ -155,8 +155,9 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 		? await fetchStatsFromDB()
 		: await getCachedStats();
 
-	// Generate ETag for this response
-	const etag = `W/"stats-${stats.totals.all}-${currentTimeBucket}"`;
+	// Derive the ETag from everything the client sees except `meta`, which
+	// createOptimizedResponse rewrites on every request (#495).
+	const etag = statsEtag(stats);
 
 	// Return 304 if client has fresh data
 	if (clientEtag === etag && !forceRefresh) {
@@ -188,6 +189,19 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 			cacheHit: !forceRefresh,
 		},
 	});
+}
+
+/**
+ * Weak ETag over the stats payload minus its per-request `meta` block, so any
+ * change to totals, platforms, categories or activity yields a new tag.
+ */
+function statsEtag(stats: { meta?: unknown }): string {
+	const { meta: _meta, ...payload } = stats;
+	const hash = createHash("sha256")
+		.update(JSON.stringify(payload))
+		.digest("base64url")
+		.slice(0, 27);
+	return `W/"stats-${hash}"`;
 }
 
 // Export wrapped handler with standardized error handling
