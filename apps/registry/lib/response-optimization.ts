@@ -68,6 +68,10 @@ interface OptimizedResponseOptions {
 		offset: number;
 		hasNext: boolean;
 		hasPrevious: boolean;
+		/** Current 1-based page, used to build Link headers */
+		page?: number;
+		/** Request URL whose path and query the Link headers keep */
+		url?: string;
 	};
 	/** Performance metadata */
 	performance?: {
@@ -242,23 +246,20 @@ function buildResponseHeaders({
 		headers["X-Has-Next-Page"] = hasNext.toString();
 		headers["X-Has-Previous-Page"] = hasPrevious.toString();
 
-		// RFC 5988 Link header for pagination
-		const links = [];
-		const baseUrl = ""; // Would need to be passed in for full URL construction
-		if (hasPrevious && offset > 0) {
-			const prevOffset = Math.max(0, offset - limit);
-			links.push(
-				`<${baseUrl}?offset=${prevOffset}&limit=${limit}>; rel="prev"`,
-			);
-		}
-		if (hasNext) {
-			const nextOffset = offset + limit;
-			links.push(
-				`<${baseUrl}?offset=${nextOffset}&limit=${limit}>; rel="next"`,
-			);
-		}
-		if (links.length > 0) {
-			headers["Link"] = links.join(", ");
+		// RFC 8288 Link header for pagination. Routes read `page`, so links set
+		// it and keep the request's other query parameters (filters, search).
+		if (options.pagination.page !== undefined) {
+			const { page, url } = options.pagination;
+			const links = [];
+			if (hasPrevious && page > 1) {
+				links.push(`<${pageLink(url, page - 1, limit)}>; rel="prev"`);
+			}
+			if (hasNext) {
+				links.push(`<${pageLink(url, page + 1, limit)}>; rel="next"`);
+			}
+			if (links.length > 0) {
+				headers["Link"] = links.join(", ");
+			}
 		}
 	}
 
@@ -293,6 +294,17 @@ function buildResponseHeaders({
 	}
 
 	return headers;
+}
+
+/**
+ * Builds a relative pagination link that keeps the request's path and query.
+ */
+function pageLink(url: string | undefined, page: number, limit: number) {
+	const target = new URL(url ?? "", "http://registry.invalid");
+	target.searchParams.delete("offset");
+	target.searchParams.set("page", page.toString());
+	target.searchParams.set("limit", limit.toString());
+	return url ? `${target.pathname}${target.search}` : target.search;
 }
 
 /**
@@ -374,11 +386,13 @@ export function createPaginatedResponse<T>(
 		total: number;
 		page: number;
 		limit: number;
+		/** Request URL; Link headers keep its path and query */
+		url?: string;
 	},
 	additionalData?: Record<string, any>,
 	headers?: Record<string, string>,
 ) {
-	const { total, page, limit } = pagination;
+	const { total, page, limit, url } = pagination;
 	const offset = (page - 1) * limit;
 	const count = items.length;
 	const hasNext = offset + limit < total;
@@ -409,6 +423,8 @@ export function createPaginatedResponse<T>(
 			offset,
 			hasNext,
 			hasPrevious,
+			page,
+			url,
 		},
 	});
 }
