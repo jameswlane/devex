@@ -192,9 +192,17 @@ describe("Redis Store System", () => {
 		});
 
 		it("reports the in-memory fallback as unhealthy, not as Redis", async () => {
-			// No Redis is configured in the test environment, so the global
-			// store is the in-memory fallback, whose ping() still answers PONG.
-			const result = await checkRedisHealth();
+			// With no Redis configured the global store is the in-memory
+			// fallback, whose ping() still answers PONG.
+			delete process.env.KV_REST_API_URL;
+			delete process.env.KV_REST_API_TOKEN;
+			delete process.env.REDIS_URL;
+			delete process.env.UPSTASH_REDIS_REST_URL;
+			delete process.env.UPSTASH_REDIS_REST_TOKEN;
+			vi.resetModules();
+			const fresh = await import("../../lib/redis");
+
+			const result = await fresh.checkRedisHealth();
 			expect(result).toEqual({
 				status: "unhealthy",
 				backend: "memory",
