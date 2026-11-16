@@ -190,6 +190,7 @@ describe("/api/v1/registry", () => {
 				"public, max-age=60, s-maxage=240, must-revalidate",
 			);
 			expect(response.headers.get("Vercel-Cache-Tag")).toBe("plugins,registry");
+			expect(data.base_url).toBe("https://registry.devex.sh/api/v1/plugins");
 			expect(data).toHaveProperty("data");
 			expect(data).toHaveProperty("pagination");
 			expect(data).toHaveProperty("stats");

@@ -1,3 +1,6 @@
+// Public origin of this registry
+const REGISTRY_URL = "https://registry.devex.sh";
+
 // Registry configuration constants
 export const REGISTRY_CONFIG = {
 	// Default values for plugins
@@ -9,8 +12,12 @@ export const REGISTRY_CONFIG = {
 	REGISTRY_VERSION: "2.0.0",
 	REGISTRY_SOURCE: "database",
 
-	// Default URL for GitHub releases
-	BASE_URL: "https://github.com/jameswlane/devex/releases/download",
+	// Public origin of this registry; base_url in registry responses points here
+	REGISTRY_URL,
+	// Base of the registry's plugin API, advertised as base_url
+	PLUGINS_API_URL: `${REGISTRY_URL}/api/v1/plugins`,
+	// Base for GitHub release asset downloads
+	RELEASE_DOWNLOAD_URL: "https://github.com/jameswlane/devex/releases/download",
 	GITHUB_URL: "https://github.com/jameswlane/devex",
 
 	// Cache and performance settings

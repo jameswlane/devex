@@ -45,10 +45,10 @@ vi.mock("@/lib/rate-limit", () => ({
 	},
 }));
 
-// Mock configuration
-vi.mock("@/lib/config", () => ({
+// Mock configuration; keep the real URLs so base_url is tested as shipped
+vi.mock("@/lib/config", async (importOriginal) => ({
 	REGISTRY_CONFIG: {
-		BASE_URL: "https://registry.devex.sh",
+		...(await importOriginal<typeof import("@/lib/config")>()).REGISTRY_CONFIG,
 		DEFAULT_CACHE_DURATION: 3600,
 		CDN_CACHE_DURATION: 7200,
 		REGISTRY_VERSION: "1.0.0",
@@ -101,7 +101,7 @@ describe("/api/v1/registry.json", () => {
 		const data = await response.json();
 
 		expect(response.status).toBe(200);
-		expect(data).toHaveProperty("base_url");
+		expect(data.base_url).toBe("https://registry.devex.sh/api/v1/plugins");
 		expect(data).toHaveProperty("plugins");
 		expect(data).toHaveProperty("last_updated");
 		expect(data.plugins).toHaveProperty("package-manager-apt");
