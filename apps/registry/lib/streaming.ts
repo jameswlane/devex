@@ -21,12 +21,14 @@ export class StreamingJsonResponse {
 		const stream = new ReadableStream({
 			start(controller) {
 				// Send opening metadata and array start
+				// Open the envelope, then start a real "data" array that the
+				// chunks below fill in. Dropping only the closing brace keeps the
+				// metadata intact; the array must not be a JSON string.
 				const opening = `${JSON.stringify({
 					...metadata,
 					total,
 					streaming: true,
-					data: "[",
-				}).slice(0, -2)}"[`;
+				}).slice(0, -1)},"data":[`;
 
 				controller.enqueue(encoder.encode(opening));
 			},
