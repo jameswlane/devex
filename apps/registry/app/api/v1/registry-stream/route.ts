@@ -240,8 +240,9 @@ async function transformPluginForStreaming(
 		author: "DevEx Team",
 		repository: plugin.githubUrl || "",
 		platforms,
-		dependencies: extractDependencies(plugin.supports as any),
-		conflicts: extractConflicts(plugin.supports as any),
+		// Releases write these to dedicated columns, never to supports (#491)
+		dependencies: plugin.dependencies ?? [],
+		conflicts: plugin.conflicts ?? [],
 		tags: extractTagsFromType(plugin.type),
 	};
 }
@@ -360,24 +361,6 @@ function extractTagsFromType(type: string): string[] {
 	}
 
 	return tags;
-}
-
-function extractDependencies(supports: any): string[] {
-	if (!supports || typeof supports !== "object") return [];
-	if (supports.dependencies && Array.isArray(supports.dependencies)) {
-		return supports.dependencies.filter((dep: any) => typeof dep === "string");
-	}
-	return [];
-}
-
-function extractConflicts(supports: any): string[] {
-	if (!supports || typeof supports !== "object") return [];
-	if (supports.conflicts && Array.isArray(supports.conflicts)) {
-		return supports.conflicts.filter(
-			(conflict: any) => typeof conflict === "string",
-		);
-	}
-	return [];
 }
 
 // Handle CORS preflight

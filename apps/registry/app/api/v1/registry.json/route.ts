@@ -252,8 +252,6 @@ async function transformPluginToMetadata(
 	// Extract structured data from plugin supports field
 	const supports = (plugin.supports as any) || {};
 	const requirements = extractRequirements(supports);
-	const dependencies = extractDependencies(supports);
-	const conflicts = extractConflicts(supports);
 
 	return {
 		name: normalizedName,
@@ -262,8 +260,9 @@ async function transformPluginToMetadata(
 		author: "DevEx Team",
 		repository: plugin.githubUrl || "",
 		platforms: platforms,
-		dependencies: dependencies,
-		conflicts: conflicts,
+		// Releases write these to dedicated columns, never to supports (#491)
+		dependencies: plugin.dependencies,
+		conflicts: plugin.conflicts,
 		tags: extractTagsFromType(plugin.type),
 		requirements: requirements,
 	};
@@ -329,34 +328,6 @@ function extractRequirements(supports: any):
 	}
 
 	return Object.keys(requirements).length > 0 ? requirements : undefined;
-}
-
-// Helper function to extract dependencies from plugin supports data
-function extractDependencies(supports: any): string[] {
-	if (!supports || typeof supports !== "object") {
-		return [];
-	}
-
-	if (supports.dependencies && Array.isArray(supports.dependencies)) {
-		return supports.dependencies.filter((dep: any) => typeof dep === "string");
-	}
-
-	return [];
-}
-
-// Helper function to extract conflicts from plugin supports data
-function extractConflicts(supports: any): string[] {
-	if (!supports || typeof supports !== "object") {
-		return [];
-	}
-
-	if (supports.conflicts && Array.isArray(supports.conflicts)) {
-		return supports.conflicts.filter(
-			(conflict: any) => typeof conflict === "string",
-		);
-	}
-
-	return [];
 }
 
 // Handle CORS preflight
