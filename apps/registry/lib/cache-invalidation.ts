@@ -180,40 +180,18 @@ const STATS_TTL_SECONDS = 30 * 24 * 60 * 60;
 export class CacheInvalidationService {
 	private invalidationInProgress = new Set<string>();
 
-	// Distributed locks to prevent race conditions
-	private lockPrefix = "cache_invalidation_lock:";
-	private lockTTL = 30000; // 30 seconds
-
 	/**
-	 * Invalidate caches based on specified options with race condition prevention
+	 * Invalidate caches based on specified options. Runs are idempotent, so
+	 * concurrent ones are allowed: skipping a run while another is in flight
+	 * could miss a write that committed after the first run cleared origin.
 	 */
 	async invalidate(options: InvalidationOptions): Promise<void> {
 		const startTime = Date.now();
 		const invalidationId = `${Date.now()}-${Math.random()}`;
 
-		// Create lock key based on resource and ID to prevent concurrent invalidations
-		const lockKey = this.createLockKey(options);
-		let lockAcquired = false;
-
 		try {
-			// Acquire distributed lock to prevent race conditions
-			lockAcquired = await this.acquireLock(lockKey, invalidationId);
-
-			if (!lockAcquired) {
-				logger.warn("Cache invalidation skipped - already in progress", {
-					options,
-					invalidationId,
-					lockKey,
-				});
-				return;
-			}
-
 			this.invalidationInProgress.add(invalidationId);
-			logger.info("Starting cache invalidation with lock", {
-				options,
-				invalidationId,
-				lockKey,
-			});
+			logger.info("Starting cache invalidation", { options, invalidationId });
 
 			const patterns = this.buildInvalidationPatterns(options);
 			const work = this.runInvalidation(options, patterns).then(
@@ -255,17 +233,6 @@ export class CacheInvalidationService {
 			throw error;
 		} finally {
 			this.invalidationInProgress.delete(invalidationId);
-
-			// Always release the lock
-			if (lockAcquired) {
-				await this.releaseLock(lockKey, invalidationId).catch((error) => {
-					logger.warn("Failed to release invalidation lock", {
-						error: error instanceof Error ? error.message : String(error),
-						lockKey,
-						invalidationId,
-					});
-				});
-			}
 		}
 	}
 
@@ -542,96 +509,6 @@ export class CacheInvalidationService {
 
 		logger.info("All caches cleared successfully");
 	}
-
-	/**
-	 * Create a lock key for distributed locking
-	 */
-	private createLockKey(options: InvalidationOptions): string {
-		const parts = [this.lockPrefix];
-
-		if (options.resource) {
-			parts.push(options.resource);
-		}
-
-		if (options.id) {
-			parts.push(options.id);
-		} else {
-			parts.push("global");
-		}
-
-		return parts.join("");
-	}
-
-	/**
-	 * Acquire a distributed lock using Redis
-	 */
-	private async acquireLock(
-		lockKey: string,
-		lockValue: string,
-	): Promise<boolean> {
-		try {
-			const lockExpiry = Date.now() + this.lockTTL;
-
-			// Try to acquire lock with expiry - use simple approach for Upstash
-			const lockExists = await redis.exists(lockKey);
-			if (lockExists) {
-				return false; // Lock already exists
-			}
-
-			const result = await redis.set(
-				lockKey,
-				JSON.stringify({
-					value: lockValue,
-					expires: lockExpiry,
-					acquired: Date.now(),
-				}),
-			);
-
-			// Set expiration separately
-			await redis.expire(lockKey, Math.ceil(this.lockTTL / 1000));
-
-			return true; // Lock acquired successfully
-		} catch (error) {
-			logger.error("Failed to acquire invalidation lock", {
-				error: error instanceof Error ? error.message : String(error),
-				lockKey,
-			});
-			return false;
-		}
-	}
-
-	/**
-	 * Release a distributed lock
-	 */
-	private async releaseLock(
-		lockKey: string,
-		lockValue: string,
-	): Promise<boolean> {
-		try {
-			// For Upstash Redis, use simple comparison and delete
-			const lockData = await redis.get(lockKey);
-			if (lockData) {
-				try {
-					const parsed = JSON.parse(lockData);
-					if (parsed.value === lockValue) {
-						await redis.del(lockKey);
-						return true;
-					}
-				} catch {
-					// If we can't parse, just delete to prevent stuck locks
-					await redis.del(lockKey);
-				}
-			}
-
-			return false;
-		} catch (error) {
-			logger.error("Failed to release invalidation lock", {
-				error: error instanceof Error ? error.message : String(error),
-				lockKey,
-			});
-			return false;
-		}
-	}
 }
 
 function usesAccelerate(): boolean {
@@ -706,10 +583,9 @@ export async function invalidateOnDataChange(
 ): Promise<void> {
 	const wait = { waitForCompletion: true };
 	const results = await Promise.allSettled([
-		invalidateRegistryCache(resource, id, {
-			...wait,
-			invalidateCDN: operation === "delete", // Only invalidate CDN on delete
-		}),
+		// Only this call purges the CDN, and only after its origin layers
+		// succeed; it covers every origin layer the list and stats calls touch.
+		invalidateRegistryCache(resource, id, wait),
 		...(affectedIds ?? []).map((affectedId) =>
 			invalidateRegistryCache(resource, affectedId, {
 				...wait,
@@ -717,8 +593,14 @@ export async function invalidateOnDataChange(
 			}),
 		),
 		// Always invalidate stats and list views
-		invalidateRegistryCache("stats", undefined, wait),
-		invalidateRegistryCache(resource, undefined, wait),
+		invalidateRegistryCache("stats", undefined, {
+			...wait,
+			invalidateCDN: false,
+		}),
+		invalidateRegistryCache(resource, undefined, {
+			...wait,
+			invalidateCDN: false,
+		}),
 	]);
 
 	for (const result of results) {

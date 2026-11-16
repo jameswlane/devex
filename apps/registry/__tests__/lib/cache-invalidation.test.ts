@@ -53,6 +53,7 @@ describe("cache invalidation (#493)", () => {
 		process.env.VERCEL = "1";
 		process.env.PRISMA_DATABASE_URL = "prisma+postgres://accelerate.test/?k=1";
 		vi.clearAllMocks();
+		mocks.revalidateTag.mockReset();
 		vi.resetModules();
 	});
 
@@ -128,6 +129,45 @@ describe("cache invalidation (#493)", () => {
 		expect(
 			Math.min(...mocks.invalidateCdnTags.mock.invocationCallOrder),
 		).toBeGreaterThan(lastOrigin);
+	});
+
+	it("runs an invalidation that starts while another is in flight", async () => {
+		const { cacheInvalidation } = await load();
+		let release = () => {};
+		mocks.accelerateInvalidate.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = () => resolve({ requestId: "r" });
+				}),
+		);
+		const run = () =>
+			cacheInvalidation.invalidate({
+				resource: "plugin",
+				invalidateDatabase: true,
+				waitForCompletion: true,
+			});
+
+		const first = run();
+		await vi.waitFor(() =>
+			expect(mocks.accelerateInvalidate).toHaveBeenCalledTimes(1),
+		);
+		const second = run();
+		await vi.waitFor(() =>
+			expect(mocks.accelerateInvalidate).toHaveBeenCalledTimes(2),
+		);
+		release();
+		await Promise.all([first, second]);
+	});
+
+	it("does not purge the CDN when the resource's origin invalidation fails", async () => {
+		const { invalidateOnDataChange } = await load();
+		mocks.revalidateTag.mockImplementation((tag: string) => {
+			if (tag === "plugins") throw new Error("data cache unavailable");
+		});
+
+		await invalidateOnDataChange("update", "plugin", "tool-git");
+
+		expect(mocks.invalidateCdnTags).not.toHaveBeenCalled();
 	});
 
 	it("reports stats from Redis so every instance sees the same counts", async () => {
