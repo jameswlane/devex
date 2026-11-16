@@ -13,7 +13,7 @@ import { createApiError, logger } from "@/lib/logger";
 async function handleGetCacheStatus(
 	request: NextRequest,
 ): Promise<NextResponse> {
-	const stats = cacheInvalidation.getStats();
+	const stats = await cacheInvalidation.getStats();
 	const inProgress = cacheInvalidation.isInvalidationInProgress();
 
 	return NextResponse.json({

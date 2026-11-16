@@ -1,4 +1,3 @@
-import { invalidateByTag } from "@vercel/functions";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/v1/plugins/[id]/releases/route";
 import {
@@ -6,14 +5,11 @@ import {
 	type AuditLogger,
 	initializeAuditLogger,
 } from "@/lib/audit-log";
-import { invalidateCdnTags, pluginCacheTags } from "@/lib/cdn-cache";
+import { invalidateCdnTags } from "@/lib/cdn-cache";
 import { computeReleaseSignature } from "@/lib/releases/contract";
 import { recordPluginRelease } from "@/lib/releases/record";
 import { payload } from "../../../lib/releases/fixture";
 
-vi.mock("@vercel/functions", () => ({
-	invalidateByTag: vi.fn<typeof invalidateByTag>(),
-}));
 vi.mock("@/lib/cdn-cache", async () => ({
 	...(await vi.importActual<typeof import("@/lib/cdn-cache")>(
 		"@/lib/cdn-cache",
@@ -80,9 +76,8 @@ describe("POST plugin release", () => {
 	it("returns 201 for a created version and audits the webhook identity", async () => {
 		const response = await POST(request(), context);
 		expect(response.status).toBe(201);
-		expect(invalidateCdnTags).toHaveBeenCalledWith(
-			pluginCacheTags(payload.plugin),
-		);
+		// recordPluginRelease purges the CDN only after origin invalidation succeeds (#493).
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 		expect(response.headers.get("cache-control")).toBe("no-store");
 		expect(await response.json()).toEqual({
 			success: true,
@@ -115,20 +110,6 @@ describe("POST plugin release", () => {
 		expect(await response.json()).toMatchObject({
 			data: { latestChanged: false },
 		});
-	});
-	it("does not fail the webhook when the CDN runtime purge fails", async () => {
-		const { invalidateCdnTags: realPurge } =
-			await vi.importActual<typeof import("@/lib/cdn-cache")>(
-				"@/lib/cdn-cache",
-			);
-		vi.mocked(invalidateCdnTags).mockImplementation(realPurge);
-		vi.mocked(invalidateByTag).mockRejectedValue(new Error("CDN unavailable"));
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		expect((await POST(request(), context)).status).toBe(201);
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining("CDN purge failed"),
-		);
-		warn.mockRestore();
 	});
 	it("accepts signed JSON whitespace without reserializing it", async () => {
 		expect(

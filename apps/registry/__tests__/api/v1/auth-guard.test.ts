@@ -8,7 +8,7 @@ import {
 	type Mock,
 	vi,
 } from "vitest";
-import { invalidateCdnTags } from "@/lib/cdn-cache";
+import type { invalidateCdnTags } from "@/lib/cdn-cache";
 
 vi.mock("@/lib/cdn-cache", async () => ({
 	...(await vi.importActual<typeof import("@/lib/cdn-cache")>(
@@ -138,10 +138,12 @@ interface ErrorBody {
 const { prisma: mockPrisma } = (await import("@/lib/prisma")) as unknown as {
 	prisma: Record<"application" | "plugin", CrudMocks>;
 };
-const { cacheInvalidation: mockCacheInvalidation } = (await import(
-	"@/lib/cache-invalidation"
-)) as unknown as {
+const {
+	cacheInvalidation: mockCacheInvalidation,
+	invalidateRegistryCache: mockInvalidateRegistryCache,
+} = (await import("@/lib/cache-invalidation")) as unknown as {
 	cacheInvalidation: Record<"invalidate" | "clearAllCaches", MockFn>;
+	invalidateRegistryCache: MockFn;
 };
 const { revalidateCacheTags: mockRevalidateCacheTags } = (await import(
 	"@/lib/cache-revalidation"
@@ -446,7 +448,7 @@ describe("API key guard on write and admin endpoints", () => {
 				makeRequest("/api/v1/revalidate", { body: { type: "plugin-cdn" } }),
 			);
 			expect(denied.status).toBe(401);
-			expect(invalidateCdnTags).not.toHaveBeenCalled();
+			expect(mockInvalidateRegistryCache).not.toHaveBeenCalled();
 			const response = await revalidate(
 				makeRequest("/api/v1/revalidate", {
 					token: REVALIDATE_KEY,
@@ -454,7 +456,12 @@ describe("API key guard on write and admin endpoints", () => {
 				}),
 			);
 			expect(response.status).toBe(200);
-			expect(invalidateCdnTags).toHaveBeenCalledWith(["plugins", "registry"]);
+			// Origin caches are cleared before the CDN purge (#493).
+			expect(mockInvalidateRegistryCache).toHaveBeenCalledWith(
+				"plugin",
+				undefined,
+				{ waitForCompletion: true },
+			);
 		});
 
 		it("returns 400 for malformed JSON instead of throwing", async () => {

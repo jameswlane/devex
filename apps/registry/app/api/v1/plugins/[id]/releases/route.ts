@@ -4,7 +4,6 @@ import {
 	extractAuditContext,
 	initializeAuditLogger,
 } from "@/lib/audit-log";
-import { invalidateCdnTags, pluginCacheTags } from "@/lib/cdn-cache";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { releasePayloadSchema } from "@/lib/releases/contract";
@@ -108,7 +107,6 @@ export async function POST(
 			payload,
 			"webhook",
 		);
-		await invalidateCdnTags(pluginCacheTags(payload.plugin));
 		const status = result.versionCreated ? 201 : 200;
 		try {
 			await initializeAuditLogger(prisma as unknown as PrismaClient).log(
