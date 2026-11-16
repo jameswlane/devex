@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import type { NextRequest, NextResponse } from "next/server";
+import { getDailyDownloads } from "@/lib/download-stats";
 import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
 import { logPerformance } from "@/lib/logger";
 import { ensurePrisma } from "@/lib/prisma";
@@ -41,6 +42,7 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 					appCategories,
 					pluginTypes,
 					configCategories,
+					dailyDownloads,
 				] = await Promise.all([
 					// Basic counts with Accelerate caching
 					prismaClient.application.count({
@@ -100,6 +102,9 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 						_count: { category: true },
 						cacheStrategy: { swr: 600, ttl: 300 },
 					}),
+
+					// Rolling 24h total from hourly buckets (null when unknown)
+					getDailyDownloads(),
 				]);
 
 				// Calculate totals
@@ -168,7 +173,7 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 					},
 					activity: {
 						totalDownloads: totalDownloads,
-						dailyDownloads: 0,
+						dailyDownloads,
 					},
 					meta: {
 						source: "database",

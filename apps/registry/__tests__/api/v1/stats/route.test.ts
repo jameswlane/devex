@@ -63,6 +63,14 @@ vi.mock("@/lib/response-optimization", () => ({
 	},
 }));
 
+// Rolling 24h download total
+const mockGetDailyDownloads = vi.hoisted(() =>
+	vi.fn<() => Promise<number | null>>(),
+);
+vi.mock("@/lib/download-stats", () => ({
+	getDailyDownloads: mockGetDailyDownloads,
+}));
+
 // Import route handler after all mocks are set up
 import { GET } from "@/app/api/v1/stats/route";
 
@@ -94,6 +102,7 @@ describe("/api/v1/stats", () => {
 
 		// Reset unstable_cache to default behavior
 		mockUnstableCache.mockImplementation((fn) => fn);
+		mockGetDailyDownloads.mockResolvedValue(42);
 
 		mockPrismaClient = {
 			// Mock individual Prisma queries (new implementation)
@@ -190,13 +199,25 @@ describe("/api/v1/stats", () => {
 			// Verify activity
 			expect(data.activity).toEqual({
 				totalDownloads: 1800, // 1000 + 500 + 300
-				dailyDownloads: 0,
+				dailyDownloads: 42,
 			});
 
 			// Verify meta
 			expect(data.meta.source).toBe("database");
 			expect(data.meta.version).toBe("2.1.0");
 			expect(data.meta.timestamp).toBeDefined();
+		});
+
+		it("reports dailyDownloads as null when the 24h count is unknown", async () => {
+			mockGetDailyDownloads.mockResolvedValue(null);
+
+			const response = await GET(createMockRequest());
+			const data = await response.json();
+
+			expect(data.activity).toEqual({
+				totalDownloads: 1800,
+				dailyDownloads: null,
+			});
 		});
 
 		it("should call all Prisma queries with Accelerate caching", async () => {

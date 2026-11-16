@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { normalizePluginVersion } from "@/app/api/v1/plugins/[id]/versions/helpers";
+import { recordDownload } from "@/lib/download-stats";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { findPluginByNameOrShortName } from "@/lib/plugins/find-plugin";
 import { prisma } from "@/lib/prisma";
@@ -97,6 +98,8 @@ export async function GET(
 					lastDownload: new Date(),
 				},
 			});
+			// Feeds the rolling 24-hour total in /api/v1/stats
+			await recordDownload();
 		}
 
 		// Log the download for analytics

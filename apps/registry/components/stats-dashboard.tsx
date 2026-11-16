@@ -28,7 +28,8 @@ interface RegistryStats {
 	};
 	activity: {
 		totalDownloads: number;
-		dailyDownloads: number;
+		// null when the 24h count can't be read
+		dailyDownloads: number | null;
 	};
 	meta: {
 		lastUpdated: string;
@@ -550,12 +551,14 @@ export default function StatsDashboard() {
 							description="All-time downloads across registry"
 							isLoading={isLoading}
 						/>
-						<StatCard
-							title="Daily Downloads"
-							count={stats.activity.dailyDownloads}
-							description="Downloads in the last 24 hours"
-							isLoading={isLoading}
-						/>
+						{stats.activity.dailyDownloads !== null && (
+							<StatCard
+								title="Daily Downloads"
+								count={stats.activity.dailyDownloads}
+								description="Downloads in the last 24 hours"
+								isLoading={isLoading}
+							/>
+						)}
 					</div>
 				</div>
 			)}
