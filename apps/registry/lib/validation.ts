@@ -132,7 +132,7 @@ export function parseIntegerParams<K extends string>(
 
 export function validatePaginationParams(
 	params: Record<string, string> | URLSearchParams,
-	options: { maxLimit?: number; clampLimit?: boolean } = {},
+	options: { clampLimit?: boolean } = {},
 ) {
 	const searchParams =
 		params instanceof URLSearchParams
@@ -148,7 +148,7 @@ export function validatePaginationParams(
 		limit: {
 			defaultValue: 50,
 			min: 1,
-			max: options.maxLimit ?? 100,
+			max: 100,
 			clampMax: options.clampLimit,
 		},
 	});
