@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { PLUGIN_CACHE_CONTROL, pluginCacheTags } from "@/lib/cdn-cache";
 import { REGISTRY_CONFIG } from "@/lib/config";
+import { listPluginTypes, matchFilterValue } from "@/lib/filter-values";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
@@ -12,15 +13,32 @@ import {
 import { transformationService } from "@/lib/transformation-service";
 import {
 	validatePaginationParams,
-	validatePluginType,
 	validateSearchQuery,
 } from "@/lib/validation";
 import type { Plugin, Prisma } from "../../../../generated/prisma/client";
 
 async function handleGetPlugins(request: Request) {
 	try {
-		const { searchParams } = new URL(request.url);
-		const type = validatePluginType(searchParams.get("type"));
+		const url = new URL(request.url);
+		const { searchParams } = url;
+
+		// Types are matched case-insensitively against the stored values
+		const rawType = searchParams.get("type")?.trim();
+		let type: string | undefined;
+		if (rawType) {
+			const types = await listPluginTypes();
+			type = matchFilterValue(rawType, types);
+			if (!type) {
+				return createApiError(
+					`Unsupported plugin type: ${rawType}`,
+					400,
+					"INVALID_FILTER",
+					{ parameter: "type", allowed: types },
+					url.pathname,
+				);
+			}
+		}
+
 		const search = validateSearchQuery(searchParams.get("search"));
 
 		// Handle the new validation format
@@ -35,8 +53,7 @@ async function handleGetPlugins(request: Request) {
 		const where: Prisma.PluginWhereInput = {};
 
 		if (type) {
-			// Now using validated plugin type - safe from injection
-			where.type = { contains: type, mode: "insensitive" };
+			where.type = { equals: type, mode: "insensitive" };
 		}
 
 		if (search) {

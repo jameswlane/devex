@@ -22,8 +22,17 @@ vi.mock("@/lib/validation", () => ({
 		success: true,
 		data: { page: 1, limit: 50 },
 	})),
-	validatePluginType: vi.fn((val) => val),
 	validateSearchQuery: vi.fn((val) => val),
+}));
+
+vi.mock("@/lib/filter-values", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/filter-values")>()),
+	listPluginTypes: vi.fn(async () => [
+		"installer",
+		"package-manager",
+		"system",
+		"utility",
+	]),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -191,10 +200,47 @@ describe("/api/v1/plugins", () => {
 			expect(mockPrisma.plugin.findMany).toHaveBeenCalledWith(
 				expect.objectContaining({
 					where: expect.objectContaining({
-						type: { contains: "package-manager", mode: "insensitive" },
+						type: { equals: "package-manager", mode: "insensitive" },
 					}),
 				}),
 			);
+		});
+
+		it("should match a type case-insensitively to its stored value", async () => {
+			const req = createMockRequest({ type: "System" });
+			await GET(req);
+
+			expect(mockPrisma.plugin.findMany).toHaveBeenCalledWith(
+				expect.objectContaining({
+					where: expect.objectContaining({
+						type: { equals: "system", mode: "insensitive" },
+					}),
+				}),
+			);
+		});
+
+		it("should reject an unsupported type with 400", async () => {
+			const { createApiError } = (await import("@/lib/logger")) as unknown as {
+				createApiError: Mock;
+			};
+			createApiError.mockReturnValueOnce(
+				new Response("Error", { status: 400 }),
+			);
+			const req = createMockRequest({ type: "system-setup" });
+			const response = await GET(req);
+
+			expect(response.status).toBe(400);
+			expect(createApiError).toHaveBeenCalledWith(
+				"Unsupported plugin type: system-setup",
+				400,
+				"INVALID_FILTER",
+				{
+					parameter: "type",
+					allowed: ["installer", "package-manager", "system", "utility"],
+				},
+				"/api/v1/plugins",
+			);
+			expect(mockPrisma.plugin.findMany).not.toHaveBeenCalled();
 		});
 
 		it("should filter by installer type correctly", async () => {
@@ -204,7 +250,7 @@ describe("/api/v1/plugins", () => {
 			expect(mockPrisma.plugin.findMany).toHaveBeenCalledWith(
 				expect.objectContaining({
 					where: expect.objectContaining({
-						type: { contains: "installer", mode: "insensitive" },
+						type: { equals: "installer", mode: "insensitive" },
 					}),
 				}),
 			);
@@ -241,7 +287,7 @@ describe("/api/v1/plugins", () => {
 			expect(mockPrisma.plugin.findMany).toHaveBeenCalledWith(
 				expect.objectContaining({
 					where: expect.objectContaining({
-						type: { contains: "installer", mode: "insensitive" },
+						type: { equals: "installer", mode: "insensitive" },
 						OR: [
 							{ name: { contains: "docker", mode: "insensitive" } },
 							{ description: { contains: "docker", mode: "insensitive" } },
@@ -428,7 +474,7 @@ describe("/api/v1/plugins", () => {
 			expect(mockPrisma.plugin.findMany).toHaveBeenCalledWith(
 				expect.objectContaining({
 					where: expect.objectContaining({
-						type: { contains: "utility", mode: "insensitive" },
+						type: { equals: "utility", mode: "insensitive" },
 						OR: [
 							{ name: { contains: "system", mode: "insensitive" } },
 							{ description: { contains: "system", mode: "insensitive" } },

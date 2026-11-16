@@ -7,7 +7,6 @@ import { APIErrorBoundary } from "@/components/error-boundary";
 import { FilterPanel } from "@/components/filter-panel";
 import { Pagination } from "@/components/pagination";
 import {
-	APPLICATION_CATEGORIES,
 	MAX_PAGE_SIZE,
 	MIN_PAGE_SIZE,
 	PAGE_SIZE_OPTIONS,
@@ -18,6 +17,8 @@ import type { ApplicationsResponse } from "./page";
 
 interface ApplicationsClientProps {
 	initialData: ApplicationsResponse | null;
+	// Stored category values, so the filter only offers ones that match
+	categories: string[];
 	initialParams: {
 		page: string;
 		limit: string;
@@ -29,6 +30,7 @@ interface ApplicationsClientProps {
 
 export function ApplicationsClient({
 	initialData,
+	categories,
 	initialParams,
 }: ApplicationsClientProps) {
 	const router = useRouter();
@@ -189,7 +191,7 @@ export function ApplicationsClient({
 			id: "category",
 			label: "Category",
 			value: selectedCategory,
-			options: APPLICATION_CATEGORIES.map((category) => ({
+			options: categories.map((category) => ({
 				value: category,
 				label: category.charAt(0).toUpperCase() + category.slice(1),
 			})),

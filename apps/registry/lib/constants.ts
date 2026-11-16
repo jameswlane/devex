@@ -1,31 +1,7 @@
-export const APPLICATION_CATEGORIES = [
-	"development",
-	"productivity",
-	"design",
-	"communication",
-	"media",
-	"games",
-	"utilities",
-	"education",
-	"security",
-	"databases",
-];
-
 export const PLATFORMS = [
 	{ value: "linux", label: "Linux" },
 	{ value: "macos", label: "macOS" },
 	{ value: "windows", label: "Windows" },
-];
-
-export const PLUGIN_TYPES = [
-	"package-manager",
-	"installer",
-	"utility",
-	"development",
-	"configuration",
-	"security",
-	"monitoring",
-	"automation",
 ];
 
 export const PLUGIN_STATUS = ["active", "deprecated", "experimental"];

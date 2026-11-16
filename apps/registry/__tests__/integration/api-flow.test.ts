@@ -187,11 +187,9 @@ const mockValidatePaginationParams = vi.hoisted(() =>
 );
 
 vi.mock("@/lib/validation", () => ({
-	validateCategory: vi.fn((val) => val),
 	validatePaginationParams: mockValidatePaginationParams,
 	validatePlatform: vi.fn((val) => val),
 	validateSearchQuery: vi.fn((val) => val),
-	validatePluginType: vi.fn((val) => val),
 }));
 
 vi.mock("@/lib/config", () => ({

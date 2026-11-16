@@ -2,6 +2,10 @@ import type { NextRequest, NextResponse } from "next/server";
 import { platformDocuments } from "@/lib/application-platforms";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
+import {
+	listApplicationCategories,
+	matchFilterValue,
+} from "@/lib/filter-values";
 import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
@@ -11,7 +15,6 @@ import {
 } from "@/lib/response-optimization";
 import { transformationService } from "@/lib/transformation-service";
 import {
-	validateCategory,
 	validatePaginationParams,
 	validatePlatform,
 	validateSearchQuery,
@@ -24,15 +27,45 @@ type ApplicationWithPlatforms = Application;
 async function handleGetApplications(
 	request: NextRequest,
 ): Promise<NextResponse> {
-	const { searchParams } = new URL(request.url);
-	const category = validateCategory(searchParams.get("category"));
+	const url = new URL(request.url);
+	const { searchParams } = url;
 	const search = validateSearchQuery(searchParams.get("search"));
-	const platform = validatePlatform(searchParams.get("platform"));
+
+	const rawPlatform = searchParams.get("platform")?.trim();
+	const platform = validatePlatform(rawPlatform);
+	if (rawPlatform && !platform) {
+		return createApiError(
+			`Unsupported platform: ${rawPlatform}`,
+			400,
+			"INVALID_FILTER",
+			{ parameter: "platform", allowed: ["linux", "macos", "windows"] },
+			url.pathname,
+		);
+	}
+
+	// Categories are matched case-insensitively against the stored values
+	const rawCategory = searchParams.get("category")?.trim();
+	let category: string | undefined;
+	if (rawCategory) {
+		const categories = (await safeDatabase(() => listApplicationCategories(), {
+			operation: "list-application-categories",
+			resource: "applications",
+		})) as string[];
+		category = matchFilterValue(rawCategory, categories);
+		if (!category) {
+			return createApiError(
+				`Unsupported category: ${rawCategory}`,
+				400,
+				"INVALID_FILTER",
+				{ parameter: "category", allowed: categories },
+				url.pathname,
+			);
+		}
+	}
 
 	// Handle the new validation format
 	const paginationResult = validatePaginationParams(searchParams);
 	if (!paginationResult.success) {
-		const url = new URL(request.url);
 		return createApiError(
 			"Invalid pagination parameters",
 			400,
@@ -48,8 +81,7 @@ async function handleGetApplications(
 	const where: Prisma.ApplicationWhereInput = {};
 
 	if (category) {
-		// Now using validated category - safe from injection
-		where.category = { contains: category, mode: "insensitive" };
+		where.category = { equals: category, mode: "insensitive" };
 	}
 
 	if (platform) {
