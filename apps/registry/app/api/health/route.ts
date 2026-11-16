@@ -1,10 +1,6 @@
 import type { NextRequest } from "next/server";
 import { REVALIDATE_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
-import {
-	DatabaseRecovery,
-	dbHealthMonitor,
-	handleHealthCheck,
-} from "@/lib/db-health";
+import { DatabaseRecovery, dbHealthMonitor } from "@/lib/db-health";
 import { createApiError, isProductionEnvironment, logger } from "@/lib/logger";
 import { getStartupHealth } from "@/lib/startup";
 
@@ -25,23 +21,12 @@ export async function GET(request: NextRequest) {
 			startupHealth: any;
 			dbHealth: any;
 			detailed: boolean;
-		} | null> => {
-			// Check if this is a detailed health check (for internal monitoring)
+		}> => {
+			// Check if this is a detailed health check (for internal monitoring).
+			// Recovery is not available here: reconnecting the database is a
+			// write action, so it lives behind the API key on POST.
 			const url = new URL(request.url);
 			const detailed = url.searchParams.get("detailed") === "true";
-			const recovery = url.searchParams.get("recovery") === "true";
-
-			// Attempt recovery if requested and needed
-			if (recovery) {
-				const needsRecovery = await DatabaseRecovery.isRecoveryNeeded();
-				if (needsRecovery) {
-					const recovered = await DatabaseRecovery.attemptRecovery();
-					if (!recovered) {
-						// Return null to signal failure
-						return null;
-					}
-				}
-			}
 
 			// Get startup health information
 			let startupHealth: Awaited<ReturnType<typeof getStartupHealth>>;
@@ -65,11 +50,6 @@ export async function GET(request: NextRequest) {
 
 		const result = await Promise.race([timeoutPromise, healthCheckPromise]);
 
-		// Handle recovery failure
-		if (result === null) {
-			return createApiError("Database recovery failed", 503);
-		}
-
 		const { startupHealth, dbHealth, detailed } = result;
 
 		// Return enhanced health check response with startup information
@@ -86,7 +66,6 @@ export async function GET(request: NextRequest) {
 			database: {
 				status: dbHealth.status,
 				latency: dbHealth.latency,
-				connections: detailed ? dbHealth.connections : undefined,
 			},
 			redis: dbHealth.redis,
 			...(detailed && {
@@ -95,7 +74,6 @@ export async function GET(request: NextRequest) {
 				errors: isProductionEnvironment()
 					? dbHealth.errors.map((e: string) => e.split(":")[0])
 					: dbHealth.errors,
-				connectionPool: await dbHealthMonitor.getPoolStatus(),
 			}),
 		};
 
@@ -148,9 +126,21 @@ export async function GET(request: NextRequest) {
 	}
 }
 
-// POST /api/health - Force refresh health cache (requires REVALIDATE_API_KEY)
-async function handleRefreshHealth() {
+// POST /api/health - Force refresh health cache (requires REVALIDATE_API_KEY).
+// With ?recovery=true it also reconnects the database when it is unhealthy.
+async function handleRefreshHealth(request: NextRequest) {
 	try {
+		const recovery =
+			new URL(request.url).searchParams.get("recovery") === "true";
+
+		let recovered: boolean | undefined;
+		if (recovery && (await DatabaseRecovery.isRecoveryNeeded())) {
+			recovered = await DatabaseRecovery.attemptRecovery();
+			if (!recovered) {
+				return createApiError("Database recovery failed", 503);
+			}
+		}
+
 		// Clear cache and force fresh health check
 		dbHealthMonitor.clearCache();
 		const health = await dbHealthMonitor.checkHealth(true);
@@ -159,6 +149,7 @@ async function handleRefreshHealth() {
 			message: "Health cache refreshed",
 			status: health.status,
 			timestamp: health.timestamp,
+			...(recovery && { recovered: recovered ?? false }),
 		});
 	} catch (error) {
 		return createApiError("Failed to refresh health cache", 500);

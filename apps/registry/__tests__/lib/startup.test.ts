@@ -25,6 +25,7 @@ vi.mock("../../lib/redis", () => ({
 	warmupRedis: vi.fn(),
 	closeRedisConnection: vi.fn(),
 	redis: {
+		backend: "upstash",
 		ping: vi.fn(),
 	},
 }));
@@ -240,9 +241,7 @@ describe("Startup Module", () => {
 			expect(health.status).toBe("ready");
 			expect(health.uptime).toBeGreaterThan(0);
 			expect(health.cache).toBeDefined();
-			expect(health.cache!.status).toBe("connected");
-			expect(health.cache!.hitRate).toBe(0.85);
-			expect(health.cache!.totalKeys).toBe(0);
+			expect(health.cache).toEqual({ status: "connected", backend: "upstash" });
 		});
 
 		it("should handle Redis ping failures", async () => {
@@ -251,9 +250,7 @@ describe("Startup Module", () => {
 			const health = await getStartupHealth();
 
 			expect(health.status).toBe("ready");
-			expect(health.cache!.status).toBe("error");
-			expect(health.cache!.hitRate).toBe(0);
-			expect(health.cache!.totalKeys).toBe(0);
+			expect(health.cache).toEqual({ status: "error" });
 		});
 
 		it("should handle Redis ping returning unexpected values", async () => {
@@ -262,6 +259,22 @@ describe("Startup Module", () => {
 			const health = await getStartupHealth();
 
 			expect(health.cache!.status).toBe("disconnected");
+		});
+
+		it("reports the in-memory fallback as not configured without pinging", async () => {
+			const store = redis as unknown as { backend: string };
+			store.backend = "memory";
+			try {
+				const health = await getStartupHealth();
+
+				expect(health.cache).toEqual({
+					status: "not_configured",
+					backend: "memory",
+				});
+				expect(redis.ping).not.toHaveBeenCalled();
+			} finally {
+				store.backend = "upstash";
+			}
 		});
 	});
 

@@ -117,8 +117,13 @@ export const ioRedisClient = (() => {
 	return ioRedisClientInstance as IORedis;
 })();
 
+// Which backend a store talks to. "memory" is the per-process fallback used
+// when no Redis is configured: it answers ping() but is not Redis.
+export type RedisBackend = "upstash" | "ioredis" | "memory";
+
 // Redis abstraction layer
 export interface RedisStore {
+	readonly backend: RedisBackend;
 	get(key: string): Promise<string | null>;
 	set(key: string, value: string, ttlSeconds?: number): Promise<void>;
 	incr(key: string): Promise<number>;
@@ -173,6 +178,8 @@ function toStoredString(value: unknown): string | null {
 
 // Upstash Redis implementation
 class UpstashRedisStore implements RedisStore {
+	readonly backend = "upstash";
+
 	constructor(private client: Redis) {}
 
 	async get(key: string): Promise<string | null> {
@@ -246,6 +253,8 @@ class UpstashRedisStore implements RedisStore {
 
 // IORedis implementation
 class IORedisStore implements RedisStore {
+	readonly backend = "ioredis";
+
 	constructor(private client: IORedis) {}
 
 	async get(key: string): Promise<string | null> {
@@ -313,6 +322,7 @@ class IORedisStore implements RedisStore {
 
 // In-memory fallback store for when Redis is not available
 class InMemoryStore implements RedisStore {
+	readonly backend = "memory";
 	private store = new Map<string, { value: string; expiry?: number }>();
 
 	async get(key: string): Promise<string | null> {
@@ -432,12 +442,24 @@ export async function warmupRedis(): Promise<void> {
 	}
 }
 
-// Health check utility
+// Health check utility. The in-memory fallback is reported as unhealthy:
+// it is per-process, so caches and rate limits are not shared and reset on
+// every cold start.
 export async function checkRedisHealth(): Promise<{
 	status: "healthy" | "unhealthy";
+	backend: RedisBackend;
 	latency?: number;
 	error?: string;
 }> {
+	const backend = redis.backend;
+	if (backend === "memory") {
+		return {
+			status: "unhealthy",
+			backend,
+			error: "Redis is not configured; using the in-memory store",
+		};
+	}
+
 	try {
 		const start = Date.now();
 		await redis.ping();
@@ -445,11 +467,13 @@ export async function checkRedisHealth(): Promise<{
 
 		return {
 			status: "healthy",
+			backend,
 			latency,
 		};
 	} catch (error) {
 		return {
 			status: "unhealthy",
+			backend,
 			error: error instanceof Error ? error.message : "Unknown error",
 		};
 	}

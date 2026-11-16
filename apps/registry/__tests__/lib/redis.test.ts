@@ -286,6 +286,34 @@ describe("Redis Store System", () => {
 			expect(["healthy", "unhealthy"]).toContain(result.status);
 		});
 
+		it("reports the in-memory fallback as unhealthy, not as Redis", async () => {
+			// With no Redis configured the global store is the in-memory
+			// fallback, whose ping() still answers PONG.
+			delete process.env.KV_REST_API_URL;
+			delete process.env.KV_REST_API_TOKEN;
+			delete process.env.REDIS_URL;
+			delete process.env.UPSTASH_REDIS_REST_URL;
+			delete process.env.UPSTASH_REDIS_REST_TOKEN;
+			vi.resetModules();
+			const fresh = await import("../../lib/redis");
+
+			const result = await fresh.checkRedisHealth();
+			expect(result).toEqual({
+				status: "unhealthy",
+				backend: "memory",
+				error: "Redis is not configured; using the in-memory store",
+			});
+		});
+
+		it("names the backend of each store", () => {
+			delete process.env.KV_REST_API_URL;
+			delete process.env.KV_REST_API_TOKEN;
+			delete process.env.REDIS_URL;
+			delete process.env.UPSTASH_REDIS_REST_URL;
+			delete process.env.UPSTASH_REDIS_REST_TOKEN;
+			expect(createRedisStore().backend).toBe("memory");
+		});
+
 		it("should handle warmup operations gracefully", async () => {
 			// Warmup should not throw errors
 			await expect(warmupRedis()).resolves.toBeUndefined();

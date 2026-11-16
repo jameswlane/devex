@@ -1,6 +1,6 @@
 import { logger } from "./logger";
 import { warmupPrisma } from "./prisma";
-import { warmupRedis } from "./redis";
+import { type RedisBackend, warmupRedis } from "./redis";
 import { RegistryTransformationService } from "./transformation-service";
 
 // Application startup configuration
@@ -337,44 +337,39 @@ async function warmupTransformationCache(
 	}
 }
 
+export interface StartupCacheHealth {
+	status: "connected" | "disconnected" | "not_configured" | "error";
+	backend?: RedisBackend;
+}
+
 // Health check that can be used by monitoring systems
 export async function getStartupHealth(): Promise<{
 	status: "ready" | "starting" | "failed";
 	uptime: number;
-	cache?: {
-		hitRate?: number;
-		totalKeys?: number;
-		status: string;
-	};
+	cache?: StartupCacheHealth;
 	lastInitialization?: StartupResults;
 }> {
-	let cacheStats: {
-		status: string;
-		hitRate: number;
-		totalKeys: number;
-	};
+	let cache: StartupCacheHealth;
 
 	try {
 		const { redis } = await import("./redis");
-		const connectionStatus = await redis.ping();
-
-		cacheStats = {
-			status: connectionStatus === "PONG" ? "connected" : "disconnected",
-			hitRate: 0.85, // Placeholder - would track in production
-			totalKeys: 0, // Placeholder - would count keys in production
-		};
+		if (redis.backend === "memory") {
+			cache = { status: "not_configured", backend: redis.backend };
+		} else {
+			const connectionStatus = await redis.ping();
+			cache = {
+				status: connectionStatus === "PONG" ? "connected" : "disconnected",
+				backend: redis.backend,
+			};
+		}
 	} catch (error) {
-		cacheStats = {
-			status: "error",
-			hitRate: 0,
-			totalKeys: 0,
-		};
+		cache = { status: "error" };
 	}
 
 	return {
 		status: "ready", // Simplified for now - could track actual state
 		uptime: process.uptime() * 1000, // Convert to milliseconds
-		cache: cacheStats,
+		cache,
 	};
 }
 
