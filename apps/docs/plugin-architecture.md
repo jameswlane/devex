@@ -286,7 +286,7 @@ builds:
 
 ### Registry Structure
 
-The plugin registry (`https://registry.devex.sh/v1/registry.json`) contains:
+The plugin registry (`https://registry.devex.sh/api/v1/registry.json`) contains:
 
 ```json
 {

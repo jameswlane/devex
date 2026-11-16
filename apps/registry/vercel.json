@@ -4,7 +4,7 @@
 	"rewrites": [
 		{
 			"source": "/v1/registry.json",
-			"destination": "/api/v1/registry"
+			"destination": "/api/v1/registry.json"
 		},
 		{
 			"source": "/v1/plugins/(.*)",
