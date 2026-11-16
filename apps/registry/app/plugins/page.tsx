@@ -62,9 +62,10 @@ import type { Prisma } from "../../generated/prisma/client";
 // Server-side data fetching function - calls database directly instead of HTTP
 async function fetchPlugins(
 	searchParams: URLSearchParams,
+	types: string[],
 ): Promise<PluginsResponse> {
-	// An unknown type matches nothing instead of being dropped
-	const type = searchParams.get("type")?.trim() || undefined;
+	const rawType = searchParams.get("type")?.trim();
+	const type = matchFilterValue(rawType, types);
 	const search = validateSearchQuery(searchParams.get("search"));
 	const status = searchParams.get("status");
 
@@ -81,6 +82,9 @@ async function fetchPlugins(
 
 	if (type) {
 		where.type = { equals: type, mode: "insensitive" };
+	} else if (rawType) {
+		// An unknown type matches nothing instead of being dropped
+		where.id = { in: [] };
 	}
 
 	if (status) {
@@ -180,10 +184,8 @@ export default async function PluginsPage({
 	let error: string | null = null;
 
 	try {
-		[data, types] = await Promise.all([
-			fetchPlugins(urlParams),
-			listPluginTypes(),
-		]);
+		types = await listPluginTypes();
+		data = await fetchPlugins(urlParams, types);
 	} catch (err) {
 		error = err instanceof Error ? err.message : "Failed to load plugins";
 		console.error("❌ Server-side fetch error:", error);

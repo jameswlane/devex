@@ -73,9 +73,10 @@ import type { Prisma } from "../../generated/prisma/client";
 // Server-side data fetching function - calls database directly instead of HTTP
 async function fetchApplications(
 	searchParams: URLSearchParams,
+	categories: string[],
 ): Promise<ApplicationsResponse> {
-	// An unknown category matches nothing instead of being dropped
-	const category = searchParams.get("category")?.trim() || undefined;
+	const rawCategory = searchParams.get("category")?.trim();
+	const category = matchFilterValue(rawCategory, categories);
 	const search = validateSearchQuery(searchParams.get("search"));
 	const platform = validatePlatform(searchParams.get("platform"));
 
@@ -92,6 +93,9 @@ async function fetchApplications(
 
 	if (category) {
 		where.category = { equals: category, mode: "insensitive" };
+	} else if (rawCategory) {
+		// An unknown category matches nothing instead of being dropped
+		where.id = { in: [] };
 	}
 
 	if (platform) {
@@ -215,10 +219,8 @@ export default async function ApplicationsPage({
 	let error: string | null = null;
 
 	try {
-		[data, categories] = await Promise.all([
-			fetchApplications(urlParams),
-			listApplicationCategories(),
-		]);
+		categories = await listApplicationCategories();
+		data = await fetchApplications(urlParams, categories);
 	} catch (err) {
 		error = err instanceof Error ? err.message : "Failed to load applications";
 		console.error("❌ Server-side fetch error:", error);
