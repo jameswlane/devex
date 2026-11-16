@@ -1,33 +1,5 @@
-// Valid categories - allowlist approach
-const VALID_CATEGORIES = [
-	"Development",
-	"Databases",
-	"Desktop",
-	"Communication",
-	"Media",
-	"Productivity",
-	"Security",
-	"System",
-	"Virtualization",
-	"Games",
-	"Education",
-	"Graphics",
-	"Internet",
-	"Science",
-	"Plugin",
-	"Other",
-] as const;
-
 // Valid platforms - allowlist approach
 const VALID_PLATFORMS = ["linux", "macos", "windows"] as const;
-
-// Valid plugin types
-const VALID_PLUGIN_TYPES = [
-	"package-manager",
-	"desktop",
-	"system-setup",
-	"tool",
-] as const;
 
 type ParamIssue = { path: string[]; code: string; message: string };
 
@@ -165,16 +137,6 @@ export function validateSearchQuery(query?: string | null): string | undefined {
 	return sanitized.length > 100 ? sanitized.slice(0, 100) : sanitized;
 }
 
-export function validateCategory(category?: string | null): string | undefined {
-	if (!category) return undefined;
-
-	// Strict validation using allowlist
-	const normalizedCategory = category.trim();
-	const isValid = VALID_CATEGORIES.includes(normalizedCategory as any);
-
-	return isValid ? normalizedCategory : undefined;
-}
-
 export function validatePlatform(platform?: string | null): string | undefined {
 	if (!platform) return undefined;
 
@@ -183,16 +145,6 @@ export function validatePlatform(platform?: string | null): string | undefined {
 	const isValid = VALID_PLATFORMS.includes(normalizedPlatform as any);
 
 	return isValid ? normalizedPlatform : undefined;
-}
-
-export function validatePluginType(type?: string | null): string | undefined {
-	if (!type) return undefined;
-
-	// Strict validation using allowlist
-	const normalizedType = type.toLowerCase().trim();
-	const isValid = VALID_PLUGIN_TYPES.includes(normalizedType as any);
-
-	return isValid ? normalizedType : undefined;
 }
 
 // Sanitize search query to prevent injection attacks
@@ -207,59 +159,4 @@ export function sanitizeSearchQuery(query: string): string {
 		.replace(/[&|]/g, " ") // Replace special characters with spaces
 		.replace(/\s+/g, " ") // Normalize multiple spaces to single space
 		.trim();
-}
-
-// Validate query parameters based on resource type
-export function validateQueryParams(
-	resource: string,
-	params: Record<string, string>,
-): { success: boolean; data?: any; error?: any } {
-	if (resource === "plugins") {
-		const validated: any = {};
-
-		if (params.type) {
-			const type = validatePluginType(params.type);
-			if (!type) {
-				return { success: false, error: "Invalid plugin type" };
-			}
-			validated.type = type;
-		}
-
-		if (params.status) {
-			validated.status = params.status;
-		}
-
-		return { success: true, data: validated };
-	}
-
-	if (resource === "applications") {
-		const validated: any = {};
-
-		if (params.category) {
-			// Accept lowercase 'development' and convert to 'Development'
-			const categoryInput =
-				params.category.charAt(0).toUpperCase() + params.category.slice(1);
-			const category = validateCategory(categoryInput);
-			if (!category) {
-				return { success: false, error: "Invalid category" };
-			}
-			validated.category = params.category; // Use the original case for test compatibility
-		}
-
-		if (params.platform) {
-			const platform = validatePlatform(params.platform);
-			if (!platform) {
-				return { success: false, error: "Invalid platform" };
-			}
-			validated.platform = platform;
-		}
-
-		if (params.official === "true") {
-			validated.official = true;
-		}
-
-		return { success: true, data: validated };
-	}
-
-	return { success: false, error: "Invalid resource type" };
 }

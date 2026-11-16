@@ -11,13 +11,14 @@ import {
 	MIN_PAGE_SIZE,
 	PAGE_SIZE_OPTIONS,
 	PLUGIN_STATUS,
-	PLUGIN_TYPES,
 	SEARCH_DEBOUNCE_MS,
 } from "@/lib/constants";
 import type { PluginsResponse } from "./page";
 
 interface PluginsClientProps {
 	initialData: PluginsResponse | null;
+	// Stored plugin types, so the filter only offers ones that match
+	types: string[];
 	initialParams: {
 		page: string;
 		limit: string;
@@ -29,6 +30,7 @@ interface PluginsClientProps {
 
 export function PluginsClient({
 	initialData,
+	types,
 	initialParams,
 }: PluginsClientProps) {
 	const router = useRouter();
@@ -185,7 +187,7 @@ export function PluginsClient({
 			id: "type",
 			label: "Type",
 			value: selectedType,
-			options: PLUGIN_TYPES.map((type) => ({
+			options: types.map((type) => ({
 				value: type,
 				label: type
 					.split("-")

@@ -55,12 +55,15 @@ export interface ApplicationsResponse {
 
 // Import required dependencies for direct database access
 import { platformDocuments } from "@/lib/application-platforms";
+import {
+	listApplicationCategories,
+	matchFilterValue,
+} from "@/lib/filter-values";
 import { prisma } from "@/lib/prisma";
 import { createPaginatedResponse } from "@/lib/response-optimization";
 import { transformationService } from "@/lib/transformation-service";
 import type { ApplicationResponse } from "@/lib/types/registry";
 import {
-	validateCategory,
 	validatePaginationParams,
 	validatePlatform,
 	validateSearchQuery,
@@ -70,8 +73,10 @@ import type { Prisma } from "../../generated/prisma/client";
 // Server-side data fetching function - calls database directly instead of HTTP
 async function fetchApplications(
 	searchParams: URLSearchParams,
+	categories: string[],
 ): Promise<ApplicationsResponse> {
-	const category = validateCategory(searchParams.get("category"));
+	const rawCategory = searchParams.get("category")?.trim();
+	const category = matchFilterValue(rawCategory, categories);
 	const search = validateSearchQuery(searchParams.get("search"));
 	const platform = validatePlatform(searchParams.get("platform"));
 
@@ -87,7 +92,10 @@ async function fetchApplications(
 	const where: Prisma.ApplicationWhereInput = {};
 
 	if (category) {
-		where.category = { contains: category, mode: "insensitive" };
+		where.category = { equals: category, mode: "insensitive" };
+	} else if (rawCategory) {
+		// An unknown category matches nothing instead of being dropped
+		where.id = { in: [] };
 	}
 
 	if (platform) {
@@ -207,10 +215,12 @@ export default async function ApplicationsPage({
 	if (params.search) urlParams.set("search", params.search as string);
 
 	let data: ApplicationsResponse | null = null;
+	let categories: string[] = [];
 	let error: string | null = null;
 
 	try {
-		data = await fetchApplications(urlParams);
+		categories = await listApplicationCategories();
+		data = await fetchApplications(urlParams, categories);
 	} catch (err) {
 		error = err instanceof Error ? err.message : "Failed to load applications";
 		console.error("❌ Server-side fetch error:", error);
@@ -292,10 +302,14 @@ export default async function ApplicationsPage({
 				>
 					<ApplicationsClient
 						initialData={data}
+						categories={categories}
 						initialParams={{
 							page: (params.page as string) || "1",
 							limit: (params.limit as string) || "20",
-							category: (params.category as string) || "",
+							category:
+								matchFilterValue(params.category as string, categories) ||
+								(params.category as string) ||
+								"",
 							platform: (params.platform as string) || "",
 							search: (params.search as string) || "",
 						}}

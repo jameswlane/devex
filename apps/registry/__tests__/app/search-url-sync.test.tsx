@@ -45,7 +45,12 @@ type Params = Record<string, string>;
 
 interface ClientCase {
 	name: string;
-	Client: ComponentType<{ initialData: never; initialParams: never }>;
+	Client: ComponentType<{
+		initialData: never;
+		initialParams: never;
+		categories: string[];
+		types: string[];
+	}>;
 	baseParams: Params;
 	filterId: string;
 	filterValue: string;
@@ -83,6 +88,8 @@ describe.each(cases)("$name search URL sync", (testCase) => {
 		rerender(
 			<Client
 				initialData={initialData}
+				categories={["development"]}
+				types={["package-manager"]}
 				initialParams={{ ...baseParams, search } as never}
 			/>,
 		);
@@ -93,6 +100,8 @@ describe.each(cases)("$name search URL sync", (testCase) => {
 		return render(
 			<Client
 				initialData={initialData}
+				categories={["development"]}
+				types={["package-manager"]}
 				initialParams={{ ...baseParams, search } as never}
 			/>,
 		);

@@ -18,13 +18,21 @@ vi.mock("@/lib/transformation-service", () => ({
 }));
 
 vi.mock("@/lib/validation", () => ({
-	validateCategory: vi.fn((val) => val),
 	validatePaginationParams: vi.fn(() => ({
 		success: true,
 		data: { page: 1, limit: 50 },
 	})),
 	validatePlatform: vi.fn((val) => val),
 	validateSearchQuery: vi.fn((val) => val),
+}));
+
+vi.mock("@/lib/filter-values", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/filter-values")>()),
+	listApplicationCategories: vi.fn(async () => [
+		"Databases",
+		"Development Tools",
+		"development",
+	]),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -196,10 +204,55 @@ describe("/api/v1/applications", () => {
 			expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
 				expect.objectContaining({
 					where: expect.objectContaining({
-						category: { contains: "development", mode: "insensitive" },
+						category: { equals: "development", mode: "insensitive" },
 					}),
 				}),
 			);
+		});
+
+		it("should match a category case-insensitively to its stored value", async () => {
+			const req = createMockRequest({ category: "databases" });
+			const response = await GET(req);
+
+			expect(response.status).toBe(200);
+			expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
+				expect.objectContaining({
+					where: expect.objectContaining({
+						category: { equals: "Databases", mode: "insensitive" },
+					}),
+				}),
+			);
+		});
+
+		it("should reject an unsupported category with 400", async () => {
+			const { createApiError } = await import("@/lib/logger");
+			const req = createMockRequest({ category: "nope" });
+			const response = await GET(req);
+
+			expect(response.status).toBe(400);
+			expect(createApiError).toHaveBeenCalledWith(
+				"Unsupported category: nope",
+				400,
+				"INVALID_FILTER",
+				{
+					parameter: "category",
+					allowed: ["Databases", "Development Tools", "development"],
+				},
+				"/api/v1/applications",
+			);
+			expect(mockPrisma.application.findMany).not.toHaveBeenCalled();
+		});
+
+		it("should reject an unsupported platform with 400", async () => {
+			const { validatePlatform } = (await import(
+				"@/lib/validation"
+			)) as unknown as { validatePlatform: Mock };
+			validatePlatform.mockReturnValueOnce(undefined);
+			const req = createMockRequest({ platform: "amiga" });
+			const response = await GET(req);
+
+			expect(response.status).toBe(400);
+			expect(mockPrisma.application.findMany).not.toHaveBeenCalled();
 		});
 
 		it("should filter by platform correctly", async () => {
@@ -269,7 +322,7 @@ describe("/api/v1/applications", () => {
 			expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
 				expect.objectContaining({
 					where: expect.objectContaining({
-						category: { contains: "development", mode: "insensitive" },
+						category: { equals: "development", mode: "insensitive" },
 						supportsLinux: true,
 						OR: [
 							{ name: { contains: "editor", mode: "insensitive" } },

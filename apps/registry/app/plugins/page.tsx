@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { CardSkeleton } from "@/components/loading-spinner";
+import { listPluginTypes, matchFilterValue } from "@/lib/filter-values";
 import { PluginsClient } from "./plugins-client";
 
 // Moved interfaces to shared types
@@ -54,7 +55,6 @@ import { transformationService } from "@/lib/transformation-service";
 import type { PluginResponse } from "@/lib/types/registry";
 import {
 	validatePaginationParams,
-	validatePluginType,
 	validateSearchQuery,
 } from "@/lib/validation";
 import type { Prisma } from "../../generated/prisma/client";
@@ -62,8 +62,10 @@ import type { Prisma } from "../../generated/prisma/client";
 // Server-side data fetching function - calls database directly instead of HTTP
 async function fetchPlugins(
 	searchParams: URLSearchParams,
+	types: string[],
 ): Promise<PluginsResponse> {
-	const type = validatePluginType(searchParams.get("type"));
+	const rawType = searchParams.get("type")?.trim();
+	const type = matchFilterValue(rawType, types);
 	const search = validateSearchQuery(searchParams.get("search"));
 	const status = searchParams.get("status");
 
@@ -79,7 +81,10 @@ async function fetchPlugins(
 	const where: Prisma.PluginWhereInput = {};
 
 	if (type) {
-		where.type = { contains: type, mode: "insensitive" };
+		where.type = { equals: type, mode: "insensitive" };
+	} else if (rawType) {
+		// An unknown type matches nothing instead of being dropped
+		where.id = { in: [] };
 	}
 
 	if (status) {
@@ -175,10 +180,12 @@ export default async function PluginsPage({
 	if (params.search) urlParams.set("search", params.search as string);
 
 	let data: PluginsResponse | null = null;
+	let types: string[] = [];
 	let error: string | null = null;
 
 	try {
-		data = await fetchPlugins(urlParams);
+		types = await listPluginTypes();
+		data = await fetchPlugins(urlParams, types);
 	} catch (err) {
 		error = err instanceof Error ? err.message : "Failed to load plugins";
 		console.error("❌ Server-side fetch error:", error);
@@ -260,10 +267,14 @@ export default async function PluginsPage({
 				>
 					<PluginsClient
 						initialData={data}
+						types={types}
 						initialParams={{
 							page: (params.page as string) || "1",
 							limit: (params.limit as string) || "20",
-							type: (params.type as string) || "",
+							type:
+								matchFilterValue(params.type as string, types) ||
+								(params.type as string) ||
+								"",
 							status: (params.status as string) || "",
 							search: (params.search as string) || "",
 						}}

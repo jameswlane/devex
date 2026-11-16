@@ -4,7 +4,6 @@ import {
 	parseIntegerParams,
 	sanitizeSearchQuery,
 	validatePaginationParams,
-	validateQueryParams,
 } from "@/lib/validation";
 
 describe("validation", () => {
@@ -145,39 +144,6 @@ describe("validation", () => {
 					"offset",
 				]);
 			}
-		});
-	});
-
-	describe("validateQueryParams", () => {
-		it("should validate plugin query parameters", () => {
-			const result = validateQueryParams("plugins", {
-				type: "package-manager",
-				status: "active",
-			});
-			expect(result.success).toBe(true);
-			if (result.success) {
-				expect(result.data.type).toBe("package-manager");
-				expect(result.data.status).toBe("active");
-			}
-		});
-
-		it("should validate application query parameters", () => {
-			const result = validateQueryParams("applications", {
-				category: "development",
-				platform: "linux",
-				official: "true",
-			});
-			expect(result.success).toBe(true);
-			if (result.success) {
-				expect(result.data.category).toBe("development");
-				expect(result.data.platform).toBe("linux");
-				expect(result.data.official).toBe(true);
-			}
-		});
-
-		it("should handle invalid resource types", () => {
-			const result = validateQueryParams("invalid" as any, {});
-			expect(result.success).toBe(false);
 		});
 	});
 
