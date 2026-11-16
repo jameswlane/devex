@@ -16,7 +16,6 @@
 		"db:deploy": "prisma migrate deploy",
 		"db:seed": "tsx scripts/seed.ts",
 		"db:studio": "prisma studio",
-		"update-binaries": "tsx scripts/update-binary-metadata.ts",
 		"typecheck": "tsc --noEmit",
 		"lint": "biome lint ."
 	},
