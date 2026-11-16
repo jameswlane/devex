@@ -4,6 +4,7 @@ import { PLUGIN_CACHE_CONTROL, pluginCacheTags } from "@/lib/cdn-cache";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { listPluginTypes, matchFilterValue } from "@/lib/filter-values";
 import { createApiError, logDatabaseError } from "@/lib/logger";
+import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
 import { prisma } from "@/lib/prisma";
 import {
 	createOptimizedResponse,
@@ -67,7 +68,7 @@ async function handleGetPlugins(request: Request) {
 		const [plugins, total] = await Promise.all([
 			prisma.plugin.findMany({
 				where,
-				orderBy: [{ priority: "asc" }, { name: "asc" }],
+				orderBy: PLUGIN_LIST_ORDER,
 				take: limit,
 				skip: offset,
 			}),
