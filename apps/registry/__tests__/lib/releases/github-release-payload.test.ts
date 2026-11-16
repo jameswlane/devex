@@ -188,6 +188,7 @@ conflicts:
 			expect(meta.apiVersion).toBe("v2");
 			expect(meta.priority).toBe(15);
 			expect(meta.supports).toEqual({ install: true, uninstall: true });
+			expect(meta.distributions).toEqual(["debian", "ubuntu"]);
 			expect(meta.dependencies).toEqual(["tool-git"]);
 			expect(meta.conflicts).toEqual(["package-manager-dnf"]);
 		});

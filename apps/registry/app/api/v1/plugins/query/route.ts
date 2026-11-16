@@ -9,6 +9,16 @@ import {
 import { transformationService } from "@/lib/transformation-service";
 import { Prisma } from "../../../../../generated/prisma/client";
 
+function pluginDistributions(supports: Prisma.JsonValue): string[] {
+	if (!supports || typeof supports !== "object" || Array.isArray(supports)) {
+		return [];
+	}
+	const distributions = supports.distributions;
+	return Array.isArray(distributions)
+		? distributions.filter((d): d is string => typeof d === "string")
+		: [];
+}
+
 /**
  * Advanced plugin query endpoint for smart plugin selection
  * Supports filtering by OS, distribution, desktop environment, and categories
@@ -76,31 +86,6 @@ export async function GET(request: Request) {
 			});
 		}
 
-		// Distribution-specific filtering (for Linux)
-		if (distribution && os === "linux") {
-			const andArray = Array.isArray(where.AND)
-				? where.AND
-				: where.AND
-					? [where.AND]
-					: [];
-			where.AND = andArray;
-			where.AND.push({
-				OR: [
-					// Generic Linux plugins
-					{ platforms: { has: "linux" } },
-					// Distribution-specific plugins
-					{ platforms: { has: distribution } },
-					// Check in supports JSON for distribution support
-					{
-						supports: {
-							path: ["distributions"],
-							array_contains: [distribution],
-						},
-					},
-				],
-			});
-		}
-
 		// Desktop environment filtering
 		if (desktop) {
 			const andArray = Array.isArray(where.AND)
@@ -150,7 +135,7 @@ export async function GET(request: Request) {
 		}
 
 		// Fetch plugins with priority ordering
-		const plugins = await prisma.plugin.findMany({
+		const matchingPlugins = await prisma.plugin.findMany({
 			where,
 			orderBy: [
 				{ priority: "asc" }, // Lower number = preferred plugin, first
@@ -160,6 +145,20 @@ export async function GET(request: Request) {
 			// Note: binaries is a JSON field in the Plugin model, not a relation
 			// We'll process the binaries JSON field in the mapping below
 		});
+
+		// Distribution filtering (Linux only). Plugins with no distro list, such
+		// as mise or pip, work on any distro; the rest must list this one.
+		const wantedDistribution =
+			distribution && os === "linux" ? distribution.toLowerCase() : undefined;
+		const plugins = wantedDistribution
+			? matchingPlugins.filter((plugin) => {
+					const distributions = pluginDistributions(plugin.supports);
+					return (
+						distributions.length === 0 ||
+						distributions.includes(wantedDistribution)
+					);
+				})
+			: matchingPlugins;
 
 		// Transform and enrich plugin data
 		const enrichedPlugins = await Promise.all(
@@ -212,7 +211,7 @@ export async function GET(request: Request) {
 						lastUpdated: plugin.updatedAt,
 						categories: (plugin.supports as any)?.categories || [],
 						desktops: (plugin.supports as any)?.desktops || [],
-						distributions: (plugin.supports as any)?.distributions || [],
+						distributions: pluginDistributions(plugin.supports),
 					},
 				};
 			}),

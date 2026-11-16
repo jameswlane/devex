@@ -88,6 +88,8 @@ export const releasePayloadSchema = z.object({
 		platforms: z.array(z.enum(["linux", "macos", "windows"])).min(1),
 		priority: z.number().int().optional(),
 		supports: z.record(z.string(), z.boolean()).optional(),
+		/** Linux distros from platforms.linux.distros; absent means any distro. */
+		distributions: z.array(z.string().min(1).max(50)).max(100).optional(),
 		sdkVersion: z.string().max(50).optional(),
 		apiVersion: z.string().max(50).optional(),
 		dependencies: z.array(z.string()).default([]),

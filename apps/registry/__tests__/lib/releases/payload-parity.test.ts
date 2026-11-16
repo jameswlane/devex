@@ -75,6 +75,7 @@ describe("webhook and nightly sync payload parity", () => {
 					list: true,
 					repository_management: true,
 				},
+				distributions: ["debian", "ubuntu", "mint", "pop", "elementary"],
 				sdkVersion: "1.0.0",
 				apiVersion: "v1",
 				dependencies: [],
