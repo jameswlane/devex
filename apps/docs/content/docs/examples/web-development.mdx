@@ -36,11 +36,7 @@ devex install --template web-development --non-interactive --dry-run
 devex init --profile frontend --non-interactive
 ```
 
-Installs download the plugins their steps need. `devex plugin run` only runs a plugin that's already installed, so install the mise plugin for the Node.js step:
-
-```bash
-devex plugin install package-manager-mise
-```
+Installs download the plugins their steps need, so you don't have to install the mise or Docker plugins first.
 
 ## Install the tools
 
@@ -104,7 +100,6 @@ devex template validate web-development
 devex template plan web-development --action install --non-interactive
 devex install --template web-development --non-interactive --dry-run
 
-devex plugin install package-manager-mise
 devex install git curl "GitHub CLI" --non-interactive
 devex install --template web-development --non-interactive
 ~/.local/bin/mise exec -- node --version
