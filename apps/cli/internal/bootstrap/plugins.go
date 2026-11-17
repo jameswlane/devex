@@ -338,6 +338,9 @@ func (b *PluginBootstrap) EnsurePluginWithContext(ctx context.Context, pluginNam
 	if b.skipDownload || viper.GetBool("skip-plugin-download") {
 		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s is not installed and downloads are disabled by skip-plugin-download; retry setup without --skip-plugin-download or run 'devex plugin install %s' first", pluginName, pluginName)
 	}
+	if b.downloader == nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s is not installed and no plugin registry is configured; run 'devex plugin install %s' first", pluginName, pluginName)
+	}
 	if err := b.downloader.DownloadValidatedPluginWithContext(ctx, pluginName); err != nil {
 		return sdk.PluginMetadata{}, fmt.Errorf("download required plugin %s (retry with 'devex plugin install %s'): %w", pluginName, pluginName, err)
 	}
@@ -422,6 +425,11 @@ func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName st
 	if _, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]; !installed {
 		if err := b.PluginDownloadError(pluginName); err != nil {
 			return fmt.Errorf("required plugin %s is unavailable: %w", pluginName, err)
+		}
+		// Steps can need plugins the startup bootstrap didn't fetch; download
+		// and verify them now unless --offline or --skip-plugin-download is set.
+		if _, err := b.EnsurePluginWithContext(ctx, pluginName); err != nil {
+			return err
 		}
 	}
 

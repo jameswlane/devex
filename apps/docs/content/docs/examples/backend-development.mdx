@@ -22,11 +22,10 @@ This page sets up a backend development machine on Debian or Ubuntu with command
 devex init --profile backend --non-interactive
 ```
 
-Installs don't download the mise and Docker plugins on their own yet ([#460](https://github.com/jameswlane/devex/issues/460)), so install them first:
+Installs download the plugins their steps need. `devex plugin run` only runs a plugin that's already installed, so install the mise plugin for the `ensure-installed` step:
 
 ```bash
 devex plugin install package-manager-mise
-devex plugin install package-manager-docker
 ```
 
 ## The built-in backend template
@@ -96,7 +95,6 @@ devex template plan backend --action install --non-interactive
 devex install --template backend --non-interactive --dry-run
 
 devex plugin install package-manager-mise
-devex plugin install package-manager-docker
 devex install git curl Docker --non-interactive
 devex plugin run package-manager-mise ensure-installed
 devex install Go Python --non-interactive
