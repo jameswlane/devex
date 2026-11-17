@@ -68,6 +68,16 @@ var _ = Describe("Shipped configuration validation", func() {
 		write(path, "languages: [")
 		Expect(errors()).To(ContainElement(HaveField("File", path)))
 	})
+	It("rejects a category spelled differently from an existing one", func() {
+		write(filepath.Join(root, "config/applications/tools/a.yaml"), "name: a\ncategory: Utilities\nlinux:\n  install_method: apt\n  install_command: a\n")
+		path := filepath.Join(root, "config/applications/tools/b.yaml")
+		write(path, "name: b\ncategory: utility\nlinux:\n  install_method: apt\n  install_command: b\n")
+		Expect(errors()).To(ContainElement(And(HaveField("File", path), HaveField("Field", "category"), HaveField("Message", ContainSubstring(`"utility" duplicates "Utilities"`)))))
+		write(path, "name: b\ncategory: \" Utilities \"\nlinux:\n  install_method: apt\n  install_command: b\n")
+		Expect(errors()).To(ContainElement(HaveField("Message", ContainSubstring(`" Utilities " duplicates "Utilities"`))))
+		write(path, "name: b\ncategory: Utilities\nlinux:\n  install_method: apt\n  install_command: b\n")
+		Expect(errors()).To(BeEmpty())
+	})
 	It("rejects unknown application schema fields", func() {
 		write(filepath.Join(root, "config/applications/tools/editor.yaml"), "name: editor\nlinux:\n  install_method: apt\n  install_command: editor\n  typo: true\n")
 		Expect(errors()).To(ContainElement(HaveField("Field", "linux.typo")))

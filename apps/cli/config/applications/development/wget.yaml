@@ -1,6 +1,6 @@
 name: wget
 description: A tool for retrieving files from the web
-category: dependency
+category: Dependency
 linux:
   install_method: apt
   install_command: wget

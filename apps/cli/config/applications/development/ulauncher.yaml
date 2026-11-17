@@ -1,6 +1,6 @@
 name: Ulauncher
 description: A fast application launcher for Linux
-category: Utility
+category: Utilities
 default: false
 desktop_environments:
   - all
