@@ -78,6 +78,7 @@ var _ = Describe("Shipped catalog architecture values", func() {
 	})
 
 	It("points the GitHub CLI source at the host architecture", func() {
+		defer types.PinCatalogOSForTesting("linux")()
 		defer types.PinCatalogArchForTesting("amd64")()
 		app := load("github-cli")
 		app.Linux.PlatformRequirements = nil
