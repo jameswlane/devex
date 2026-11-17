@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"github.com/jameswlane/devex/apps/cli/internal/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
@@ -18,5 +19,9 @@ var _ = Describe("Catalog opt-ins", func() {
 		Expect(requiresCatalog(unrelated)).To(BeFalse())
 		Expect(requiresCatalog(group)).To(BeTrue())
 		Expect(requiresCatalog(child)).To(BeTrue())
+	})
+
+	It("loads the catalog for template plans, whose steps name catalog applications", func() {
+		Expect(requiresCatalog(newTemplatePlanCmd(config.CrossPlatformSettings{}, nil))).To(BeTrue())
 	})
 })

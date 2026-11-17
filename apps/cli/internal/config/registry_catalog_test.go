@@ -55,5 +55,9 @@ var _ = Describe("Registry settings integration", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loaded.Catalog.Source).To(Equal("bundled"))
 		Expect(loaded.GetAllApps()).To(ContainElement(HaveField("Name", "git")))
+		// Programming languages ship outside applications/ but are catalog
+		// entries too (#466).
+		Expect(loaded.GetAllApps()).To(ContainElement(SatisfyAll(HaveField("Name", "Go"), HaveField("AllPlatforms.InstallMethod", "mise"))))
+		Expect(loaded.GetAllApps()).To(ContainElement(HaveField("Name", "Python")))
 	})
 })
