@@ -73,6 +73,8 @@ var _ = Describe("Shipped configuration validation", func() {
 		path := filepath.Join(root, "config/applications/tools/b.yaml")
 		write(path, "name: b\ncategory: utility\nlinux:\n  install_method: apt\n  install_command: b\n")
 		Expect(errors()).To(ContainElement(And(HaveField("File", path), HaveField("Field", "category"), HaveField("Message", ContainSubstring(`"utility" duplicates "Utilities"`)))))
+		write(path, "name: b\ncategory: \" Utilities \"\nlinux:\n  install_method: apt\n  install_command: b\n")
+		Expect(errors()).To(ContainElement(HaveField("Message", ContainSubstring(`" Utilities " duplicates "Utilities"`))))
 		write(path, "name: b\ncategory: Utilities\nlinux:\n  install_method: apt\n  install_command: b\n")
 		Expect(errors()).To(BeEmpty())
 	})

@@ -145,7 +145,7 @@ func checkCategory(node *yaml.Node, seen map[string]string, add func(string, str
 	if err := node.Decode(&header); err != nil || strings.TrimSpace(header.Category) == "" {
 		return
 	}
-	category := strings.TrimSpace(header.Category)
+	category := header.Category
 	key := categoryKey(category)
 	if first, ok := seen[key]; !ok {
 		seen[key] = category
