@@ -116,7 +116,7 @@ func GetInstalledAppsCache(repo types.Repository) map[string]bool {
 
 	dbApps, err := repo.ListApps()
 	if err != nil {
-		log.Warn("Failed to retrieve installed apps from database: %v", err)
+		log.Warn("Failed to retrieve installed apps from database", "error", err)
 		return installedApps
 	}
 
