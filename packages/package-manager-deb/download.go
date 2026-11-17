@@ -33,7 +33,7 @@ func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (downloa
 		}
 	}()
 
-	d.logger.Debug("Downloading to temporary file: %s", tmpFile.Name())
+	d.logger.Debug(fmt.Sprintf("Downloading to temporary file: %s", tmpFile.Name()))
 
 	// Download the file with proper context propagation
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -64,7 +64,7 @@ func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (downloa
 		return "", fmt.Errorf("failed to save file: %w", err)
 	}
 
-	d.logger.Debug("Successfully downloaded package to: %s", tmpFile.Name())
+	d.logger.Debug(fmt.Sprintf("Successfully downloaded package to: %s", tmpFile.Name()))
 	return tmpFile.Name(), nil
 }
 
@@ -102,7 +102,7 @@ func (d *DebInstaller) cleanupTempFile(filename string) {
 	if err := os.Remove(filename); err != nil {
 		d.logger.Warning("Failed to remove temporary file %s: %v", filename, err)
 	} else {
-		d.logger.Debug("Cleaned up temporary file: %s", filename)
+		d.logger.Debug(fmt.Sprintf("Cleaned up temporary file: %s", filename))
 	}
 }
 
