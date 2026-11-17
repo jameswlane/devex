@@ -45,6 +45,7 @@ func Validate(ctx context.Context, root string) ([]config.Diagnostic, error) {
 	}
 	defer sourceRoot.Close()
 	manager := templates.NewTemplateManager("")
+	categories := map[string]string{}
 	for _, tree := range []string{"config", "assets/templates"} {
 		err := filepath.WalkDir(filepath.Join(root, tree), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
@@ -88,6 +89,9 @@ func Validate(ctx context.Context, root string) ([]config.Diagnostic, error) {
 				return nil
 			}
 			checkReferences(node.Content[0], "", root, filepath.Dir(path), add, 0)
+			if strings.HasPrefix(filepath.ToSlash(relativePath), "config/applications/") {
+				checkCategory(&node, categories, add)
+			}
 			if strings.Contains(filepath.ToSlash(path), "/templates/") && (filepath.Base(path) == "manifest.yaml" || filepath.Base(filepath.Dir(path)) == "templates") {
 				var schema any = &templates.Template{}
 				if filepath.Base(path) == "manifest.yaml" {
@@ -129,6 +133,36 @@ func Validate(ctx context.Context, root string) ([]config.Diagnostic, error) {
 		}
 	}
 	return diagnostics, nil
+}
+
+// checkCategory rejects a category that differs from an earlier one only by
+// case, surrounding space, or a plural suffix. The registry shows each spelling
+// as its own category filter, so the catalog keeps one spelling per category.
+func checkCategory(node *yaml.Node, seen map[string]string, add func(string, string)) {
+	var header struct {
+		Category string `yaml:"category"`
+	}
+	if err := node.Decode(&header); err != nil || strings.TrimSpace(header.Category) == "" {
+		return
+	}
+	category := strings.TrimSpace(header.Category)
+	key := categoryKey(category)
+	if first, ok := seen[key]; !ok {
+		seen[key] = category
+	} else if first != category {
+		add("category", fmt.Sprintf("category %q duplicates %q; use one spelling", category, first))
+	}
+}
+
+func categoryKey(category string) string {
+	key := strings.ToLower(strings.Join(strings.Fields(category), " "))
+	switch {
+	case strings.HasSuffix(key, "ies"):
+		return strings.TrimSuffix(key, "ies") + "y"
+	case strings.HasSuffix(key, "s") && !strings.HasSuffix(key, "ss"):
+		return strings.TrimSuffix(key, "s")
+	}
+	return key
 }
 
 func checkTemplateSteps(steps []templates.TemplateStepSpec, field string, known map[string]bool, add func(string, string)) {
