@@ -451,6 +451,47 @@ describe("ToolSearch", () => {
 			expect(pluginCard.getByText("Windows")).toBeInTheDocument();
 		});
 
+		it("should show every platform for a tool defined only for all platforms", async () => {
+			toolsHandler.mockImplementation(async () =>
+				jsonResponse({
+					...mockToolsResponse,
+					tools: [
+						{
+							name: "MySQL",
+							description: "Relational database",
+							category: "Database",
+							type: "application",
+							official: true,
+							default: false,
+							platforms: {
+								all: {
+									install_method: "docker",
+									install_command: "mysql:8",
+									official_support: true,
+								},
+							},
+							tags: ["database"],
+						},
+					],
+				}),
+			);
+			const user = userEvent.setup();
+			await user.type(
+				screen.getByPlaceholderText("Search tools, descriptions, or tags..."),
+				"mysql",
+			);
+			await waitFor(() => {
+				expect(screen.getByText("MySQL")).toBeInTheDocument();
+			});
+
+			const card = within(getToolCard("MySQL"));
+			expect(card.getByText("Linux")).toBeInTheDocument();
+			expect(card.getByText("macOS")).toBeInTheDocument();
+			expect(card.getByText("Windows")).toBeInTheDocument();
+			expect(card.getByText("Install via:")).toBeInTheDocument();
+			expect(card.getByText("docker")).toBeInTheDocument();
+		});
+
 		it("should display install commands", () => {
 			const appCard = within(getToolCard("Test App 1"));
 			expect(appCard.getByText("Install via:")).toBeInTheDocument();

@@ -2,7 +2,7 @@ import { ValidationError } from "../utils/error-handling";
 import { validateAndSanitizeSearch } from "./search-sanitization";
 
 // Tool type definition
-interface PlatformInfo {
+export interface PlatformInfo {
 	install_method: string;
 	install_command: string;
 	alternatives?: Array<{
@@ -24,6 +24,8 @@ export interface Tool {
 		linux?: PlatformInfo | null;
 		macos?: PlatformInfo | null;
 		windows?: PlatformInfo | null;
+		// Install details shared by every platform (all_platforms in the registry)
+		all?: PlatformInfo | null;
 	};
 	tags: string[];
 	desktopEnvironments?: string[];
@@ -32,6 +34,21 @@ export interface Tool {
 	priority?: number;
 	supports?: Record<string, boolean>;
 	status?: string;
+}
+
+export type Platform = "linux" | "macos" | "windows";
+
+export const PLATFORMS: readonly Platform[] = ["linux", "macos", "windows"];
+
+/**
+ * Returns the install details for a platform, falling back to the
+ * all-platforms entry when the tool has no platform-specific one.
+ */
+export function getPlatformInfo(
+	tool: Tool,
+	platform: Platform,
+): PlatformInfo | null {
+	return tool.platforms[platform] || tool.platforms.all || null;
 }
 
 // Configuration for API behavior
@@ -191,12 +208,9 @@ export class ToolsService {
 
 		// Apply platform filter
 		if (query.platform && query.platform !== "all") {
+			const platform = query.platform as Platform;
 			filteredTools = filteredTools.filter(
-				(tool) =>
-					query.platform &&
-					query.platform in tool.platforms &&
-					tool.platforms[query.platform as keyof typeof tool.platforms] !==
-						null,
+				(tool) => getPlatformInfo(tool, platform) !== null,
 			);
 		}
 
