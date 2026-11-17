@@ -22,6 +22,7 @@ var starterAnswers = map[string][]string{
 	"mobile":           {"targets=react-native,flutter,android,ios"},
 	"data-science":     {"components=jupyter,mlflow"},
 	"game-development": {"engine=godot"},
+	"web-development":  {},
 }
 
 func planStarter(id string, action templates.LifecycleAction, goos string, answers []string, known map[string]templates.ResourceDeclaration, available func(context.Context, string) bool) (*templates.ExecutionPlan, error) {
@@ -138,6 +139,8 @@ var _ = Describe("Shipped lifecycle templates", func() {
 		Entry("game-development on Linux", "game-development", "linux"),
 		Entry("game-development on macOS", "game-development", "darwin"),
 		Entry("databases on Linux", "databases", "linux"),
+		Entry("web-development on Linux", "web-development", "linux"),
+		Entry("web-development on macOS", "web-development", "darwin"),
 	)
 
 	Describe("OS guards", func() {
@@ -228,6 +231,23 @@ var _ = Describe("Shipped lifecycle templates", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
+		It("installs mise before Node.js for web development", func() {
+			plan, err := planStarter("web-development", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stepIDs(plan)).To(Equal([]string{"mise", "node"}))
+			Expect(plannedStep(plan, "mise").Request).To(HaveField("Command", "ensure-installed"))
+			Expect(plannedStep(plan, "node").DependsOn).To(Equal([]string{"mise"}))
+			Expect(plannedStep(plan, "node").Request.Args).To(Equal([]string{"node@24"}))
+
+			plan, err = planStarter("web-development", templates.LifecycleInstall, "linux", []string{"node_version=22"}, nil, allPluginsAvailable)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plannedStep(plan, "node").Request.Args).To(Equal([]string{"node@22"}))
+
+			// The mise plugin rejects aliases such as lts, so the plan must too.
+			_, err = planStarter("web-development", templates.LifecycleInstall, "linux", []string{"node_version=lts"}, nil, allPluginsAvailable)
+			Expect(err).To(MatchError(ContainSubstring("node_version")))
+		})
+
 		It("requires a mobile target instead of installing everything", func() {
 			_, err := planStarter("mobile", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
 			Expect(err).To(MatchError(ContainSubstring("required input 'targets'")))
@@ -241,6 +261,7 @@ var _ = Describe("Shipped lifecycle templates", func() {
 			Expect(err).To(MatchError(ContainSubstring("plugin '" + missing + "' is not available")))
 		},
 		Entry("mise for DevOps tools", "devops", "linux", []string{"tools=kubectl"}, "package-manager-mise"),
+		Entry("mise for web development", "web-development", "linux", nil, "package-manager-mise"),
 		Entry("Docker for the notebook", "data-science", "darwin", []string{"components=jupyter"}, "package-manager-docker"),
 		Entry("Flatpak for Android Studio", "mobile", "linux", []string{"targets=android"}, "package-manager-flatpak"),
 		Entry("Homebrew for CocoaPods", "mobile", "darwin", []string{"targets=ios"}, "package-manager-brew"),

@@ -1,56 +1,86 @@
+schema_version: devex.template/v1
+id: web-development
+name: Web Development
+version: 2.0.0
+description: Node.js through mise for React, Vue, Angular and other JavaScript web development
+author: DevEx Team
+tags:
+  - web
+  - frontend
+  - react
+  - vue
+  - angular
+  - javascript
+  - typescript
+categories:
+  - development
 metadata:
-  name: web-development
-  version: 1.0.0
-  description: Complete web development environment with React, Vue, Angular support and modern tooling
-  category: development
-  tags:
-    - web
-    - frontend
-    - react
-    - vue
-    - angular
-    - javascript
-    - typescript
+  languages:
+    - node
   platforms:
     - linux
     - macos
-    - windows
-  difficulty: intermediate
-  estimated_time: 45 minutes
-  icon: 🌐
-  additive: true
-applications:
-  - name: node
-    description: Node.js JavaScript runtime
-    category: development
-    install_method: mise
-    install_command: node
-    default: true
-  - name: vscode
-    description: Visual Studio Code editor
-    category: development
-    install_method: apt
-    install_command: code
-    default: true
-  - name: chrome
-    description: Google Chrome browser
-    category: browser
-    install_method: apt
-    install_command: google-chrome-stable
-    default: true
-environment:
-  shell: zsh
-  editor: vscode
-  languages:
-    - node
-    - typescript
-  variables:
-    NODE_ENV: development
-system:
-  configure_git: true
-  configure_ssh: true
-  global_theme: VS Code Dark+
-  directories:
-    - ~/Projects
-    - ~/Projects/personal
-    - ~/Projects/work
+  limitations:
+    - VS Code and Google Chrome are not installed. They need vendor package repositories, so install them yourself.
+inputs:
+  node_version:
+    type: text
+    prompt: Node.js version (mise version prefix)
+    default: "24"
+    validation:
+      pattern: ^[0-9][0-9A-Za-z.+_-]*$
+      message: Versions must start with a digit, then letters, numbers, dots, plus signs, underscores, or hyphens.
+lifecycle:
+  install:
+    - id: mise
+      order: 10
+      description: Install mise, which pins Node.js
+      plugin:
+        name: package-manager-mise
+        command: ensure-installed
+    - id: node
+      order: 20
+      depends_on:
+        - mise
+      app:
+        name: Node.js
+        category: development
+        installer: mise
+        command: install
+        args:
+          - node@{{ inputs.node_version }}
+      resources:
+        - type: tool
+          name: node
+          external_id: node@{{ inputs.node_version }}
+          metadata:
+            tool: node
+  maintain:
+    # Re-running `mise use` moves Node.js to the newest release that matches
+    # the version prefix recorded at install time.
+    - id: node-update
+      order: 10
+      if: has_resource("node")
+      plugin:
+        name: package-manager-mise
+        command: install
+        args:
+          - "{{ resource.node.external_id }}"
+  status:
+    - id: node-status
+      order: 10
+      if: has_resource("node")
+      plugin:
+        name: package-manager-mise
+        command: is-installed
+        args:
+          - "{{ resource.node.metadata.tool }}"
+  remove:
+    - id: node-remove
+      order: 10
+      if: has_resource("node")
+      plugin:
+        name: package-manager-mise
+        command: remove
+        args:
+          - "{{ resource.node.external_id }}"

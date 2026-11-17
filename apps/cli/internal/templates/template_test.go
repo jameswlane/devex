@@ -47,7 +47,7 @@ var _ = Describe("Template System", func() {
 		It("should get available built-in templates", func() {
 			templates, err := templateManager.GetAvailableTemplates()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(templates)).To(BeNumerically(">=", 4)) // flat and directory built-in templates
+			Expect(len(templates)).To(BeNumerically(">=", 3)) // flat and directory built-in templates
 
 			// Check that we have the expected templates
 			templateNames := make([]string, len(templates))
@@ -56,7 +56,6 @@ var _ = Describe("Template System", func() {
 			}
 
 			expectedTemplates := []string{
-				"web-development",
 				"minimal",
 				"backend",
 				"full-stack",
@@ -91,12 +90,12 @@ var _ = Describe("Template System", func() {
 		})
 
 		It("should get a specific template by name", func() {
-			template, err := templateManager.GetTemplate("web-development")
+			template, err := templateManager.GetTemplate("minimal")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(template).ToNot(BeNil())
-			Expect(template.Metadata.Name).To(Equal("web-development"))
+			Expect(template.Metadata.Name).To(Equal("minimal"))
 			Expect(template.Metadata.Category).To(Equal("development"))
-			Expect(template.Metadata.Icon).To(Equal("🌐"))
+			Expect(template.Metadata.Icon).To(Equal("⚡"))
 		})
 
 		It("should return error for non-existent template", func() {
@@ -114,16 +113,6 @@ var _ = Describe("Template System", func() {
 			var err error
 			availableTemplates, err = templateManager.GetAvailableTemplates()
 			Expect(err).ToNot(HaveOccurred())
-		})
-
-		It("should have a web development template", func() {
-			webTemplate := findTemplate(availableTemplates, "web-development")
-			Expect(webTemplate).ToNot(BeNil())
-			Expect(webTemplate.Metadata.Description).To(ContainSubstring("React, Vue, Angular"))
-			Expect(webTemplate.Metadata.Difficulty).To(Equal("intermediate"))
-			Expect(webTemplate.Applications).To(ContainElement(HaveField("Name", "node")))
-			Expect(webTemplate.Applications).To(ContainElement(HaveField("Name", "vscode")))
-			Expect(webTemplate.Environment.Languages).To(ContainElement("node"))
 		})
 
 		It("should have a minimal template", func() {
