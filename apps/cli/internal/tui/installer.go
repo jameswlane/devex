@@ -1063,7 +1063,8 @@ func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.C
 }
 
 // addModernGPGKey downloads and processes a GPG key using modern keyring approach
-func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyName string, requireDearmor bool) error {
+// A non-empty fingerprint pins the key: a mismatch fails the install.
+func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyName, fingerprint string, requireDearmor bool) error {
 	si.sendLog("INFO", "Downloading and processing GPG key...")
 
 	// Validate the key URL is HTTPS
@@ -1083,6 +1084,9 @@ func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyNa
 		return fmt.Errorf("failed to create keyrings directory: %w", err)
 	}
 
+	if fingerprint != "" {
+		return si.addPinnedGPGKey(ctx, keyURL, keyName, fingerprint)
+	}
 	if requireDearmor {
 		// Download and dearmor the key in one command
 		downloadAndDearmorCmd := fmt.Sprintf("curl -fsSL %s | sudo -n gpg --dearmor -o %s", keyURL, keyName)

@@ -444,7 +444,7 @@ var _ = Describe("APT batching", func() {
 	It("uses a filesystem check for existing key files", func() {
 		path := filepath.Join(GinkgoT().TempDir(), "key.gpg")
 		Expect(os.WriteFile(path, []byte("existing"), 0600)).To(Succeed())
-		Expect(installer.addModernGPGKey(context.Background(), "https://example.org/key", path, true)).To(Succeed())
+		Expect(installer.addModernGPGKey(context.Background(), "https://example.org/key", path, "", true)).To(Succeed())
 		Expect(recorder.Calls("apt-get")).To(BeEmpty())
 	})
 

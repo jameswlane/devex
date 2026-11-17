@@ -36,7 +36,7 @@ linux:
   apt_sources:
     - key_source: https://cli.github.com/packages/githubcli-archive-keyring.gpg
       key_name: /etc/apt/keyrings/githubcli-archive-keyring.gpg
-      key_fingerprint: 23F3D4EA75716F8B2E1A5E1A50F32B5B1B4A2C1C
+      key_fingerprint: 7F38BBB59D064DBCB3D84D725612B36462313325
       source_repo: deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main
       source_name: /etc/apt/sources.list.d/github-cli.list
   platform_requirements:

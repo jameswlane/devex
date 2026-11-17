@@ -122,7 +122,7 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, osConfig types.
 
 			// Use modern GPG keyring approach (no apt-key)
 			si.sendLog("INFO", "Using modern GPG keyring approach")
-			if err := si.addModernGPGKey(ctx, source.KeySource, source.KeyName, source.RequireDearmor); err != nil {
+			if err := si.addModernGPGKey(ctx, source.KeySource, source.KeyName, source.KeyFingerprint, source.RequireDearmor); err != nil {
 				return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
 			}
 		}
