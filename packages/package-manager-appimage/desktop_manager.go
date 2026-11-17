@@ -31,7 +31,7 @@ Terminal=false
 		return fmt.Errorf("failed to write desktop file: %w", err)
 	}
 
-	p.logger.Debug("Created desktop entry: %s", desktopFile)
+	p.logger.Debug(fmt.Sprintf("Created desktop entry: %s", desktopFile))
 	return nil
 }
 
@@ -48,7 +48,7 @@ func (p *AppimagePlugin) RemoveDesktopEntry(binaryName string) error {
 		return fmt.Errorf("failed to remove desktop entry: %w", err)
 	}
 
-	p.logger.Debug("Removed desktop entry: %s", desktopFile)
+	p.logger.Debug(fmt.Sprintf("Removed desktop entry: %s", desktopFile))
 	return nil
 }
 
