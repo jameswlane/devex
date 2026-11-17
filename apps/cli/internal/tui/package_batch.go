@@ -15,6 +15,10 @@ type PackageBatch struct {
 	// BatchInstalled holds apps whose packages the shared transaction installed.
 	// Their own install step is skipped; config files and hooks still run.
 	BatchInstalled map[string]bool
+	// SourceErrors holds apps whose APT sources or keys could not be prepared.
+	// Installing them on their own would use the distribution's package, so
+	// they fail with this error instead.
+	SourceErrors map[string]error
 }
 
 // PreparePackageBatch runs the TUI's package batch planner without a TUI, so
@@ -48,7 +52,11 @@ func PreparePackageBatch(ctx context.Context, apps []types.CrossPlatformApp, rep
 	err = si.preparePackageRun(ctx, available, settings.HomeDir)
 	si.apt.mu.Lock()
 	defer si.apt.mu.Unlock()
-	return PackageBatch{Preinstalled: copySet(si.apt.preinstalled), BatchInstalled: copySet(si.apt.batchInstalled)}, err
+	sourceErrors := make(map[string]error, len(si.apt.sourceErrors))
+	for name, sourceErr := range si.apt.sourceErrors {
+		sourceErrors[name] = sourceErr
+	}
+	return PackageBatch{Preinstalled: copySet(si.apt.preinstalled), BatchInstalled: copySet(si.apt.batchInstalled), SourceErrors: sourceErrors}, err
 }
 
 func copySet(set map[string]bool) map[string]bool {

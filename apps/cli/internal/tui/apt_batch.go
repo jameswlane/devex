@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -54,6 +55,8 @@ type aptRunState struct {
 	preinstalled map[string]bool
 	// batchInstalled holds apps whose packages the batch install already installed.
 	batchInstalled map[string]bool
+	// sourceErrors holds apps whose APT sources or keys could not be prepared.
+	sourceErrors map[string]error
 }
 
 func (s *aptRunState) mark(set *map[string]bool, key string) {
@@ -239,10 +242,26 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 
 	// Prepare every known source before any app can request the once-only update,
 	// including runs which must retain per-app dependency/hook ordering.
+	// A failed source does not stop the others: an app installed later without
+	// its sources would silently get the distribution's package.
+	var sourceErrs []error
 	for _, app := range toBatch {
 		if err := state.AuditTargetsStep(ctx, []string{app.Name}, "apt-sources", func() error { return si.addAptSources(ctx, app.GetOSConfig()) }); err != nil {
-			return fmt.Errorf("prepare APT sources for %s: %w", app.Name, err)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			err = fmt.Errorf("prepare APT sources for %s: %w", app.Name, err)
+			si.apt.mu.Lock()
+			if si.apt.sourceErrors == nil {
+				si.apt.sourceErrors = make(map[string]error)
+			}
+			si.apt.sourceErrors[app.Name] = err
+			si.apt.mu.Unlock()
+			sourceErrs = append(sourceErrs, err)
 		}
+	}
+	if len(sourceErrs) > 0 {
+		return errors.Join(sourceErrs...)
 	}
 	// Pre-install hooks and dependency graphs must retain scheduler ordering.
 	for _, app := range apps {

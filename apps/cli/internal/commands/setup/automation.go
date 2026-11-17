@@ -260,6 +260,11 @@ func installAutomatedApps(ctx context.Context, apps []types.CrossPlatformApp, al
 			outcomes.Record(app.Name, tui.OutcomeSkipped, nil)
 			continue
 		}
+		if err := batch.SourceErrors[app.Name]; err != nil {
+			outcomes.Record(app.Name, tui.OutcomeFailed, err)
+			failures = append(failures, fmt.Sprintf("failed to install %s: %v", app.Name, err))
+			continue
+		}
 		if err := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
 			return nil, err
 		}

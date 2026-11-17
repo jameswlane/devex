@@ -4,6 +4,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -71,5 +72,33 @@ var _ = Describe("Automated setup package batching", func() {
 			results[result.Name] = result.Outcome
 		}
 		Expect(results).To(Equal(map[string]tui.AppOutcome{"bat": tui.OutcomeInstalled, "fzf": tui.OutcomeInstalled, "GitHub CLI": tui.OutcomeSkipped, "jq": tui.OutcomeSkipped, "databases": tui.OutcomeInstalled}))
+	})
+
+	It("fails an app whose APT sources could not be prepared instead of installing it without them", func() {
+		// The fake sudo keeps authorization checks off the host.
+		sdktest.NewRecorder(GinkgoT(), "apt-get")
+		sourceErr := errors.New("prepare APT sources for GitHub CLI: failed to add GPG key")
+		preparePackageBatch = func(context.Context, []types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) (tui.PackageBatch, error) {
+			return tui.PackageBatch{SourceErrors: map[string]error{"GitHub CLI": sourceErr}}, sourceErr
+		}
+		original := installAutomatedApp
+		DeferCleanup(func() { installAutomatedApp = original })
+		var ran []string
+		installAutomatedApp = func(_ context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+			ran = append(ran, app.Name)
+			return nil
+		}
+
+		outcomes := tui.NewOutcomeRecorder()
+		failures, err := installAutomatedApps(context.Background(), []types.CrossPlatformApp{aptApp("GitHub CLI", "gh"), aptApp("bat", "bat")}, nil, outcomes, config.CrossPlatformSettings{}, mocks.NewMockRepository())
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ran).To(Equal([]string{"bat"}))
+		Expect(failures).To(Equal([]string{"failed to install GitHub CLI: " + sourceErr.Error()}))
+		results := map[string]tui.AppOutcome{}
+		for _, result := range outcomes.Results() {
+			results[result.Name] = result.Outcome
+		}
+		Expect(results).To(Equal(map[string]tui.AppOutcome{"GitHub CLI": tui.OutcomeFailed, "bat": tui.OutcomeInstalled}))
 	})
 })
