@@ -11,6 +11,8 @@ import {
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
+import { pluginReleaseTag } from "@/lib/plugins/release-tag";
+import { attachReleaseTags } from "@/lib/plugins/release-tags";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import { transformationService } from "@/lib/transformation-service";
@@ -27,6 +29,12 @@ interface PluginMetadata {
 	dependencies?: string[];
 	conflicts?: string[];
 	tags?: string[];
+	// Restored from the 2025 static registry.json shape (#512)
+	type: string;
+	priority: number;
+	status: string;
+	supports: Record<string, unknown>;
+	release_tag?: string;
 	requirements?: {
 		os_version?: string;
 		arch?: string[];
@@ -43,9 +51,12 @@ interface PlatformBinary {
 
 interface RegistryResponse {
 	base_url: string;
+	version: string;
 	plugins: Record<string, PluginMetadata>;
 	last_updated: string;
 }
+
+type PluginWithTag = Plugin & { releaseTag: string | null };
 
 // Batch size for plugin processing to optimize database queries
 const PLUGIN_BATCH_SIZE = 50;
@@ -114,14 +125,16 @@ export const GET = withRateLimit(async function handler(request: Request) {
 		});
 
 		// Fetch active plugins with batched processing for better performance
-		const plugins = await fetchPluginsInBatches(limit, offset);
+		const plugins = await attachReleaseTags(
+			await fetchPluginsInBatches(limit, offset),
+		);
 
 		// Transform plugins into registry.json format with parallel processing
 		const registryPlugins: Record<string, PluginMetadata> = {};
 
 		// Process plugins in parallel batches for better performance
 		const transformBatch = async (
-			batch: Plugin[],
+			batch: PluginWithTag[],
 		): Promise<[string, PluginMetadata][]> => {
 			return Promise.all(
 				batch.map(async (plugin) => {
@@ -132,7 +145,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 		};
 
 		// Split plugins into batches for parallel processing
-		const batches: Plugin[][] = [];
+		const batches: PluginWithTag[][] = [];
 		for (let i = 0; i < plugins.length; i += PLUGIN_BATCH_SIZE) {
 			batches.push(plugins.slice(i, i + PLUGIN_BATCH_SIZE));
 		}
@@ -149,6 +162,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 
 		const response: RegistryResponse = {
 			base_url: REGISTRY_CONFIG.PLUGINS_API_URL,
+			version: REGISTRY_CONFIG.REGISTRY_VERSION,
 			plugins: registryPlugins,
 			last_updated: new Date().toISOString(),
 		};
@@ -181,7 +195,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 
 // Helper function to transform a single plugin to metadata format
 async function transformPluginToMetadata(
-	plugin: Plugin,
+	plugin: PluginWithTag,
 ): Promise<PluginMetadata> {
 	// Use version from database, fall back to "latest" if not set
 	const version = plugin.version || "latest";
@@ -245,6 +259,16 @@ async function transformPluginToMetadata(
 		dependencies: plugin.dependencies,
 		conflicts: plugin.conflicts,
 		tags: extractTagsFromType(plugin.type),
+		type: plugin.type,
+		priority: plugin.priority,
+		status: plugin.status,
+		supports,
+		// Recorded tag first, else the real format (packages/<plugin>/v<version>)
+		release_tag:
+			plugin.releaseTag ??
+			(version === "latest"
+				? undefined
+				: pluginReleaseTag(normalizedName, version)),
 		requirements: requirements,
 	};
 }
