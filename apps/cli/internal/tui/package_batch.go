@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -65,4 +67,33 @@ func copySet(set map[string]bool) map[string]bool {
 		result[key] = value
 	}
 	return result
+}
+
+// PrepareAptSources writes an apt app's APT sources and keys and refreshes the
+// package lists, for an app about to install on its own outside the TUI. The
+// batch only prepares sources for apps it considers, so an app it skipped (an
+// install command that is not plain package names, or a batch that failed
+// early) would otherwise install the distribution's package. Sources already
+// on disk are not written again, and fresh lists are not updated again.
+// Apps the organization policy denies are left to their own install to refuse.
+func PrepareAptSources(ctx context.Context, app types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
+	cfg := app.GetOSConfig()
+	if cfg.InstallMethod != "apt" || len(cfg.AptSources) == 0 {
+		return nil
+	}
+	// The app's own install refuses an app the organization policy denies.
+	if allowed, err := policyBatchable(ctx, []types.CrossPlatformApp{app}, settings.HomeDir); err != nil || len(allowed) == 0 {
+		return nil
+	}
+	si := NewStreamingInstaller(nil, repo, ctx, settings)
+	defer si.cancel()
+	if err := state.AuditStep(ctx, "apt-sources", true, func() error {
+		if err := si.addAptSources(ctx, cfg); err != nil {
+			return err
+		}
+		return si.ensureAptLists(ctx)
+	}); err != nil {
+		return fmt.Errorf("prepare APT sources for %s: %w", app.Name, err)
+	}
+	return nil
 }

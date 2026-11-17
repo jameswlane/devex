@@ -28,6 +28,9 @@ var prepareApplicationInstallers = initializeApplicationInstallers
 // preparePackageBatch shares the TUI's batched package transactions; tests replace it.
 var preparePackageBatch = tui.PreparePackageBatch
 
+// prepareAptSources writes the APT sources of an app the batch did not install; tests replace it.
+var prepareAptSources = tui.PrepareAptSources
+
 // Query the native manager rather than trusting a potentially stale tracking row.
 var nativeApplicationInstalled = func(ctx context.Context, app types.CrossPlatformApp) (bool, error) {
 	cfg := app.GetOSConfig()
@@ -171,6 +174,9 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 		}
 		if err == nil {
 			err = batch.SourceErrors[app.Name]
+		}
+		if err == nil && !batch.BatchInstalled[app.Name] {
+			err = prepareAptSources(appCtx, app, repo, settings)
 		}
 		if err == nil {
 			// Until registration finishes, a rerun must not skip this app as installed.

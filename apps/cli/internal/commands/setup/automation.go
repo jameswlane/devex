@@ -271,6 +271,13 @@ func installAutomatedApps(ctx context.Context, apps []types.CrossPlatformApp, al
 		appCtx := ctx
 		if batch.BatchInstalled[app.Name] {
 			appCtx = installers.WithPackagesInstalled(ctx, app.Name)
+		} else if err := prepareAptSources(ctx, app, repo, settings); err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			outcomes.Record(app.Name, tui.OutcomeFailed, err)
+			failures = append(failures, fmt.Sprintf("failed to install %s: %v", app.Name, err))
+			continue
 		}
 		if err := tui.RecordLifecycle(repo, app.Name, false); err != nil {
 			log.Warn("Could not record install state", "app", app.Name, "error", err)

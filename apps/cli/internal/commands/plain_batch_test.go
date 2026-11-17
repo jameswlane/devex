@@ -6,12 +6,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -29,6 +31,11 @@ var _ = BeforeEach(func() {
 		return tui.PackageBatch{}, nil
 	}
 	DeferCleanup(func() { preparePackageBatch = original })
+	originalSources := prepareAptSources
+	prepareAptSources = func(context.Context, types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) error {
+		return nil
+	}
+	DeferCleanup(func() { prepareAptSources = originalSources })
 })
 
 var _ = Describe("Plain install package batching", func() {
@@ -90,6 +97,7 @@ var _ = Describe("Plain install package batching", func() {
 		viper.Set("apt-lists-max-age", "0s")
 		DeferCleanup(func() { viper.Set("apt-lists-max-age", nil) })
 		preparePackageBatch = tui.PreparePackageBatch
+		prepareAptSources = tui.PrepareAptSources
 		installers.EnableTestMode()
 		DeferCleanup(installers.DisableTestMode)
 		oldPrepare, oldInstall, oldQuery := prepareApplicationInstallers, installApplication, nativeApplicationInstalled
@@ -139,6 +147,87 @@ var _ = Describe("Plain install package batching", func() {
 		}
 		Expect(shell).NotTo(ContainElement(ContainSubstring("github-cli.list")))
 		Expect(shell).To(ContainElement(ContainSubstring("tee " + filepath.Join(dir, "other.list"))))
+	})
+
+	// An app with options never enters the batch, so the batch never writes its sources.
+	unbatchedSourceApp := func(dir string) types.CrossPlatformApp {
+		gh := aptApp("GitHub CLI", "")
+		gh.AllPlatforms.Packages = []string{"gh"}
+		gh.AllPlatforms.Options = []string{"--no-install-recommends"}
+		gh.AllPlatforms.AptSources = []types.AptSource{{SourceName: filepath.Join(dir, "github-cli.list"), SourceRepo: "deb https://cli.github.com/packages stable main"}}
+		return gh
+	}
+	shellCommands := func(recorder *sdktest.Recorder) []string {
+		calls := recorder.Calls("bash")
+		shell := make([]string, 0, len(calls))
+		for _, call := range calls {
+			shell = append(shell, call.Args[1])
+		}
+		return shell
+	}
+
+	It("writes the APT sources of an app the batch left out before it installs", func() {
+		recorder := usePlainBatch("", "bash")
+		dir := GinkgoT().TempDir()
+		var shellBeforeInstall []string
+		var updatesBeforeInstall int
+		installApplication = func(context.Context, types.CrossPlatformApp, config.CrossPlatformSettings, types.Repository) error {
+			shellBeforeInstall = shellCommands(recorder)
+			for _, call := range recorder.Calls("apt-get") {
+				if call.Args[0] == "update" {
+					updatesBeforeInstall++
+				}
+			}
+			return nil
+		}
+
+		var output bytes.Buffer
+		Expect(runPlainInstall(context.Background(), &output, []types.CrossPlatformApp{unbatchedSourceApp(dir)}, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)).To(Succeed())
+
+		Expect(shellBeforeInstall).To(ContainElement(ContainSubstring("tee " + filepath.Join(dir, "github-cli.list"))))
+		Expect(updatesBeforeInstall).To(Equal(1))
+		Expect(output.String()).To(ContainSubstring("installed GitHub CLI"))
+	})
+
+	It("fails an app the batch left out when its APT sources cannot be written", func() {
+		recorder := usePlainBatch("", "bash")
+		dir := GinkgoT().TempDir()
+		recorder.Fallback("bash", sdktest.Response{ExitCode: 1, Stderr: "sudo: a password is required\n"})
+		var ran []string
+		installApplication = func(_ context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+			ran = append(ran, app.Name)
+			return nil
+		}
+
+		var output bytes.Buffer
+		err := runPlainInstall(context.Background(), &output, []types.CrossPlatformApp{unbatchedSourceApp(dir)}, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)
+
+		Expect(err).To(MatchError(ContainSubstring("GitHub CLI")))
+		Expect(ran).To(BeEmpty())
+		Expect(output.String()).To(ContainSubstring("failed GitHub CLI: prepare APT sources for GitHub CLI: failed to add APT source"))
+	})
+
+	It("writes no APT sources for an app the organization policy denies", func() {
+		recorder := usePlainBatch("", "bash")
+		home := GinkgoT().TempDir()
+		teamDir := filepath.Join(home, "team")
+		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(teamDir, "policy.yaml"), []byte("version: '1'\napplications:\n  deny: [GitHub CLI]\n"), 0o600)).To(Succeed())
+		security.ResetOrgPolicyCache()
+		DeferCleanup(security.ResetOrgPolicyCache)
+		policyErr := errors.New("application GitHub CLI is denied by organization policy")
+		installApplication = func(context.Context, types.CrossPlatformApp, config.CrossPlatformSettings, types.Repository) error {
+			return policyErr
+		}
+
+		var output bytes.Buffer
+		err := runPlainInstall(context.Background(), &output, []types.CrossPlatformApp{unbatchedSourceApp(GinkgoT().TempDir())}, mocks.NewMockRepository(), config.CrossPlatformSettings{HomeDir: home}, nil)
+
+		Expect(err).To(MatchError(ContainSubstring("GitHub CLI")))
+		Expect(output.String()).To(ContainSubstring("failed GitHub CLI: " + policyErr.Error()))
+		Expect(shellCommands(recorder)).To(BeEmpty())
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
 	})
 
 	It("retries an installed app whose DevEx lifecycle did not finish", func() {

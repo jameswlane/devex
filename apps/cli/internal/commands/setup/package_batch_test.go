@@ -5,6 +5,8 @@ package setup
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -24,6 +26,11 @@ var _ = BeforeEach(func() {
 		return tui.PackageBatch{}, nil
 	}
 	DeferCleanup(func() { preparePackageBatch = original })
+	originalSources := prepareAptSources
+	prepareAptSources = func(context.Context, types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) error {
+		return nil
+	}
+	DeferCleanup(func() { prepareAptSources = originalSources })
 })
 
 var _ = Describe("Automated setup package batching", func() {
@@ -100,5 +107,39 @@ var _ = Describe("Automated setup package batching", func() {
 			results[result.Name] = result.Outcome
 		}
 		Expect(results).To(Equal(map[string]tui.AppOutcome{"GitHub CLI": tui.OutcomeFailed, "bat": tui.OutcomeInstalled}))
+	})
+	It("writes the APT sources of an app the batch left out before it installs", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "apt-get", "dpkg-query", "bash")
+		viper.Set("apt-lists-max-age", "0s")
+		DeferCleanup(func() { viper.Set("apt-lists-max-age", nil) })
+		preparePackageBatch = tui.PreparePackageBatch
+		prepareAptSources = tui.PrepareAptSources
+		installers.EnableTestMode()
+		DeferCleanup(installers.DisableTestMode)
+		original := installAutomatedApp
+		DeferCleanup(func() { installAutomatedApp = original })
+		dir := GinkgoT().TempDir()
+		source := filepath.Join(dir, "github-cli.list")
+		// Options keep the app out of the batch, so the batch never writes its sources.
+		gh := aptApp("GitHub CLI", "")
+		gh.AllPlatforms.Packages = []string{"gh"}
+		gh.AllPlatforms.Options = []string{"--no-install-recommends"}
+		gh.AllPlatforms.AptSources = []types.AptSource{{SourceName: source, SourceRepo: "deb https://cli.github.com/packages stable main"}}
+		var written bool
+		installAutomatedApp = func(context.Context, types.CrossPlatformApp, config.CrossPlatformSettings, types.Repository) error {
+			for _, call := range recorder.Calls("bash") {
+				if strings.Contains(call.Args[1], "tee "+source) {
+					written = true
+				}
+			}
+			return nil
+		}
+
+		outcomes := tui.NewOutcomeRecorder()
+		failures, err := installAutomatedApps(context.Background(), []types.CrossPlatformApp{gh}, nil, outcomes, config.CrossPlatformSettings{}, mocks.NewMockRepository())
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(failures).To(BeEmpty())
+		Expect(written).To(BeTrue())
 	})
 })
