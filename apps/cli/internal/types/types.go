@@ -405,7 +405,55 @@ func PinCatalogOSForTesting(goos string) (restore func()) {
 
 // GetOSConfig returns the appropriate OS configuration for the current platform
 func (app *CrossPlatformApp) GetOSConfig() OSConfig {
-	return app.selectOSConfig().withBrewSelection()
+	return app.selectOSConfig().withBrewSelection().withArchitecture(catalogArch)
+}
+
+// ArchitecturePlaceholder in an APT source line stands for the host's dpkg
+// architecture, as `dpkg --print-architecture` reports it.
+const ArchitecturePlaceholder = "%ARCHITECTURE%"
+
+// catalogArch names the Go architecture whose dpkg name replaces the placeholder.
+var catalogArch = runtime.GOARCH
+
+// PinCatalogArchForTesting makes placeholder replacement use goarch instead of
+// the host architecture. It returns a function that restores the previous
+// value. Production code must not call it.
+func PinCatalogArchForTesting(goarch string) (restore func()) {
+	previous := catalogArch
+	catalogArch = goarch
+	return func() { catalogArch = previous }
+}
+
+// dpkgArchitecture maps a Go architecture to its Debian architecture name.
+func dpkgArchitecture(goarch string) string {
+	switch goarch {
+	case "arm":
+		return "armhf"
+	case "386":
+		return "i386"
+	case "mips64le":
+		return "mips64el"
+	case "mipsle":
+		return "mipsel"
+	default:
+		return goarch
+	}
+}
+
+// withArchitecture replaces the architecture placeholder in APT source lines,
+// so APT receives a real arch= value instead of skipping the repository.
+func (config OSConfig) withArchitecture(goarch string) OSConfig {
+	if len(config.AptSources) == 0 {
+		return config
+	}
+	arch := dpkgArchitecture(goarch)
+	sources := make([]AptSource, len(config.AptSources))
+	for i, source := range config.AptSources {
+		source.SourceRepo = strings.ReplaceAll(source.SourceRepo, ArchitecturePlaceholder, arch)
+		sources[i] = source
+	}
+	config.AptSources = sources
+	return config
 }
 
 // withBrewSelection turns the legacy brew_cask flag into the typed --cask

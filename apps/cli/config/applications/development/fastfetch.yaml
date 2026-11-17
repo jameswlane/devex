@@ -32,16 +32,32 @@ linux:
   install_method: deb
   install_command: fastfetch
   uninstall_command: fastfetch
-  download_url: https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-%ARCHITECTURE%.deb
+  download_url: https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb
   official_support: true
   platform_requirements:
     - os: debian
       version: 11+
+      arch: amd64
     - os: ubuntu
       version: 20.04+
+      arch: amd64
   post_install:
     - shell: export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r
   alternatives:
+    - install_method: deb
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      download_url: https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-aarch64.deb
+      official_support: true
+      platform_requirements:
+        - os: debian
+          version: 11+
+          arch: arm64
+        - os: ubuntu
+          version: 20.04+
+          arch: arm64
+      post_install:
+        - shell: export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r
     - install_method: apt
       install_command: fastfetch
       uninstall_command: fastfetch
