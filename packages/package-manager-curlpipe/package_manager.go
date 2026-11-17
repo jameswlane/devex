@@ -124,7 +124,7 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 
 		// Track installation (extract app name from URL)
 		appName := p.extractAppNameFromURL(scriptURL)
-		p.logger.Debug("Tracking installation: %s", appName)
+		p.logger.Debug(fmt.Sprintf("Tracking installation: %s", appName))
 	}
 
 	return nil
