@@ -150,7 +150,8 @@ type ExecutionRequest struct {
 	// Dir is the caller directory, preserved after switching to a user account.
 	Dir  string   `json:"dir,omitempty"`
 	Args []string `json:"args,omitempty"`
-	// Unattended disables stdin and all authorization prompts.
+	// Unattended disables inherited stdin and all authorization prompts; in-memory
+	// caller input is still delivered.
 	Unattended bool `json:"unattended,omitempty"`
 	// Env contains per-operation environment assignments, also preserved across sudo.
 	Env []string `json:"env,omitempty"`
@@ -225,7 +226,7 @@ func (unavailablePrivilegeAdapter) Run(ctx context.Context, plan ExecutionPlan, 
 	cmd := NewCommandContext(ctx, plan.Name, plan.Args...)
 	configureOperationCommand(cmd, plan.ExecutionRequest)
 	if plan.Unattended {
-		streams.Stdin = nil
+		streams.Stdin = unattendedInput(streams.Stdin)
 	}
 	return runPreparedCommand(cmd, streams)
 }
@@ -330,7 +331,7 @@ func (a UnixSudoAdapter) Run(ctx context.Context, plan ExecutionPlan, streams Op
 		return err
 	}
 	if plan.Unattended {
-		streams.Stdin = nil
+		streams.Stdin = unattendedInput(streams.Stdin)
 	}
 	if plan.Elevate || plan.SwitchUser {
 		return runSudoCommand(ctx, cmd, streams)
@@ -400,7 +401,7 @@ func RunOperation(ctx context.Context, request ExecutionRequest, streams Operati
 		return err
 	}
 	if plan.Unattended {
-		streams.Stdin = nil
+		streams.Stdin = unattendedInput(streams.Stdin)
 	}
 	return DefaultPrivilegeAdapter.Run(ctx, plan, streams)
 }

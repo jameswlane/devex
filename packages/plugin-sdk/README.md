@@ -448,8 +448,10 @@ keeps existing interactive behavior. No positional arguments or metadata fields
 are required, so existing plugin entry points remain compatible.
 
 Go hosts can use `sdk.WithUnattended(ctx)` with every `ExecutePlugin*` entry point,
-or set `ExecutionRequest.Unattended` for a scoped operation. The SDK supplies EOF
-on stdin even if the caller supplied a terminal or reader, passes the environment
+or set `ExecutionRequest.Unattended` for a scoped operation. An unattended plugin
+always gets EOF on stdin. A scoped operation gets EOF instead of an inherited
+terminal or file, but keeps in-memory input such as a file body piped to `tee`.
+The SDK also passes the environment
 contract to child plugins, and uses `sudo -n` for elevation. macOS unattended
 operations also use non-prompting sudo instead of an authorization dialog;
 Windows requires an already-authorized administrator process. Missing elevation

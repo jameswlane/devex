@@ -65,6 +65,19 @@ var _ = Describe("Unattended execution contract", func() {
 		var auth *sdk.AuthorizationError
 		Expect(errors.As(err, &auth)).To(BeFalse())
 	})
+	It("passes caller-supplied operation input to an unattended privileged command", func() {
+		// Template steps run plugins with DEVEX_UNATTENDED=1; a plugin that pipes
+		// a file body to tee must still deliver it (#470).
+		recorder := sdktest.NewRecorder(GinkgoT(), "tee")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		args := []string{"/etc/apt/sources.list.d/example.list"}
+		recorder.CaptureStdin("tee", args)
+		request := sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, Name: "tee", Args: args}
+		Expect(sdk.RunOperation(context.Background(), request, sdk.OperationIO{Stdin: strings.NewReader("deb https://example.test stable main\n"), Stdout: io.Discard, Stderr: io.Discard})).To(Succeed())
+		Expect(recorder.Calls("tee")).To(Equal([]sdktest.Call{{Args: args, ElevationRequested: true}}))
+		Expect(recorder.Stdin("tee", args)).To(Equal([]string{"deb https://example.test stable main\n"}))
+	})
 	DescribeTable("forwards unattended intent to the plugin and closes caller stdin", func(scoped bool) {
 		root := GinkgoT().TempDir()
 		privilege := ""

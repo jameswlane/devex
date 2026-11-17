@@ -1543,6 +1543,11 @@ func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName
 		streams.Stderr = io.Discard
 	}
 	streams.Stderr = io.MultiWriter(streams.Stderr, &diagnostic)
+	// An unattended plugin never reads caller input, so it cannot prompt; only
+	// operations a plugin runs keep the data it supplies (see unattendedInput).
+	if unattendedContext(ctx) {
+		streams.Stdin = nil
+	}
 	var err error
 	if privilege := PluginOperationPrivilege(pluginInfo.PluginInfo, args); privilege != nil {
 		dir, dirErr := os.Getwd()
@@ -1558,11 +1563,7 @@ func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName
 		err = RunOperation(ctx, request, streams)
 	} else {
 		cmd := NewCommandContext(ctx, pluginInfo.Path, args...)
-		unattended := unattendedContext(ctx)
-		configureOperationCommand(cmd, ExecutionRequest{Unattended: unattended})
-		if unattended {
-			streams.Stdin = nil
-		}
+		configureOperationCommand(cmd, ExecutionRequest{Unattended: unattendedContext(ctx)})
 		err = runPreparedCommand(cmd, streams)
 	}
 	if ctx.Err() != nil {
