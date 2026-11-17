@@ -15,6 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/jameswlane/devex/apps/cli/internal/utils"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -83,8 +84,8 @@ var _ = Describe("Plain install package batching", func() {
 		Expect(output.String()).To(Equal("installing bat...\ninstalled bat\ninstalling fzf...\ninstalled fzf\nskipped GitHub CLI (already installed)\ninstalling databases...\ninstalled databases\ninstalled 3 of 4 applications\n"))
 	})
 
-	usePlainBatch := func(installed string) *sdktest.Recorder {
-		recorder := sdktest.NewRecorder(GinkgoT(), "apt-get", "dpkg-query")
+	usePlainBatch := func(installed string, commands ...string) *sdktest.Recorder {
+		recorder := sdktest.NewRecorder(GinkgoT(), append([]string{"apt-get", "dpkg-query"}, commands...)...)
 		recorder.Fallback("dpkg-query", sdktest.Response{Stdout: installed})
 		viper.Set("apt-lists-max-age", "0s")
 		DeferCleanup(func() { viper.Set("apt-lists-max-age", nil) })
@@ -99,6 +100,46 @@ var _ = Describe("Plain install package batching", func() {
 		nativeApplicationInstalled = func(context.Context, types.CrossPlatformApp) (bool, error) { return true, nil }
 		return recorder
 	}
+
+	It("fails an app whose APT key download failed instead of installing the distribution's package", func() {
+		// Shell steps run through bash; only the key download fails.
+		recorder := usePlainBatch("", "bash")
+		dir := GinkgoT().TempDir()
+		keyURL := "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+		keyName := filepath.Join(dir, "githubcli-archive-keyring.gpg")
+		recorder.Script("bash", []string{"-c", utils.NonInteractiveSudoShell("curl -fsSL " + keyURL + " | sudo -n gpg --dearmor -o " + keyName)}, sdktest.Response{ExitCode: 22, Stderr: "curl: (22) The requested URL returned error: 404\n"})
+		gh := aptApp("GitHub CLI", "gh")
+		gh.AllPlatforms.AptSources = []types.AptSource{{
+			KeySource:      keyURL,
+			KeyName:        keyName,
+			RequireDearmor: true,
+			SourceName:     filepath.Join(dir, "github-cli.list"),
+			SourceRepo:     "deb https://cli.github.com/packages stable main",
+		}}
+		// A later app's source is still written although an earlier one failed.
+		other := aptApp("other", "other")
+		other.AllPlatforms.AptSources = []types.AptSource{{SourceName: filepath.Join(dir, "other.list"), SourceRepo: "deb https://example.test stable main"}}
+		var ran []string
+		installApplication = func(_ context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+			ran = append(ran, app.Name)
+			return nil
+		}
+
+		var output bytes.Buffer
+		err := runPlainInstall(context.Background(), &output, []types.CrossPlatformApp{gh, other}, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)
+
+		Expect(err).To(MatchError(ContainSubstring("GitHub CLI")))
+		Expect(ran).To(Equal([]string{"other"}))
+		Expect(output.String()).To(ContainSubstring("failed GitHub CLI: prepare APT sources for GitHub CLI: failed to add GPG key"))
+		Expect(output.String()).To(ContainSubstring("installed 1 of 2 applications"))
+		calls := recorder.Calls("bash")
+		shell := make([]string, 0, len(calls))
+		for _, call := range calls {
+			shell = append(shell, call.Args[1])
+		}
+		Expect(shell).NotTo(ContainElement(ContainSubstring("github-cli.list")))
+		Expect(shell).To(ContainElement(ContainSubstring("tee " + filepath.Join(dir, "other.list"))))
+	})
 
 	It("retries an installed app whose DevEx lifecycle did not finish", func() {
 		usePlainBatch("gh\tinstall ok installed\nbat\tinstall ok installed\n")

@@ -170,6 +170,9 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 			err = ctx.Err()
 		}
 		if err == nil {
+			err = batch.SourceErrors[app.Name]
+		}
+		if err == nil {
 			// Until registration finishes, a rerun must not skip this app as installed.
 			if recordErr := tui.RecordLifecycle(repo, app.Name, false); recordErr != nil {
 				log.Warn("Could not record install state", "app", app.Name, "error", recordErr)
