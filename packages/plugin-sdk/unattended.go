@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -26,6 +27,17 @@ func WithUnattended(ctx context.Context) context.Context {
 func unattendedContext(ctx context.Context) bool {
 	enabled, _ := ctx.Value(unattendedContextKey{}).(bool)
 	return enabled || Unattended()
+}
+
+// unattendedInput returns the stdin an unattended operation may read. It closes
+// inherited process handles (a terminal or a host pipe), which could block on
+// or answer prompts, but keeps data the caller supplies in memory, such as a
+// file body piped to tee: that is operation input, not user input.
+func unattendedInput(stdin io.Reader) io.Reader {
+	if _, inherited := stdin.(*os.File); inherited {
+		return nil
+	}
+	return stdin
 }
 
 func operationEnvironment(request ExecutionRequest) []string {

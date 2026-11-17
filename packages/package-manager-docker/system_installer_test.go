@@ -61,6 +61,21 @@ var _ = Describe("Docker Engine apt installation", func() {
 		Entry("Ubuntu derivative", "ID=linuxmint\nID_LIKE=\"ubuntu debian\"\nUBUNTU_CODENAME=noble\nVERSION_CODENAME=virginia\n", "ubuntu", "noble"),
 	)
 
+	It("writes the apt source when a template step runs the plugin unattended", func() {
+		recorder = sdktest.NewRecorder(GinkgoT(), "apt-get", "install", "curl", "chmod", "dpkg", "tee")
+		recorder.Script("dpkg", []string{"--print-architecture"}, sdktest.Response{Stdout: "amd64\n"})
+		teeArgs := []string{dockerAptSourcePath}
+		recorder.CaptureStdin("tee", teeArgs)
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+
+		Expect(newInstaller(writeRelease("ID=debian\nVERSION_CODENAME=bookworm\n")).installDockerEngineDebian(context.Background())).To(Succeed())
+
+		Expect(recorder.Stdin("tee", teeArgs)).To(Equal([]string{
+			"deb [arch=amd64 signed-by=" + dockerAptKeyPath + "] https://download.docker.com/linux/debian bookworm stable\n",
+		}))
+	})
+
 	It("rejects an unsupported apt distribution before invoking apt-get", func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "apt-get")
 		installer := newInstaller(writeRelease("ID=fedora\nVERSION_CODENAME=fedora\n"))

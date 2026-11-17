@@ -54,7 +54,7 @@ func (a windowsPrivilegeAdapter) Run(ctx context.Context, plan ExecutionPlan, st
 			cmd := exec.CommandContext(ctx, plan.Name, plan.Args...)
 			configureOperationCommand(cmd, plan.ExecutionRequest)
 			if plan.Unattended {
-				streams.Stdin = nil
+				streams.Stdin = unattendedInput(streams.Stdin)
 			}
 			return runPreparedCommand(cmd, streams)
 		}
