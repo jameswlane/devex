@@ -3,15 +3,6 @@ import { PrismaClient } from "../generated/prisma/client";
 import { logger } from "./logger";
 import { prismaConnectionOptions } from "./prisma-connection";
 
-// Connection pool metrics and health monitoring
-interface ConnectionPoolMetrics {
-	totalConnections: number;
-	activeConnections: number;
-	idle: number;
-	latency?: number;
-	error?: string;
-}
-
 // Retry configuration for database operations
 interface RetryConfig {
 	maxAttempts: number;
@@ -225,7 +216,6 @@ export const prisma = prismaInstance;
 
 // Export additional utilities
 export {
-	type ConnectionPoolMetrics,
 	type DatabasePoolConfig,
 	isNonRetryableError,
 	poolManager,
@@ -295,10 +285,11 @@ export async function disconnectPrisma(): Promise<void> {
 	}
 }
 
-// Health check with connection pool metrics
+// Health check: reports only measured values (status and query latency).
+// Real pool metrics would need the Prisma metrics preview feature.
 export async function checkDatabaseHealth(): Promise<{
 	status: "healthy" | "unhealthy";
-	metrics?: ConnectionPoolMetrics;
+	latency?: number;
 	error?: string;
 }> {
 	try {
@@ -309,17 +300,7 @@ export async function checkDatabaseHealth(): Promise<{
 
 		const latency = Date.now() - start;
 
-		// Note: Actual connection pool metrics would require Prisma metrics preview feature
-		// For now, we return basic health information
-		return {
-			status: "healthy",
-			metrics: {
-				totalConnections: 1, // Placeholder - would need metrics feature
-				activeConnections: isConnected ? 1 : 0,
-				idle: 0, // Placeholder
-				latency,
-			},
-		};
+		return { status: "healthy", latency };
 	} catch (error) {
 		return {
 			status: "unhealthy",
