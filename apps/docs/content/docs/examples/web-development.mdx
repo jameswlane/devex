@@ -15,11 +15,11 @@ This page sets up a web development machine on Debian or Ubuntu with commands th
 
 ## Built-in web templates
 
-DevEx ships two web templates. You can inspect and plan both, but a real install doesn't finish yet:
+DevEx ships two web templates:
 
 | Template | Installs | Status |
 | --- | --- | --- |
-| `web-development` | Node.js (mise), VS Code and Chrome (APT) | Stops at the first step because it doesn't install mise ([#461](https://github.com/jameswlane/devex/issues/461)) |
+| `web-development` | mise, then Node.js 24 through mise | Installs on a fresh machine. It doesn't install VS Code or Chrome |
 | `full-stack` | Git, curl, wget, Docker, PostgreSQL, Redis, VS Code, Chrome and Firefox Developer Edition | Stops at the VS Code snap on Ubuntu ([#462](https://github.com/jameswlane/devex/issues/462)) |
 
 ```bash
@@ -49,9 +49,10 @@ devex plugin install package-manager-mise
 devex install git curl "GitHub CLI" --non-interactive
 
 # mise, then Node.js 24
-devex plugin run package-manager-mise ensure-installed
-devex plugin run package-manager-mise install node@24
+devex install --template web-development --non-interactive
 ```
+
+Pick another Node.js major version with `--answer node_version=22`.
 
 mise adds its activation line to `~/.bashrc`. Open a new terminal to get `node` and `npm` on your PATH, or run them through `~/.local/bin/mise exec -- node`.
 
@@ -91,7 +92,7 @@ devex remove --template databases --run latest --force   # keeps the data volume
 
 ## Editor and browser
 
-DevEx doesn't install VS Code or Chrome on Debian and Ubuntu yet. Install them from [code.visualstudio.com](https://code.visualstudio.com/) and [google.com/chrome](https://www.google.com/chrome/).
+DevEx doesn't install VS Code or Chrome on Debian and Ubuntu yet ([#553](https://github.com/jameswlane/devex/issues/553)). Install them from [code.visualstudio.com](https://code.visualstudio.com/) and [google.com/chrome](https://www.google.com/chrome/).
 
 ## Smoke procedure
 
@@ -105,8 +106,7 @@ devex install --template web-development --non-interactive --dry-run
 
 devex plugin install package-manager-mise
 devex install git curl "GitHub CLI" --non-interactive
-devex plugin run package-manager-mise ensure-installed
-devex plugin run package-manager-mise install node@24
+devex install --template web-development --non-interactive
 ~/.local/bin/mise exec -- node --version
 gh --version
 
