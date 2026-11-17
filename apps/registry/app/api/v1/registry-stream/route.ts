@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
+import { extractTagsFromType } from "@/lib/plugin-tags";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import {
@@ -336,22 +337,6 @@ function extractPluginNameFromPath(githubPath: string | null): string | null {
 	// Extract from: "packages/tool-shell" or "https://github.com/.../packages/package-manager-apt"
 	const match = githubPath.match(/packages\/([^/]+?)(?:\/|$)/);
 	return match ? match[1] : null;
-}
-
-function extractTagsFromType(type: string): string[] {
-	const tags = [type];
-
-	if (type.includes("package-manager")) {
-		tags.push("installer", "package-manager");
-	}
-	if (type.includes("tool")) {
-		tags.push("utility", "tool");
-	}
-	if (type.includes("system")) {
-		tags.push("system", "configuration");
-	}
-
-	return tags;
 }
 
 // Handle CORS preflight

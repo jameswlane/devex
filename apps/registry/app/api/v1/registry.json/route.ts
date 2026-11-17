@@ -11,6 +11,7 @@ import {
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { PLUGIN_LIST_ORDER } from "@/lib/plugin-order";
+import { extractTagsFromType } from "@/lib/plugin-tags";
 import { pluginReleaseTag } from "@/lib/plugins/release-tag";
 import { attachReleaseTags } from "@/lib/plugins/release-tags";
 import { prisma } from "@/lib/prisma";
@@ -281,24 +282,6 @@ function extractPluginNameFromPath(githubPath: string | null): string | null {
 	// Extract from: "packages/tool-shell" or "https://github.com/.../packages/package-manager-apt"
 	const match = githubPath.match(/packages\/([^/]+?)(?:\/|$)/);
 	return match ? match[1] : null;
-}
-
-// Helper function to extract tags from plugin type
-function extractTagsFromType(type: string): string[] {
-	const tags = [type];
-
-	// Add semantic tags based on type
-	if (type.includes("package-manager")) {
-		tags.push("installer", "package-manager");
-	}
-	if (type.includes("tool")) {
-		tags.push("utility", "tool");
-	}
-	if (type.includes("system")) {
-		tags.push("system", "configuration");
-	}
-
-	return tags;
 }
 
 // Helper function to extract requirements from plugin supports data

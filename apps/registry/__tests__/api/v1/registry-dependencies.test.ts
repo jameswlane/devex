@@ -207,3 +207,37 @@ describe("registry dependencies and conflicts (#491)", () => {
 		expect(plugin.conflicts).toEqual(CONFLICTS);
 	});
 });
+
+// #520: a package-manager plugin got the package-manager tag twice.
+describe("registry tags (#520)", () => {
+	const TAGS = ["package-manager", "installer"];
+
+	beforeAll(async () => {
+		pluginFindMany.mockResolvedValue([await recordedPluginRow()]);
+	});
+
+	it("/api/v1/registry.json serves each tag once", async () => {
+		const response = await getRegistryJson(
+			new NextRequest("https://registry.devex.sh/api/v1/registry.json"),
+		);
+		const data = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(data.plugins[NAME].tags).toEqual(TAGS);
+	});
+
+	it.each(["json", "ndjson", "json-stream"])(
+		"/api/v1/registry-stream?format=%s serves each tag once",
+		async (format) => {
+			const response = await getRegistryStream(
+				new NextRequest(
+					`https://registry.devex.sh/api/v1/registry-stream?format=${format}`,
+				),
+			);
+			const body = await response.text();
+
+			expect(response.status).toBe(200);
+			expect(body).toContain(`"tags":${JSON.stringify(TAGS)}`);
+		},
+	);
+});
