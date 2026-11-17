@@ -238,6 +238,14 @@ var _ = Describe("Shipped lifecycle templates", func() {
 			Expect(plannedStep(plan, "mise").Request).To(HaveField("Command", "ensure-installed"))
 			Expect(plannedStep(plan, "node").DependsOn).To(Equal([]string{"mise"}))
 			Expect(plannedStep(plan, "node").Request.Args).To(Equal([]string{"node@24"}))
+
+			plan, err = planStarter("web-development", templates.LifecycleInstall, "linux", []string{"node_version=22"}, nil, allPluginsAvailable)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plannedStep(plan, "node").Request.Args).To(Equal([]string{"node@22"}))
+
+			// The mise plugin rejects aliases such as lts, so the plan must too.
+			_, err = planStarter("web-development", templates.LifecycleInstall, "linux", []string{"node_version=lts"}, nil, allPluginsAvailable)
+			Expect(err).To(MatchError(ContainSubstring("node_version")))
 		})
 
 		It("requires a mobile target instead of installing everything", func() {
