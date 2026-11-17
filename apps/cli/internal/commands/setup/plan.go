@@ -83,6 +83,9 @@ var installedAppsCheck = tui.InstalledApps
 // preparePackageBatch shares the TUI's batched package transactions; tests replace it.
 var preparePackageBatch = tui.PreparePackageBatch
 
+// prepareAptSources writes the APT sources of an app the batch did not install; tests replace it.
+var prepareAptSources = tui.PrepareAptSources
+
 // refreshInstalledApps records which planned apps are already installed so the
 // Confirmation screen can show them as skipped, matching what the installer does.
 func (m *SetupModel) refreshInstalledApps() {
