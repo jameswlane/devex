@@ -82,7 +82,7 @@ devex remove --template databases --run latest --force
 To record a template's profile in your configuration, run `devex init --profile <name>`. `devex init --help` lists the profiles.
 
 <Callout type="info">
-On a fresh machine, run `devex init` before you plan a template or install catalog apps ([#466](https://github.com/jameswlane/devex/issues/466)). Install any plugin a template needs, such as `package-manager-mise` or `package-manager-docker`, with `devex plugin install` first ([#460](https://github.com/jameswlane/devex/issues/460)). For templates that run containers, install Docker with `devex install Docker`, then log out and back in, before the template install ([#470](https://github.com/jameswlane/devex/issues/470), [#455](https://github.com/jameswlane/devex/issues/455)).
+On a fresh machine, run `devex init` before you plan a template or install catalog apps ([#466](https://github.com/jameswlane/devex/issues/466)). For templates that run containers, install Docker with `devex install Docker`, then log out and back in, before the template install ([#470](https://github.com/jameswlane/devex/issues/470), [#455](https://github.com/jameswlane/devex/issues/455)).
 </Callout>
 
 ## Write your own template
@@ -110,7 +110,6 @@ devex template validate databases
 devex template plan databases --action install --answer databases=postgres --answer mysql_password=unused --non-interactive
 devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive --dry-run
 
-devex plugin install package-manager-docker
 devex install Docker --non-interactive
 
 # Log out and back in so the docker group applies, then:
