@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import type { Tool } from "../services/tools-api";
+import {
+	getPlatformInfo,
+	PLATFORMS,
+	type Platform,
+	type Tool,
+} from "../services/tools-api";
 import {
 	formatErrorMessage,
 	logError,
@@ -9,7 +14,6 @@ import {
 	withRetry,
 } from "../utils/error-handling";
 
-type Platform = "linux" | "macos" | "windows";
 type FilterType = "all" | "application" | "plugin";
 
 interface ApiResponse {
@@ -221,13 +225,8 @@ export function ToolSearch() {
 	);
 
 	const getPlatformBadges = useMemo(
-		() => (tool: Tool) => {
-			const platforms: Platform[] = [];
-			if (tool.platforms.linux) platforms.push("linux");
-			if (tool.platforms.macos) platforms.push("macos");
-			if (tool.platforms.windows) platforms.push("windows");
-			return platforms;
-		},
+		() => (tool: Tool) =>
+			PLATFORMS.filter((platform) => getPlatformInfo(tool, platform) !== null),
 		[],
 	);
 
@@ -320,7 +319,7 @@ export function ToolSearch() {
 										</span>
 									) : (
 										<span className="text-gray-600">
-											{tool.platforms[platforms[0]]?.install_method ||
+											{getPlatformInfo(tool, platforms[0])?.install_method ||
 												"auto-detect"}
 										</span>
 									)}

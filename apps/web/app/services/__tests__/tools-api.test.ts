@@ -208,6 +208,29 @@ describe("ToolsService", () => {
 			expect(windowsResult).toHaveLength(2); // Docker has null Windows support
 		});
 
+		it("should match an all-platforms tool for every platform filter", () => {
+			const allOnly: Tool = {
+				name: "MySQL",
+				description: "Relational database",
+				category: "Database",
+				type: "application",
+				official: true,
+				default: false,
+				platforms: {
+					all: {
+						install_method: "docker",
+						install_command: "mysql:8",
+						official_support: true,
+					},
+				},
+				tags: ["database"],
+			};
+			const allService = new ToolsService([allOnly]);
+			for (const platform of ["linux", "macos", "windows"]) {
+				expect(allService.filterTools({ platform }, null)).toEqual([allOnly]);
+			}
+		});
+
 		it("should combine multiple filters", () => {
 			const result = service.filterTools(
 				{
