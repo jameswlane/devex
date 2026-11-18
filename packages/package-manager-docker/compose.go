@@ -84,6 +84,7 @@ func (d *DockerInstaller) handleCompose(ctx context.Context, args []string) erro
 	}
 
 	// Test if docker compose is available, fallback to docker-compose
+	// The version check doesn't reach the daemon, so it needs no sudo.
 	if err := sdk.ExecCommandWithContext(ctx, false, "docker", "compose", "version"); err != nil {
 		if sdk.CommandExists("docker-compose") {
 			composeCmd = "docker-compose"
@@ -93,5 +94,5 @@ func (d *DockerInstaller) handleCompose(ctx context.Context, args []string) erro
 		}
 	}
 
-	return sdk.ExecCommandWithContext(ctx, false, composeCmd, composeArgs...)
+	return d.runDockerTool(ctx, composeCmd, composeArgs...)
 }

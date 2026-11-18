@@ -356,3 +356,81 @@ lifecycle:
 		Expect(err).To(MatchError(ContainSubstring("required input 'token'")))
 	})
 })
+
+var _ = Describe("Required inputs of install steps that won't run", func() {
+	It("installs PostgreSQL and Redis without a MySQL password", func() {
+		plan, err := planStarter("databases", templates.LifecycleInstall, "linux", []string{"databases=postgres,redis"}, nil, allPluginsAvailable)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stepIDs(plan)).To(Equal([]string{"docker-engine", "postgres", "redis"}))
+		Expect(plan.RawInputs).NotTo(HaveKey("mysql_password"))
+	})
+
+	It("still requires the MySQL password when MySQL is selected", func() {
+		_, err := planStarter("databases", templates.LifecycleInstall, "linux", []string{"databases=postgres,mysql"}, nil, allPluginsAvailable)
+
+		Expect(err).To(MatchError(ContainSubstring("required input 'mysql_password' is missing")))
+	})
+
+	It("doesn't prompt for the MySQL password when MySQL isn't selected", func() {
+		planner := templates.TemplatePlanner{
+			Manager:     templates.NewTemplateManager(GinkgoT().TempDir()),
+			AppResolver: testAppResolver{},
+			System:      map[string]string{"os": "linux"},
+		}
+		var prompted []string
+		_, err := planner.Plan(context.Background(), "databases", templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers: []string{"databases=postgres"},
+				Prompt: func(_ context.Context, key string, _ templates.TemplateInput) (any, error) {
+					prompted = append(prompted, key)
+					return "secret", nil
+				},
+			},
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(prompted).To(BeEmpty())
+	})
+
+	It("keeps an input required when the condition that would skip its step reads an unanswered required input", func() {
+		dir := GinkgoT().TempDir()
+		path := writeSpecFile(dir, `schema_version: devex.template/v1
+id: gated
+name: Gated
+version: 1.0.0
+inputs:
+  mode:
+    type: text
+    required: true
+  token:
+    type: text
+    required: true
+lifecycle:
+  install:
+    - id: app
+      if: equals(inputs.mode, "remote")
+      plugin:
+        name: package-manager-docker
+        command: install
+        args:
+          - --env=TOKEN={{ inputs.token }}
+          - redis:7
+`)
+		planner := templates.TemplatePlanner{Manager: templates.NewTemplateManager(dir)}
+		var prompted []string
+		_, err := planner.Plan(context.Background(), path, templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Prompt: func(_ context.Context, key string, _ templates.TemplateInput) (any, error) {
+					prompted = append(prompted, key)
+					return "remote", nil
+				},
+			},
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(prompted).To(ConsistOf("mode", "token"))
+	})
+})

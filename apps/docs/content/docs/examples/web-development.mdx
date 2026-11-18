@@ -66,18 +66,13 @@ Install Docker Engine from the catalog first. The template's own Docker step fai
 devex install Docker --non-interactive
 ```
 
-Installing Docker adds you to the `docker` group, but your current session doesn't pick up the new group ([#455](https://github.com/jameswlane/devex/issues/455)). Log out and back in (or run `newgrp docker`), then start the containers:
+Then start the containers. Your session doesn't have the new `docker` group until you log out and back in, so DevEx runs `docker` with sudo until then:
 
 ```bash
 devex install --template databases \
   --answer databases=postgres,redis \
-  --answer mysql_password=unused \
   --non-interactive
 ```
-
-<Callout type="info">
-The template asks for `mysql_password` even when you don't select MySQL ([#465](https://github.com/jameswlane/devex/issues/465)). Any value works.
-</Callout>
 
 Connect with `postgresql://postgres@127.0.0.1:5432/postgres` and `redis://127.0.0.1:6379`.
 
@@ -107,10 +102,9 @@ gh --version
 
 devex install Docker --non-interactive
 
-# Log out and back in so the docker group applies, then:
-devex install --template databases --answer databases=postgres,redis --answer mysql_password=unused --non-interactive
-timeout 60 sh -c "until docker exec devex-postgres pg_isready; do sleep 2; done"
-docker exec devex-redis redis-cli ping
+devex install --template databases --answer databases=postgres,redis --non-interactive
+timeout 60 sh -c "until sudo docker exec devex-postgres pg_isready; do sleep 2; done"
+sudo docker exec devex-redis redis-cli ping
 
 devex list installed
 devex remove --template databases --run latest --force

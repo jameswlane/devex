@@ -65,11 +65,11 @@ devex template info databases
 
 # Check it and see the steps an install would run
 devex template validate databases
-devex template plan databases --action install --answer databases=postgres --answer mysql_password=unused --non-interactive
+devex template plan databases --action install --answer databases=postgres --non-interactive
 
 # Preview, then install (see the note below about Docker)
-devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive --dry-run
-devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive
+devex install --template databases --answer databases=postgres --non-interactive --dry-run
+devex install --template databases --answer databases=postgres --non-interactive
 
 # Check, update or remove what the latest install created
 devex status --template databases --run latest
@@ -82,7 +82,7 @@ devex remove --template databases --run latest --force
 To record a template's profile in your configuration, run `devex init --profile <name>`. `devex init --help` lists the profiles.
 
 <Callout type="info">
-On a fresh machine, run `devex init` before you plan a template or install catalog apps ([#466](https://github.com/jameswlane/devex/issues/466)). For templates that run containers, install Docker with `devex install Docker`, then log out and back in, before the template install ([#470](https://github.com/jameswlane/devex/issues/470), [#455](https://github.com/jameswlane/devex/issues/455)).
+On a fresh machine, run `devex init` before you plan a template or install catalog apps ([#466](https://github.com/jameswlane/devex/issues/466)). For templates that run containers, install Docker with `devex install Docker` before the template install ([#470](https://github.com/jameswlane/devex/issues/470)). Until you log out and back in, DevEx runs the template's `docker` commands with sudo, because your session doesn't have the new `docker` group yet.
 </Callout>
 
 ## Write your own template
@@ -107,14 +107,13 @@ devex list available
 devex template list
 devex template info databases
 devex template validate databases
-devex template plan databases --action install --answer databases=postgres --answer mysql_password=unused --non-interactive
-devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive --dry-run
+devex template plan databases --action install --answer databases=postgres --non-interactive
+devex install --template databases --answer databases=postgres --non-interactive --dry-run
 
 devex install Docker --non-interactive
 
-# Log out and back in so the docker group applies, then:
-devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive
-timeout 60 sh -c "until docker exec devex-postgres pg_isready; do sleep 2; done"
+devex install --template databases --answer databases=postgres --non-interactive
+timeout 60 sh -c "until sudo docker exec devex-postgres pg_isready; do sleep 2; done"
 
 devex status --template databases --run latest
 devex maintain --template databases --run latest

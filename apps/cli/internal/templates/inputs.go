@@ -24,6 +24,9 @@ type InputResolverOptions struct {
 	// NotRequired lists required inputs that this resolution does not
 	// enforce: they are neither prompted for nor treated as missing.
 	NotRequired map[string]bool
+	// fileAnswers holds AnswerFiles already read, so a file such as
+	// /dev/stdin is read once when inputs are resolved twice.
+	fileAnswers map[string]any
 }
 
 type InputPromptFunc func(ctx context.Context, key string, input TemplateInput) (any, error)
@@ -50,9 +53,13 @@ func ResolveInputs(ctx context.Context, spec TemplateSpec, opts InputResolverOpt
 		}
 	}
 
-	fileAnswers, err := loadAnswerFiles(opts.AnswerFiles)
-	if err != nil {
-		return nil, err
+	fileAnswers := opts.fileAnswers
+	if fileAnswers == nil {
+		var err error
+		fileAnswers, err = loadAnswerFiles(opts.AnswerFiles)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for key, value := range fileAnswers {
 		values[key] = value

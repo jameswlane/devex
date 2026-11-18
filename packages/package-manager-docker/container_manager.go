@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 type DockerRunOptions struct {
@@ -62,7 +60,7 @@ func (d *DockerInstaller) handleInstall(ctx context.Context, args []string) erro
 	}
 
 	d.logger.Printf("Running container from image: %s\n", runCmd[len(runCmd)-1])
-	if err := sdk.ExecCommandWithContext(ctx, false, "docker", runCmd...); err != nil {
+	if err := d.runDocker(ctx, runCmd...); err != nil {
 		return fmt.Errorf("failed to run container: %w", err)
 	}
 
@@ -84,11 +82,11 @@ func (d *DockerInstaller) handleRemove(ctx context.Context, args []string) error
 
 	for _, container := range containers {
 		// Stop container first
-		if err := sdk.ExecCommandWithContext(ctx, false, "docker", "stop", container); err != nil {
+		if err := d.runDocker(ctx, "stop", container); err != nil {
 			d.logger.Warning("Failed to stop container %s: %v", container, err)
 		}
 	}
-	if err := sdk.ExecCommandWithContext(ctx, false, "docker", removeArgs...); err != nil {
+	if err := d.runDocker(ctx, removeArgs...); err != nil {
 		return fmt.Errorf("failed to remove containers: %w", err)
 	}
 
@@ -105,7 +103,7 @@ func (d *DockerInstaller) handleStart(ctx context.Context, args []string) error 
 		return err
 	}
 	cmdArgs := append([]string{"start"}, args...)
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 // handleStop stops running containers
@@ -117,7 +115,7 @@ func (d *DockerInstaller) handleStop(ctx context.Context, args []string) error {
 		return err
 	}
 	cmdArgs := append([]string{"stop"}, args...)
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 // handleRestart restarts containers
@@ -126,7 +124,7 @@ func (d *DockerInstaller) handleRestart(ctx context.Context, args []string) erro
 	if err != nil {
 		return err
 	}
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 // handleList lists containers
@@ -138,7 +136,7 @@ func (d *DockerInstaller) handleList(ctx context.Context, args []string) error {
 			break
 		}
 	}
-	return sdk.ExecCommandWithContext(ctx, false, "docker", listArgs...)
+	return d.runDocker(ctx, listArgs...)
 }
 
 // handleLogs shows container logs
@@ -150,7 +148,7 @@ func (d *DockerInstaller) handleLogs(ctx context.Context, args []string) error {
 		return err
 	}
 	cmdArgs := append([]string{"logs"}, args...)
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 // handleExec executes commands in containers
@@ -159,7 +157,7 @@ func (d *DockerInstaller) handleExec(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 func (d *DockerInstaller) parseDockerRunOptions(args []string) (DockerRunOptions, error) {

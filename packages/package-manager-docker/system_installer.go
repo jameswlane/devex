@@ -16,13 +16,22 @@ import (
 func (d *DockerInstaller) handleEnsureInstalled(ctx context.Context, args []string) error {
 	d.logger.Printf("Checking if Docker Engine is installed...\n")
 
+	addUser := false
+	for _, arg := range args {
+		if arg == "--add-user" {
+			addUser = true
+			break
+		}
+	}
+
 	// Check if docker command exists and daemon is accessible
-	if d.isDockerAvailable() && d.isDockerDaemonRunning() {
+	if d.isDockerAvailable() && d.isDockerDaemonRunning(ctx) {
 		d.logger.Success("Docker Engine is already installed and running")
+		d.addUserIfSocketDenied(ctx, addUser)
 		return nil
 	}
 
-	if d.isDockerAvailable() && !d.isDockerDaemonRunning() {
+	if d.isDockerAvailable() && !d.isDockerDaemonRunning(ctx) {
 		d.logger.Printf("Docker is installed but daemon is not running. Starting Docker service...\n")
 		if err := d.startDockerService(ctx); err != nil {
 			d.logger.Warning("Failed to start Docker service: %v", err)
@@ -31,6 +40,7 @@ func (d *DockerInstaller) handleEnsureInstalled(ctx context.Context, args []stri
 		// Wait for daemon to start with retry mechanism
 		if d.waitForDockerDaemon(ctx) {
 			d.logger.Success("Docker service started successfully")
+			d.addUserIfSocketDenied(ctx, addUser)
 			return nil
 		}
 	}
@@ -48,14 +58,6 @@ func (d *DockerInstaller) handleEnsureInstalled(ctx context.Context, args []stri
 	}
 
 	// Add user to docker group if requested
-	addUser := false
-	for _, arg := range args {
-		if arg == "--add-user" {
-			addUser = true
-			break
-		}
-	}
-
 	if addUser {
 		if err := d.addUserToDockerGroup(ctx); err != nil {
 			d.logger.Warning("Failed to add user to docker group: %v", err)
@@ -69,9 +71,20 @@ func (d *DockerInstaller) handleEnsureInstalled(ctx context.Context, args []stri
 
 	d.logger.Success("Docker Engine installed successfully")
 	if addUser {
-		d.logger.Printf("Note: You may need to log out and back in for docker group changes to take effect\n")
+		d.logger.Printf("Note: log out and back in to run docker without sudo. Until then, DevEx runs docker with sudo.\n")
 	}
 	return nil
+}
+
+// addUserIfSocketDenied adds the user to the docker group when Docker was
+// already installed but this user can reach it only through sudo.
+func (d *DockerInstaller) addUserIfSocketDenied(ctx context.Context, addUser bool) {
+	if !addUser || !d.dockerNeedsSudo(ctx) {
+		return
+	}
+	if err := d.addUserToDockerGroup(ctx); err != nil {
+		d.logger.Warning("Failed to add user to docker group: %v", err)
+	}
 }
 
 // installDockerEngine installs Docker Engine based on the detected system
@@ -311,7 +324,7 @@ func (d *DockerInstaller) waitForDockerDaemon(ctx context.Context) bool {
 			d.logger.Warning("Context cancelled while waiting for Docker daemon")
 			return false
 		case <-time.After(retryDelay):
-			if d.isDockerDaemonRunning() {
+			if d.isDockerDaemonRunning(ctx) {
 				return true
 			}
 			d.logger.Printf("Attempt %d/%d: Docker daemon not ready yet, retrying...", i+1, maxRetries)

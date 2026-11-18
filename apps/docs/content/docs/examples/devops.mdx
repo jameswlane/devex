@@ -51,7 +51,7 @@ DevEx never configures cloud credentials. After install, run `aws configure` or 
 </Callout>
 
 - **macOS Docker**: Docker Engine is installed only on Linux. On macOS, install Docker Desktop yourself; its license terms apply.
-- **Docker group**: log out and back in after the first install, so the `docker` group applies.
+- **Docker group**: log out and back in after the first install to run `docker` without sudo. Until then, DevEx runs its own `docker` commands with sudo.
 - **Remove**: `remove` uninstalls the mise tools but keeps Docker Engine, because other templates may use it.
 
 ## Maintain, status and remove
