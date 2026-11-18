@@ -112,27 +112,30 @@ func (d *DockerInstaller) handleStatus(ctx context.Context, args []string) error
 		return fmt.Errorf("docker is not installed on this system")
 	}
 
-	if d.isDockerDaemonRunning(ctx) {
-		d.logger.Success("Docker daemon is running")
-
-		if len(args) > 0 {
-			inspectArgs, err := d.BuildDockerStatusArgs(args)
-			if err != nil {
-				return err
-			}
-			if err := d.runDocker(ctx, inspectArgs...); err != nil {
-				return fmt.Errorf("failed to inspect containers: %w", err)
-			}
-			return nil
+	if err := d.runDocker(ctx, "info"); err != nil {
+		if d.dockerNeedsSudo(ctx) {
+			// sudo failed, so the daemon state is unknown.
+			return err
 		}
+		d.logger.ErrorMsg("Docker daemon is not running")
+		return fmt.Errorf("docker daemon is not running")
+	}
+	d.logger.Success("Docker daemon is running")
 
-		// Show Docker version
-		if err := d.runDocker(ctx, "version"); err != nil {
-			d.logger.Warning("Failed to get Docker version: %v", err)
+	if len(args) > 0 {
+		inspectArgs, err := d.BuildDockerStatusArgs(args)
+		if err != nil {
+			return err
+		}
+		if err := d.runDocker(ctx, inspectArgs...); err != nil {
+			return fmt.Errorf("failed to inspect containers: %w", err)
 		}
 		return nil
 	}
 
-	d.logger.ErrorMsg("Docker daemon is not running")
-	return fmt.Errorf("docker daemon is not running")
+	// Show Docker version
+	if err := d.runDocker(ctx, "version"); err != nil {
+		d.logger.Warning("Failed to get Docker version: %v", err)
+	}
+	return nil
 }

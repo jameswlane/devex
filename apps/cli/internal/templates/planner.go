@@ -129,7 +129,12 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 	if opts.Action != LifecycleInstall {
 		inputOptions.NotRequired = requiredInputsUnusedBy(*spec, steps)
 	} else {
-		inputOptions.NotRequired = p.requiredInputsOnlyUsedBySkippedSteps(ctx, *spec, steps, opts)
+		answers, err := loadAnswerFiles(inputOptions.AnswerFiles)
+		if err != nil {
+			return nil, nil, err
+		}
+		inputOptions.fileAnswers = answers
+		inputOptions.NotRequired = p.requiredInputsOnlyUsedBySkippedSteps(ctx, *spec, steps, inputOptions, opts.KnownResources)
 	}
 	inputs, err := ResolveInputs(ctx, *spec, inputOptions)
 	if err != nil {
@@ -208,7 +213,7 @@ func requiredInputsUnusedBy(spec TemplateSpec, steps []TemplateStepSpec) map[str
 // when MySQL isn't selected. Conditions are evaluated with the inputs that
 // resolve without prompting; a step whose condition reads a required input
 // that isn't known yet counts as running, so its inputs stay required.
-func (p *TemplatePlanner) requiredInputsOnlyUsedBySkippedSteps(ctx context.Context, spec TemplateSpec, steps []TemplateStepSpec, opts PlanOptions) map[string]bool {
+func (p *TemplatePlanner) requiredInputsOnlyUsedBySkippedSteps(ctx context.Context, spec TemplateSpec, steps []TemplateStepSpec, inputOptions InputResolverOptions, resources map[string]ResourceDeclaration) map[string]bool {
 	required := map[string]bool{}
 	for key, input := range spec.Inputs {
 		if input.Required {
@@ -219,7 +224,7 @@ func (p *TemplatePlanner) requiredInputsOnlyUsedBySkippedSteps(ctx context.Conte
 		return nil
 	}
 
-	known := opts.InputOptions
+	known := inputOptions
 	known.NonInteractive = true
 	known.NotRequired = required
 	inputs, err := ResolveInputs(ctx, spec, known)
@@ -227,7 +232,7 @@ func (p *TemplatePlanner) requiredInputsOnlyUsedBySkippedSteps(ctx context.Conte
 		// The real resolution reports the error.
 		return nil
 	}
-	evalCtx := EvaluationContext{Inputs: inputs, Resources: opts.KnownResources, System: p.systemFacts()}
+	evalCtx := EvaluationContext{Inputs: inputs, Resources: resources, System: p.systemFacts()}
 
 	var running, skipped []TemplateStepSpec
 	for _, step := range steps {

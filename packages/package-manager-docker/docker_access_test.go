@@ -53,6 +53,25 @@ var _ = Describe("Docker socket access", func() {
 		})
 	})
 
+	Context("when docker fails with another permission error", func() {
+		It("runs docker without sudo", func() {
+			recorder.Script("docker", []string{"info"}, sdktest.Response{ExitCode: 1, Stderr: "WARNING: Error loading config file: open /home/u/.docker/config.json: permission denied\n"})
+
+			Expect(NewDockerPlugin().dockerNeedsSudo(context.Background())).To(BeFalse())
+		})
+	})
+
+	Context("when status can't reach the socket even with sudo", func() {
+		It("reports the re-login hint instead of a stopped daemon", func() {
+			recorder.Script("docker", []string{"info"}, sdktest.Response{ExitCode: 1, Stderr: "permission denied while trying to connect to the docker API at unix:///var/run/docker.sock\n"})
+
+			err := NewDockerPlugin().ExecuteContext(context.Background(), "status", nil)
+
+			Expect(err).To(MatchError(ContainSubstring("log out and back in")))
+			Expect(err.Error()).NotTo(ContainSubstring("daemon is not running"))
+		})
+	})
+
 	Context("when the user can reach the Docker socket", func() {
 		It("runs docker without sudo", func() {
 			Expect(NewDockerPlugin().ExecuteContext(context.Background(), "install", runArgs)).To(Succeed())

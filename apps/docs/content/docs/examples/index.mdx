@@ -113,7 +113,7 @@ devex install --template databases --answer databases=postgres --non-interactive
 devex install Docker --non-interactive
 
 devex install --template databases --answer databases=postgres --non-interactive
-timeout 60 sh -c "until docker exec devex-postgres pg_isready; do sleep 2; done"
+timeout 60 sh -c "until sudo docker exec devex-postgres pg_isready; do sleep 2; done"
 
 devex status --template databases --run latest
 devex maintain --template databases --run latest

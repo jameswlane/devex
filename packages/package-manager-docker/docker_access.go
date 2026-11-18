@@ -12,8 +12,8 @@ import (
 // can't open the daemon socket, such as a user added to the docker group in
 // this login session.
 func dockerSocketPermissionDenied(output string) bool {
-	lower := strings.ToLower(output)
-	return strings.Contains(lower, "permission denied") && strings.Contains(lower, "docker")
+	// Older clients say "the Docker daemon socket", newer ones "the docker API".
+	return strings.Contains(strings.ToLower(output), "permission denied while trying to connect to the docker")
 }
 
 // dockerNeedsSudo reports whether docker commands must run through sudo.
