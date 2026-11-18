@@ -53,6 +53,18 @@ var _ = Describe("Docker socket access", func() {
 		})
 	})
 
+	Context("when only standalone docker-compose is installed", func() {
+		It("falls back to it through sudo", func() {
+			recorder = sdktest.NewRecorder(GinkgoT(), "docker", "docker-compose")
+			recorder.Script("docker", []string{"info"}, sdktest.Response{ExitCode: 1, Stderr: socketDenied})
+			recorder.Script("docker", []string{"compose", "version"}, sdktest.Response{ExitCode: 1, Stderr: "docker: 'compose' is not a docker command.\n"})
+
+			Expect(NewDockerPlugin().ExecuteContext(context.Background(), "compose", []string{"up"})).To(Succeed())
+
+			Expect(recorder.Calls("docker-compose")).To(Equal([]sdktest.Call{{Args: []string{"up"}, ElevationRequested: true}}))
+		})
+	})
+
 	Context("when docker fails with another permission error", func() {
 		It("runs docker without sudo", func() {
 			recorder.Script("docker", []string{"info"}, sdktest.Response{ExitCode: 1, Stderr: "WARNING: Error loading config file: open /home/u/.docker/config.json: permission denied\n"})
