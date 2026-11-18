@@ -17,12 +17,12 @@ func (d *DockerInstaller) handleEnsureInstalled(ctx context.Context, args []stri
 	d.logger.Printf("Checking if Docker Engine is installed...\n")
 
 	// Check if docker command exists and daemon is accessible
-	if d.isDockerAvailable() && d.isDockerDaemonRunning() {
+	if d.isDockerAvailable() && d.isDockerDaemonRunning(ctx) {
 		d.logger.Success("Docker Engine is already installed and running")
 		return nil
 	}
 
-	if d.isDockerAvailable() && !d.isDockerDaemonRunning() {
+	if d.isDockerAvailable() && !d.isDockerDaemonRunning(ctx) {
 		d.logger.Printf("Docker is installed but daemon is not running. Starting Docker service...\n")
 		if err := d.startDockerService(ctx); err != nil {
 			d.logger.Warning("Failed to start Docker service: %v", err)
@@ -69,7 +69,7 @@ func (d *DockerInstaller) handleEnsureInstalled(ctx context.Context, args []stri
 
 	d.logger.Success("Docker Engine installed successfully")
 	if addUser {
-		d.logger.Printf("Note: You may need to log out and back in for docker group changes to take effect\n")
+		d.logger.Printf("Note: log out and back in to run docker without sudo. Until then, DevEx runs docker with sudo.\n")
 	}
 	return nil
 }
@@ -311,7 +311,7 @@ func (d *DockerInstaller) waitForDockerDaemon(ctx context.Context) bool {
 			d.logger.Warning("Context cancelled while waiting for Docker daemon")
 			return false
 		case <-time.After(retryDelay):
-			if d.isDockerDaemonRunning() {
+			if d.isDockerDaemonRunning(ctx) {
 				return true
 			}
 			d.logger.Printf("Attempt %d/%d: Docker daemon not ready yet, retrying...", i+1, maxRetries)

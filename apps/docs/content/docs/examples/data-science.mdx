@@ -51,7 +51,7 @@ Open JupyterLab at http://127.0.0.1:8888 and MLflow at http://127.0.0.1:5000. In
 Docker Engine is installed only on Linux. On macOS, start Docker Desktop before you install; its license terms apply.
 </Callout>
 
-- **First install on a machine without Docker**: the Docker Engine step adds you to the `docker` group, but a running session doesn't pick up new groups. The container steps then fail with a Docker socket permission error. Log out and back in (or run `newgrp docker`), then run the same `devex install` command again.
+- **First install on a machine without Docker**: the Docker Engine step adds you to the `docker` group, but a running session doesn't pick up new groups. Until you log out and back in, DevEx runs the container steps with sudo.
 - GPU access is not configured.
 - Ports are published on 127.0.0.1 only.
 - `remove` deletes the containers but keeps the `devex-jupyter-work` and `devex-mlflow-data` volumes, so your work survives a reinstall. Delete them with `docker volume rm`.
@@ -75,8 +75,6 @@ devex template validate data-science
 devex template plan data-science --action install --answer components=jupyter,mlflow --non-interactive --format yaml
 devex install --template data-science --answer components=jupyter,mlflow --non-interactive --dry-run
 devex install --template data-science --answer components=jupyter,mlflow --non-interactive
-# On a VM without Docker, the first run stops after adding you to the docker group:
-# log out and back in, then run the same install command again.
 
 curl -fsS http://127.0.0.1:8888/api && echo " jupyter ok"
 curl -fsS http://127.0.0.1:5000/health && echo mlflow ok

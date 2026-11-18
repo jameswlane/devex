@@ -26,6 +26,8 @@ type DockerInstaller struct {
 	*sdk.PackageManagerPlugin
 	logger        sdk.Logger
 	osReleasePath string
+	// dockerSudo caches whether this session must run docker through sudo.
+	dockerSudo *bool
 }
 
 // Execute handles command execution
@@ -99,9 +101,8 @@ func (d *DockerInstaller) isDockerAvailable() bool {
 }
 
 // isDockerDaemonRunning checks if Docker daemon is running
-func (d *DockerInstaller) isDockerDaemonRunning() bool {
-	err := d.ExecManagerCommand("search", false, "info")
-	return err == nil
+func (d *DockerInstaller) isDockerDaemonRunning(ctx context.Context) bool {
+	return d.runDocker(ctx, "info") == nil
 }
 
 // handleStatus checks Docker daemon status
@@ -111,7 +112,7 @@ func (d *DockerInstaller) handleStatus(ctx context.Context, args []string) error
 		return fmt.Errorf("docker is not installed on this system")
 	}
 
-	if d.isDockerDaemonRunning() {
+	if d.isDockerDaemonRunning(ctx) {
 		d.logger.Success("Docker daemon is running")
 
 		if len(args) > 0 {
@@ -119,14 +120,14 @@ func (d *DockerInstaller) handleStatus(ctx context.Context, args []string) error
 			if err != nil {
 				return err
 			}
-			if err := sdk.ExecCommandWithContext(ctx, false, "docker", inspectArgs...); err != nil {
+			if err := d.runDocker(ctx, inspectArgs...); err != nil {
 				return fmt.Errorf("failed to inspect containers: %w", err)
 			}
 			return nil
 		}
 
 		// Show Docker version
-		if err := d.ExecManagerCommand("search", false, "version"); err != nil {
+		if err := d.runDocker(ctx, "version"); err != nil {
 			d.logger.Warning("Failed to get Docker version: %v", err)
 		}
 		return nil

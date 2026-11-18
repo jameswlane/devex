@@ -15,6 +15,6 @@ var _ = Describe("Unattended Docker execution", func() {
 		plugin := main.NewDockerPlugin()
 		Expect(plugin.Execute("pull", []string{"alpine:latest"})).To(Succeed())
 		Expect(plugin.Execute("rmi", []string{"alpine:latest"})).To(Succeed())
-		Expect(recorder.Calls("docker")).To(Equal([]sdktest.Call{{Args: []string{"pull", "alpine:latest"}}, {Args: []string{"rmi", "alpine:latest"}}}))
+		Expect(recorder.Calls("docker")).To(Equal([]sdktest.Call{{Args: []string{"info"}}, {Args: []string{"pull", "alpine:latest"}}, {Args: []string{"rmi", "alpine:latest"}}}))
 	})
 })

@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-
-	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // handleBuild builds Docker images
@@ -13,7 +11,7 @@ func (d *DockerInstaller) handleBuild(ctx context.Context, args []string) error 
 	if err != nil {
 		return err
 	}
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 func (d *DockerInstaller) BuildDockerBuildArgs(args []string) ([]string, error) {
@@ -105,7 +103,7 @@ func (d *DockerInstaller) handlePull(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 func (d *DockerInstaller) BuildDockerPullArgs(args []string) ([]string, error) {
@@ -131,7 +129,7 @@ func (d *DockerInstaller) handlePush(ctx context.Context, args []string) error {
 		}
 	}
 	cmdArgs := append([]string{"push"}, args...)
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 // handleImages lists Docker images
@@ -140,7 +138,7 @@ func (d *DockerInstaller) handleImages(ctx context.Context, args []string) error
 	if err != nil {
 		return err
 	}
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }
 
 func (d *DockerInstaller) BuildDockerImagesArgs(args []string) ([]string, error) {
@@ -207,5 +205,5 @@ func (d *DockerInstaller) handleRmi(ctx context.Context, args []string) error {
 		}
 	}
 	cmdArgs := append([]string{"rmi"}, args...)
-	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
+	return d.runDocker(ctx, cmdArgs...)
 }

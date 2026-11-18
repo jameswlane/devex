@@ -65,17 +65,16 @@ The `databases` template runs PostgreSQL 16 and Redis 7 in Docker containers. Th
 ```bash
 devex install --template databases \
   --answer databases=postgres,redis \
-  --answer mysql_password=unused \
   --non-interactive
 ```
 
 <Callout type="info">
-The template asks for `mysql_password` even when you don't select MySQL ([#465](https://github.com/jameswlane/devex/issues/465)). Any value works. Select `mysql` to run MySQL 8 too; the value is then its root password.
+To run MySQL 8 too, add `mysql` to `databases` and set its root password with `--answer mysql_password=<password>`.
 </Callout>
 
 Install Docker from the catalog, as in the previous section, before you run this template. The template's own Docker step fails on a fresh machine ([#470](https://github.com/jameswlane/devex/issues/470)).
 
-Installing Docker adds you to the `docker` group, but your current session doesn't pick up the new group. Log out and back in (or run `newgrp docker`) before you install the database containers ([#455](https://github.com/jameswlane/devex/issues/455)).
+Installing Docker adds you to the `docker` group, but your current session doesn't pick up the new group. Until you log out and back in, DevEx runs the template's `docker` commands with sudo.
 
 Connect with `postgresql://postgres@127.0.0.1:5432/postgres` and `redis://127.0.0.1:6379`.
 
@@ -104,8 +103,7 @@ devex install --template devops --answer tools=kubectl,helm --non-interactive
 ~/.local/bin/mise exec -- kubectl version --client
 ~/.local/bin/mise exec -- helm version
 
-# Log out and back in so the docker group applies, then:
-devex install --template databases --answer databases=postgres,redis --answer mysql_password=unused --non-interactive
+devex install --template databases --answer databases=postgres,redis --non-interactive
 timeout 60 sh -c "until docker exec devex-postgres pg_isready; do sleep 2; done"
 docker exec devex-redis redis-cli ping
 

@@ -128,6 +128,8 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 	inputOptions := opts.InputOptions
 	if opts.Action != LifecycleInstall {
 		inputOptions.NotRequired = requiredInputsUnusedBy(*spec, steps)
+	} else {
+		inputOptions.NotRequired = p.requiredInputsOnlyUsedBySkippedSteps(ctx, *spec, steps, opts)
 	}
 	inputs, err := ResolveInputs(ctx, *spec, inputOptions)
 	if err != nil {
@@ -199,6 +201,70 @@ func requiredInputsUnusedBy(spec TemplateSpec, steps []TemplateStepSpec) map[str
 		}
 	}
 	return unused
+}
+
+// requiredInputsOnlyUsedBySkippedSteps returns the required inputs that only
+// install steps whose condition is false reference, such as a MySQL password
+// when MySQL isn't selected. Conditions are evaluated with the inputs that
+// resolve without prompting; a step whose condition reads a required input
+// that isn't known yet counts as running, so its inputs stay required.
+func (p *TemplatePlanner) requiredInputsOnlyUsedBySkippedSteps(ctx context.Context, spec TemplateSpec, steps []TemplateStepSpec, opts PlanOptions) map[string]bool {
+	required := map[string]bool{}
+	for key, input := range spec.Inputs {
+		if input.Required {
+			required[key] = true
+		}
+	}
+	if len(required) == 0 {
+		return nil
+	}
+
+	known := opts.InputOptions
+	known.NonInteractive = true
+	known.NotRequired = required
+	inputs, err := ResolveInputs(ctx, spec, known)
+	if err != nil {
+		// The real resolution reports the error.
+		return nil
+	}
+	evalCtx := EvaluationContext{Inputs: inputs, Resources: opts.KnownResources, System: p.systemFacts()}
+
+	var running, skipped []TemplateStepSpec
+	for _, step := range steps {
+		if stepSkipped(step, required, inputs, evalCtx) {
+			skipped = append(skipped, step)
+		} else {
+			running = append(running, step)
+		}
+	}
+	if len(skipped) == 0 {
+		return nil
+	}
+
+	// An input no step references keeps its required flag: it may feed a
+	// file the template renders.
+	unusedByRunning := requiredInputsUnusedBy(spec, running)
+	unusedBySkipped := requiredInputsUnusedBy(spec, skipped)
+	notRequired := map[string]bool{}
+	for key := range unusedByRunning {
+		if !unusedBySkipped[key] {
+			notRequired[key] = true
+		}
+	}
+	return notRequired
+}
+
+func stepSkipped(step TemplateStepSpec, required map[string]bool, inputs map[string]any, evalCtx EvaluationContext) bool {
+	if strings.TrimSpace(step.If) == "" {
+		return false
+	}
+	for key := range required {
+		if _, ok := inputs[key]; !ok && inputReferencePattern(key).MatchString(step.If) {
+			return false
+		}
+	}
+	include, err := EvaluateCondition(step.If, evalCtx)
+	return err == nil && !include
 }
 
 func inputReferencePattern(key string) *regexp.Regexp {

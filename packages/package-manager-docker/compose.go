@@ -84,7 +84,7 @@ func (d *DockerInstaller) handleCompose(ctx context.Context, args []string) erro
 	}
 
 	// Test if docker compose is available, fallback to docker-compose
-	if err := sdk.ExecCommandWithContext(ctx, false, "docker", "compose", "version"); err != nil {
+	if err := d.runDocker(ctx, "compose", "version"); err != nil {
 		if sdk.CommandExists("docker-compose") {
 			composeCmd = "docker-compose"
 			composeArgs = fallbackArgs
@@ -93,5 +93,8 @@ func (d *DockerInstaller) handleCompose(ctx context.Context, args []string) erro
 		}
 	}
 
-	return sdk.ExecCommandWithContext(ctx, false, composeCmd, composeArgs...)
+	if composeCmd == "docker" {
+		return d.runDocker(ctx, composeArgs...)
+	}
+	return sdk.ExecCommandWithContext(ctx, d.dockerNeedsSudo(ctx), composeCmd, composeArgs...)
 }
