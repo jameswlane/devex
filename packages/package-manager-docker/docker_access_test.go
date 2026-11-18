@@ -62,6 +62,7 @@ var _ = Describe("Docker socket access", func() {
 			Expect(NewDockerPlugin().ExecuteContext(context.Background(), "compose", []string{"up"})).To(Succeed())
 
 			Expect(recorder.Calls("docker-compose")).To(Equal([]sdktest.Call{{Args: []string{"up"}, ElevationRequested: true}}))
+			Expect(recorder.Calls("docker")).To(ContainElement(sdktest.Call{Args: []string{"compose", "version"}}))
 		})
 	})
 
