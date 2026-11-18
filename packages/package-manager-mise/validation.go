@@ -82,8 +82,10 @@ func (m *MisePlugin) ValidateToolSpecFormat(toolSpec string) error {
 			return fmt.Errorf("version cannot be empty when '@' is used")
 		}
 
-		// Version can be "latest" or a semantic version-like string
-		if version == "latest" {
+		// Version can be a named alias mise resolves itself, such as
+		// "latest", "lts", "lts-iron", "stable" or "temurin-21".
+		aliasRegex := regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_.-]{0,31}$`)
+		if aliasRegex.MatchString(version) {
 			return nil
 		}
 

@@ -40,6 +40,12 @@ var _ = Describe("Validation", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+			It("should accept mise version aliases", func() {
+				for _, spec := range []string{"node@lts", "node@lts-iron", "java@temurin-21", "go@stable"} {
+					Expect(plugin.ValidateToolSpec(spec)).To(Succeed(), spec)
+				}
+			})
+
 			It("should accept tool with semantic version range", func() {
 				err := plugin.ValidateToolSpec("rust@^1.70.0")
 				Expect(err).ToNot(HaveOccurred())
