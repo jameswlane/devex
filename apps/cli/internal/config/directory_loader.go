@@ -79,28 +79,38 @@ func loadEnvironmentAppDirectory(dir string) ([]types.CrossPlatformApp, error) {
 		if err != nil {
 			return nil, fmt.Errorf("load environment config %s: %w", path, err)
 		}
-		var app types.CrossPlatformApp
-		if err := fileViper.Unmarshal(&app); err != nil {
-			return nil, fmt.Errorf("decode environment config %s: %w", path, err)
-		}
-		var legacy types.AppConfig
-		if err := fileViper.Unmarshal(&legacy); err != nil {
-			return nil, fmt.Errorf("decode environment config %s: %w", path, err)
-		}
-		if strings.TrimSpace(legacy.Name) == "" {
-			return nil, fmt.Errorf("environment config %s must define name", path)
-		}
-		if app.AllPlatforms.InstallMethod == "" && app.Linux.InstallMethod == "" && app.MacOS.InstallMethod == "" && app.Windows.InstallMethod == "" {
-			app = CrossPlatformAppFromLegacy(legacy)
-		}
-		for _, osConfig := range []types.OSConfig{app.AllPlatforms, app.Linux, app.MacOS, app.Windows} {
-			if err := osConfig.ValidateShellActions(); err != nil {
-				return nil, fmt.Errorf("invalid shell actions for %s: %w", app.Name, err)
-			}
+		app, err := decodeEnvironmentApp(path, fileViper)
+		if err != nil {
+			return nil, err
 		}
 		apps = append(apps, app)
 	}
 	return apps, nil
+}
+
+// decodeEnvironmentApp decodes one programming-language or shell definition,
+// which may use either the cross-platform or the flat legacy layout.
+func decodeEnvironmentApp(path string, fileViper *viper.Viper) (types.CrossPlatformApp, error) {
+	var app types.CrossPlatformApp
+	if err := fileViper.Unmarshal(&app); err != nil {
+		return app, fmt.Errorf("decode environment config %s: %w", path, err)
+	}
+	var legacy types.AppConfig
+	if err := fileViper.Unmarshal(&legacy); err != nil {
+		return app, fmt.Errorf("decode environment config %s: %w", path, err)
+	}
+	if strings.TrimSpace(legacy.Name) == "" {
+		return app, fmt.Errorf("environment config %s must define name", path)
+	}
+	if app.AllPlatforms.InstallMethod == "" && app.Linux.InstallMethod == "" && app.MacOS.InstallMethod == "" && app.Windows.InstallMethod == "" {
+		app = CrossPlatformAppFromLegacy(legacy)
+	}
+	for _, osConfig := range []types.OSConfig{app.AllPlatforms, app.Linux, app.MacOS, app.Windows} {
+		if err := osConfig.ValidateShellActions(); err != nil {
+			return app, fmt.Errorf("invalid shell actions for %s: %w", app.Name, err)
+		}
+	}
+	return app, nil
 }
 
 func configFilesIfPresent(dir string, maxDepth int) ([]string, error) {

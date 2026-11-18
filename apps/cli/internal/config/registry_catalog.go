@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
@@ -58,6 +59,8 @@ func loadCatalog(ctx context.Context, settings CrossPlatformSettings, offline bo
 	return nil
 }
 
+// bundledApplications returns the applications and programming languages this
+// binary ships, so lookups work before devex init writes a configuration.
 func bundledApplications() ([]types.CrossPlatformApp, error) {
 	var apps []types.CrossPlatformApp
 	err := fs.WalkDir(shipconfig.Files, "applications", func(path string, entry fs.DirEntry, err error) error {
@@ -78,5 +81,28 @@ func bundledApplications() ([]types.CrossPlatformApp, error) {
 		apps = append(apps, app)
 		return nil
 	})
-	return apps, err
+	if err != nil {
+		return nil, err
+	}
+	languages, err := fs.Glob(shipconfig.Files, "environments/programming-languages/*.yaml")
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range languages {
+		data, err := shipconfig.Files.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		fileViper := viper.New()
+		fileViper.SetConfigType("yaml")
+		if err := fileViper.ReadConfig(bytes.NewReader(data)); err != nil {
+			return nil, fmt.Errorf("bundled language %s: %w", path, err)
+		}
+		app, err := decodeEnvironmentApp(path, fileViper)
+		if err != nil {
+			return nil, err
+		}
+		apps = append(apps, app)
+	}
+	return apps, nil
 }

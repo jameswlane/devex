@@ -142,7 +142,9 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 	cmd := &cobra.Command{
 		Use:   "plan <id-or-path>",
 		Short: "Build and display a template execution plan",
-		Args:  cobra.ExactArgs(1),
+		// Template steps name catalog applications.
+		Annotations: map[string]string{catalogAnnotation: catalogRequired},
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			homeDir, err := devexHomeDir()
 			if err != nil {
