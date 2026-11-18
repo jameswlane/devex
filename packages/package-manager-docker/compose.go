@@ -94,8 +94,5 @@ func (d *DockerInstaller) handleCompose(ctx context.Context, args []string) erro
 		}
 	}
 
-	if composeCmd == "docker" {
-		return d.runDocker(ctx, composeArgs...)
-	}
-	return sdk.ExecCommandWithContext(ctx, d.dockerNeedsSudo(ctx), composeCmd, composeArgs...)
+	return d.runDockerTool(ctx, composeCmd, composeArgs...)
 }

@@ -39,8 +39,8 @@ devex install --template data-science \
   --answer notebook_stack=r \
   --non-interactive
 
-# Jupyter's login token
-docker logs devex-jupyter 2>&1 | grep token=
+# Jupyter's login token (drop sudo once you log in again)
+sudo docker logs devex-jupyter 2>&1 | grep token=
 ```
 
 Open JupyterLab at http://127.0.0.1:8888 and MLflow at http://127.0.0.1:5000. In a notebook, set `MLFLOW_TRACKING_URI=http://host.docker.internal:5000` (Docker Desktop) or use the host's bridge address (Linux).

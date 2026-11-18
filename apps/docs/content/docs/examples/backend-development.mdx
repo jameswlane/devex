@@ -69,7 +69,7 @@ devex install --template databases \
 ```
 
 <Callout type="info">
-To run MySQL 8 too, add `mysql` to `databases` and set its root password with `--answer mysql_password=<password>`.
+To run MySQL 8 too, add `mysql` to `databases`. Without `--non-interactive`, DevEx prompts for its root password and hides what you type. For an unattended install, put `mysql_password` in an answers file that only you can read, and pass `--answers <file>`.
 </Callout>
 
 Install Docker from the catalog, as in the previous section, before you run this template. The template's own Docker step fails on a fresh machine ([#470](https://github.com/jameswlane/devex/issues/470)).

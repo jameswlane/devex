@@ -46,8 +46,14 @@ func (d *DockerInstaller) dockerNeedsSudo(ctx context.Context) bool {
 // runDocker runs a docker command, elevated when this session can't reach the
 // Docker socket.
 func (d *DockerInstaller) runDocker(ctx context.Context, args ...string) error {
+	return d.runDockerTool(ctx, "docker", args...)
+}
+
+// runDockerTool runs docker or docker-compose, elevated when this session
+// can't reach the Docker socket.
+func (d *DockerInstaller) runDockerTool(ctx context.Context, name string, args ...string) error {
 	useSudo := d.dockerNeedsSudo(ctx)
-	err := sdk.ExecCommandWithContext(ctx, useSudo, "docker", args...)
+	err := sdk.ExecCommandWithContext(ctx, useSudo, name, args...)
 	if err != nil && useSudo {
 		return fmt.Errorf("%w; this session isn't in the docker group yet, so log out and back in, then run the same command again", err)
 	}

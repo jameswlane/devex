@@ -66,6 +66,19 @@ var _ = Describe("Docker socket access", func() {
 		})
 	})
 
+	Context("when Docker is already running but only sudo reaches it", func() {
+		It("still adds the user to the docker group for --add-user", func() {
+			recorder = sdktest.NewRecorder(GinkgoT(), "docker", "usermod")
+			plugin := NewDockerPlugin()
+			needs := true
+			plugin.dockerSudo = &needs
+
+			plugin.addUserIfSocketDenied(context.Background(), true)
+
+			Expect(recorder.Calls("usermod")).To(Equal([]sdktest.Call{{Args: []string{"-aG", "docker", "devex-test-user"}, ElevationRequested: true}}))
+		})
+	})
+
 	Context("when docker fails with another permission error", func() {
 		It("runs docker without sudo", func() {
 			recorder.Script("docker", []string{"info"}, sdktest.Response{ExitCode: 1, Stderr: "WARNING: Error loading config file: open /home/u/.docker/config.json: permission denied\n"})

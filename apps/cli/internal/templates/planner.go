@@ -134,7 +134,14 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 			return nil, nil, err
 		}
 		inputOptions.fileAnswers = answers
-		inputOptions.NotRequired = p.requiredInputsOnlyUsedBySkippedSteps(ctx, *spec, steps, inputOptions, opts.KnownResources)
+		notRequired := map[string]bool{}
+		for key := range p.requiredInputsOnlyUsedBySkippedSteps(ctx, *spec, steps, inputOptions, opts.KnownResources) {
+			notRequired[key] = true
+		}
+		for key, exempt := range opts.InputOptions.NotRequired {
+			notRequired[key] = notRequired[key] || exempt
+		}
+		inputOptions.NotRequired = notRequired
 	}
 	inputs, err := ResolveInputs(ctx, *spec, inputOptions)
 	if err != nil {
