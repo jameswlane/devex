@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
@@ -95,5 +96,24 @@ var _ = Describe("Verified Mise installer", func() {
 		metadata := sdk.MiseInstallVerification()
 		Expect(metadata.Policy).To(Equal("required"))
 		Expect(metadata.Fingerprint).To(Equal(sdk.MiseReleaseKeyFingerprint))
+	})
+})
+
+var _ = Describe("Bash shell integration", func() {
+	It("activates mise from ~/.local/bin when that directory is not on PATH", func() {
+		home := GinkgoT().TempDir()
+		userBin := filepath.Join(home, ".local", "bin")
+		Expect(os.MkdirAll(userBin, 0o755)).To(Succeed())
+		fakeMise := "#!/bin/sh\necho 'export MISE_ACTIVATED=yes'\n"
+		Expect(os.WriteFile(filepath.Join(userBin, "mise"), []byte(fakeMise), 0o755)).To(Succeed())
+
+		plugin := &main.MisePlugin{PackageManagerPlugin: sdk.NewPackageManagerPlugin(sdk.PluginInfo{Name: "package-manager-mise", Version: "test"}, "mise")}
+		Expect(main.ConfigureBashIntegration(plugin, home)).To(Succeed())
+
+		cmd := exec.Command("bash", "-c", `. "$HOME/.bashrc"; printf %s "$MISE_ACTIVATED"`)
+		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(Equal("yes"))
 	})
 })
