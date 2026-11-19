@@ -21,9 +21,6 @@ macos:
   system_requirements:
     min_memory_mb: 2048
     min_disk_space_mb: 5120
-    required_commands:
-      - make
-      - gcc
 windows:
   install_method: chocolatey
   install_command: visualstudio2022buildtools visualstudio2022-workload-vctools pkgconfiglite openssl zlib sqlite mysql.utilities postgresql redis-64
@@ -48,9 +45,6 @@ windows:
   system_requirements:
     min_memory_mb: 2048
     min_disk_space_mb: 5120
-    required_commands:
-      - make
-      - gcc
 linux:
   install_method: apt
   install_command: build-essential pkg-config autoconf bison clang rustc libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev libjemalloc2 libvips-dev imagemagick libmagickwand-dev mupdf mupdf-tools gir1.2-gtop-2.0 gir1.2-clutter-1.0 redis-tools sqlite3 libsqlite3-0 libmysqlclient-dev libpq-dev postgresql-client postgresql-client-common
@@ -121,6 +115,3 @@ linux:
   system_requirements:
     min_memory_mb: 2048
     min_disk_space_mb: 5120
-    required_commands:
-      - make
-      - gcc
