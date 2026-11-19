@@ -126,6 +126,19 @@ The host needs `qemu-system-x86_64`, `qemu-img`, `python3`, OpenSSH and read/wri
 
 The CLI is built from source, and the desktop plugins come from the plugin registry, so the suite checks the plugins users receive. Because a run is slow, the `CLI desktop VM` workflow runs every job weekly, on manual dispatch (with optional distro and desktop filters), and on pull requests that change the harness. GitHub-hosted Ubuntu runners provide KVM.
 
+## Template virtual machine suite
+
+`scripts/e2e-template-vm.sh` installs one built-in template on a clean Ubuntu 24.04 or Debian 12 cloud image, the way a new user would. Each run boots a new VM, installs only the prerequisites from the installation guide, runs `devex install --template <id> --non-interactive`, then checks from a new login that `devex status --template` works and that the template's packages, commands, services and containers are there. Commands run through a real interactive shell, so a missing PATH or mise activation fails the run.
+
+```bash
+task e2e:vm:template TEMPLATE=backend DISTRO=debian-12
+task e2e:vm:templates
+```
+
+The host needs the same tools as the desktop suite, and the `VM_*`, `DISTRO` and `E2E_DEVEX_BINARY` settings above apply. Set `TMPDIR` to a directory on disk if `/tmp` is a small tmpfs, because VM disks grow to several GB. Logs land in `artifacts/vm-templates/<distro>-<template>/`.
+
+The template list comes from `devex template list`, so a new template gets a job automatically. Its job fails until you add a case with its answers and expected results to `test/vm/guest/template-check.sh`. The `CLI template VM` workflow runs every template on both distributions weekly, on manual dispatch (with optional distro and template filters), and on pull requests that change a template or the harness.
+
 ## Roadmap
 
 Later end-to-end testing phases will add Arch and Fedora desktop virtual machines.
