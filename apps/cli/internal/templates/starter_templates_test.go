@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/assets"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 // starterAnswers are the answers that select every component of each
@@ -229,6 +231,37 @@ var _ = Describe("Shipped lifecycle templates", func() {
 
 			_, err = planStarter("game-development", templates.LifecycleInstall, "linux", []string{"engine=unity"}, nil, allPluginsAvailable)
 			Expect(err).To(HaveOccurred())
+		})
+
+		It("installs the backend template's Kubernetes tools through mise", func() {
+			planner := templates.TemplatePlanner{
+				Manager: templates.NewTemplateManager(GinkgoT().TempDir()),
+				AppResolver: testAppResolver{apps: map[string]*types.AppConfig{
+					"docker": {BaseConfig: types.BaseConfig{Name: "docker"}, InstallMethod: "apt", InstallCommand: "docker-ce"},
+				}},
+				PluginAvailable: allPluginsAvailable,
+				System:          map[string]string{"os": "linux"},
+			}
+			plan, err := planner.Plan(context.Background(), "backend", templates.PlanOptions{
+				Action:          templates.LifecycleInstall,
+				InputOptions:    templates.InputResolverOptions{NonInteractive: true},
+				ValidatePlugins: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			ids := stepIDs(plan)
+			Expect(ids).NotTo(ContainElement("mongodb"), "Debian and Ubuntu do not ship a mongodb package")
+			Expect(slices.Index(ids, "ensure-mise")).To(BeNumerically("<", slices.Index(ids, "kubectl")))
+			Expect(plannedStep(plan, "ensure-mise").Request).To(And(
+				HaveField("Plugin", "package-manager-mise"),
+				HaveField("Command", "ensure-installed"),
+			))
+			for tool, spec := range map[string]string{"kubectl": "kubectl@1.37", "helm": "helm@4"} {
+				step := plannedStep(plan, tool)
+				Expect(step.DependsOn).To(Equal([]string{"ensure-mise"}))
+				Expect(step.Request.Plugin).To(Equal("package-manager-mise"))
+				Expect(step.Request.Args).To(Equal([]string{spec}))
+			}
 		})
 
 		It("installs mise before Node.js for web development", func() {

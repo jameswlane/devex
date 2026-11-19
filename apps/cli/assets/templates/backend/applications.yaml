@@ -1,5 +1,5 @@
 # Backend Template Applications Configuration
-# Template Version: 1.1.0
+# Template Version: 1.2.0
 applications:
   # Core Development Tools
   - name: git
@@ -27,16 +27,14 @@ applications:
     category: container
     description: Kubernetes command-line tool
     default: true
-    install_method: curlpipe
-    install_command: |
-      curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    install_method: mise
+    install_command: kubectl@1.37
   - name: helm
     category: container
     description: Kubernetes package manager
     default: true
-    install_method: curlpipe
-    install_command: |
-      curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    install_method: mise
+    install_command: helm@4
   # Database Systems
   - name: postgresql
     category: database
@@ -50,12 +48,6 @@ applications:
     default: true
     install_method: apt
     install_command: redis-server
-  - name: mongodb
-    category: database
-    description: Document database
-    default: false
-    install_method: apt
-    install_command: mongodb
   # Message Queues
   - name: rabbitmq
     category: infrastructure

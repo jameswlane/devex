@@ -140,11 +140,14 @@ func (m *MisePlugin) configureBashIntegration(homeDir string) error {
 		return nil
 	}
 
-	// Add configuration to .bashrc
+	// The installer puts mise in ~/.local/bin, which is often not on PATH yet
+	// when .bashrc runs, so fall back to that path.
 	config := `
 # Mise configuration
 if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate bash)"
+elif [ -x "$HOME/.local/bin/mise" ]; then
+  eval "$("$HOME/.local/bin/mise" activate bash)"
 fi
 `
 

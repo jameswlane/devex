@@ -10,3 +10,8 @@ import (
 func InstallMiseFrom(m *MisePlugin, ctx context.Context, scriptURL string, verification sdk.ArtifactVerification) error {
 	return m.installMiseFrom(ctx, scriptURL, verification)
 }
+
+// ConfigureBashIntegration exposes the .bashrc setup to tests.
+func ConfigureBashIntegration(m *MisePlugin, homeDir string) error {
+	return m.configureBashIntegration(homeDir)
+}
