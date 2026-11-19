@@ -30,13 +30,15 @@ devex plugin install package-manager-mise
 
 ## The built-in backend template
 
-DevEx ships a `backend` template with Git, Docker, kubectl, Helm, PostgreSQL, Redis and RabbitMQ. You can inspect and plan it, but a real install doesn't finish yet: its kubectl and Helm steps fail, and it plans a `mongodb` package that Debian and Ubuntu don't ship ([#463](https://github.com/jameswlane/devex/issues/463)).
+DevEx ships a `backend` template that installs Git, curl, jq, Docker Engine, PostgreSQL, Redis, RabbitMQ, htop and net-tools from APT, and kubectl and Helm through mise. It sets up the services on the machine itself. The rest of this page uses Docker containers for the databases instead.
 
 ```bash
 devex template info backend
 devex template plan backend --action install --non-interactive
-devex install --template backend --non-interactive --dry-run
+devex install --template backend --non-interactive
 ```
+
+Open a new terminal afterward to get `kubectl` and `helm` on your PATH.
 
 ## Install the tools
 
