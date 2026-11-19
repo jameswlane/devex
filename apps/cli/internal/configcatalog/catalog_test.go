@@ -8,8 +8,10 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configcatalog"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"gopkg.in/yaml.v3"
 )
 
 func TestConfigCatalog(t *testing.T) {
@@ -42,6 +44,15 @@ var _ = Describe("Shipped configuration validation", func() {
 	It("validates the complete repository catalog through runtime entry points", func() {
 		root = filepath.Join("..", "..")
 		Expect(errors()).To(BeEmpty())
+	})
+	It("does not require the compilers Build Essential installs", func() {
+		data, err := os.ReadFile(filepath.Join("..", "..", "config", "applications", "development", "build-essential.yaml"))
+		Expect(err).NotTo(HaveOccurred())
+		var app types.CrossPlatformApp
+		Expect(yaml.Unmarshal(data, &app)).To(Succeed())
+		for _, platform := range []types.OSConfig{app.Linux, app.MacOS, app.Windows} {
+			Expect(platform.SystemRequirements.RequiredCommands).NotTo(ContainElement(BeElementOf("make", "gcc")))
+		}
 	})
 	It("accepts valid catalogs without creating user files", func() {
 		home := GinkgoT().TempDir()
