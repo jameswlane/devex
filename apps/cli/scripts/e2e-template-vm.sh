@@ -90,7 +90,7 @@ main() {
 
 	boot_vm
 	upload "$WORK/devex" "$GUEST_DIR/template-check.sh"
-	guest "cloud-init status --wait >/dev/null; sudo ln -sf /var/tmp/devex-vm-bin/devex /usr/local/bin/devex"
+	guest "timeout 600 cloud-init status --wait >/dev/null; sudo ln -sf /var/tmp/devex-vm-bin/devex /usr/local/bin/devex"
 
 	guest "bash /var/tmp/devex-vm-bin/template-check.sh prepare $TEMPLATE" 2>&1 | tee "$ARTIFACTS/prepare.log" >&2
 

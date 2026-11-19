@@ -87,6 +87,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
       - name: Install and verify the template
+        id: smoke
         working-directory: apps/cli
         env:
           DISTRO: ${{ matrix.distro }}
@@ -108,10 +109,12 @@ jobs:
         env:
           DISTRO: ${{ matrix.distro }}
           TEMPLATE: ${{ matrix.template }}
+          OUTCOME: ${{ steps.smoke.outcome }}
         run: |
           log="artifacts/vm-templates/$DISTRO-$TEMPLATE/verify.log"
           {
             echo "## $DISTRO / $TEMPLATE"
+            echo "- Result: $OUTCOME"
             if [ -f "$log" ]; then
               echo "- Passed: $(grep -c '^\[pass\]' "$log" || true)"
               echo "- Failed: $(grep -c '^\[FAIL\]' "$log" || true)"
@@ -119,6 +122,6 @@ jobs:
               grep '^\[known\]' "$log" | sed 's/^/  - /' || true
               grep '^\[FAIL\]' "$log" | sed 's/^/  - /' || true
             else
-              echo "The install step failed before verification; see install.log in the artifacts."
+              echo "Verification did not start; see the step log and the uploaded artifacts."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

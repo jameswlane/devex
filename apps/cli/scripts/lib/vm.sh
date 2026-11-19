@@ -71,7 +71,10 @@ fetch_image() {
 		return
 	fi
 	log "downloading $IMAGE_URL"
-	curl -fL --retry 3 -o "$BASE_IMAGE.part.$$" "$IMAGE_URL"
+	curl -fL --retry 3 -o "$BASE_IMAGE.part.$$" "$IMAGE_URL" || {
+		rm -f "$BASE_IMAGE.part.$$"
+		die "could not download $IMAGE_URL"
+	}
 	mv "$BASE_IMAGE.part.$$" "$BASE_IMAGE"
 	(cd "$dir" && grep -E "[ *]$name\$" SUMS | sed 's/ \*/  /' | "$SUM_TOOL" --check --strict -) ||
 		die "checksum mismatch for $BASE_IMAGE"

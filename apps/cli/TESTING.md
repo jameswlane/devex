@@ -112,7 +112,7 @@ task e2e:vm DISTRO=debian-12 DESKTOP=kde
 task e2e:vm:all
 ```
 
-The host needs `qemu-system-x86_64`, `qemu-img`, `python3`, OpenSSH and read/write access to `/dev/kvm` (on Debian and Ubuntu, `sudo apt-get install qemu-system-x86 qemu-utils` and add yourself to the `kvm` group). A run downloads about 2 GB of packages in the guest and takes 15–40 minutes. Artifacts land in `artifacts/vm/<distro>-<desktop>/`.
+The host needs `qemu-system-x86_64`, `qemu-img`, `python3`, `curl`, OpenSSH and read/write access to `/dev/kvm` (on Debian and Ubuntu, `sudo apt-get install qemu-system-x86 qemu-utils` and add yourself to the `kvm` group). A run downloads about 2 GB of packages in the guest and takes 15–40 minutes. Artifacts land in `artifacts/vm/<distro>-<desktop>/`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -136,6 +136,8 @@ task e2e:vm:templates
 ```
 
 The host needs the same tools as the desktop suite, and the `VM_*`, `DISTRO` and `E2E_DEVEX_BINARY` settings above apply. Set `TMPDIR` to a directory on disk if `/tmp` is a small tmpfs, because VM disks grow to several GB. Logs land in `artifacts/vm-templates/<distro>-<template>/`.
+
+A passing run can still contain `[known]` lines. They mark a step that failed with the error of an open bug, and a known install failure also skips the checks that step blocks, so read them before treating a pass as full coverage. The run fails on any other error, and once the listed step succeeds, so the entry is removed with the fix.
 
 The template list comes from `devex template list`, so a new template gets a job automatically. Its job fails until you add a case with its answers and expected results to `test/vm/guest/template-check.sh`. The `CLI template VM` workflow runs every template on both distributions weekly, on manual dispatch (with optional distro and template filters), and on pull requests that change a template or the harness.
 

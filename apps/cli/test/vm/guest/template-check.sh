@@ -152,6 +152,11 @@ check_status() {
 	fi
 }
 
+# dpkg-query also succeeds for removed or half-configured packages.
+package_installed() {
+	[[ "$(dpkg-query -W -f '${db:Status-Status}' "$1")" == installed ]]
+}
+
 # mise activates from the prompt hook, so feed the command to a real prompt.
 in_new_shell() {
 	printf '%s >/dev/null 2>&1; echo "devex-rc=$?"\nexit\n' "$1" | bash -i 2>/dev/null | grep -qx 'devex-rc=0'
@@ -159,11 +164,15 @@ in_new_shell() {
 
 # Containers can take a while to settle, and one that crash-loops is not running.
 container_running() {
-	local attempt
-	for attempt in 1 2 3 4 5 6; do
+	local _ stable=0
+	for _ in 1 2 3 4 5 6 7 8 9; do
 		sleep 10
-		[[ "$(docker inspect -f '{{.State.Running}} {{.State.Restarting}}' "$1" 2>/dev/null)" == "true false" ]] || continue
-		((attempt >= 3)) && return 0
+		if [[ "$(docker inspect -f '{{.State.Running}} {{.State.Restarting}}' "$1" 2>/dev/null)" == "true false" ]]; then
+			stable=$((stable + 1))
+		else
+			stable=0
+		fi
+		((stable < 3)) || return 0
 	done
 	return 1
 }
@@ -215,7 +224,7 @@ verify)
 			continue
 		fi
 		case "$item" in
-		pkg:*) check "package $value" dpkg-query -W "$value" ;;
+		pkg:*) check "package $value" package_installed "$value" ;;
 		run:*) check "command $value" in_new_shell "$value" ;;
 		svc:*) check "service $value" systemctl is-active --quiet "$value" ;;
 		ctr:*) check "container $value" container_running "$value" ;;
