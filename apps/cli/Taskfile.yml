@@ -150,6 +150,27 @@ tasks:
         vars:
           DISTRO: '{{splitList "/" .ITEM | first}}'
           DESKTOP: '{{splitList "/" .ITEM | last}}'
+  e2e:vm:template:
+    desc: Install one template on a clean virtual machine (TEMPLATE=<id>, DISTRO=ubuntu-24.04|debian-12)
+    requires:
+      vars: [TEMPLATE]
+    vars:
+      DISTRO: '{{.DISTRO | default "ubuntu-24.04"}}'
+    cmds:
+      - DISTRO="{{.DISTRO}}" TEMPLATE="{{.TEMPLATE}}" ./scripts/e2e-template-vm.sh
+  e2e:vm:templates:
+    desc: Install every built-in template on clean Debian 12 and Ubuntu 24.04 virtual machines
+    cmds:
+      - |
+        templates="$(./scripts/e2e-template-vm.sh --list)" || exit 1
+        [ -n "$templates" ] || { echo "no templates found" >&2; exit 1; }
+        failed=0
+        for template in $templates; do
+          for distro in ubuntu-24.04 debian-12; do
+            DISTRO="$distro" TEMPLATE="$template" ./scripts/e2e-template-vm.sh || failed=1
+          done
+        done
+        exit "$failed"
   # === CLEANUP ===
   clean:
     desc: Clean build artifacts and temporary files

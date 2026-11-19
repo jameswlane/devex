@@ -9,7 +9,9 @@ on:
   pull_request:
     paths:
       - 'apps/cli/scripts/e2e-vm.sh'
-      - 'apps/cli/test/vm/**'
+      - 'apps/cli/scripts/lib/vm.sh'
+      - 'apps/cli/test/vm/guest/desktop-check.sh'
+      - 'apps/cli/test/vm/guest/provision.sh'
       - '.github/workflows/cli-vm.yml'
   workflow_dispatch:
     inputs:
