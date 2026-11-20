@@ -149,15 +149,17 @@ func backups(home string) []string {
 func applyNeovimConfig(ctx context.Context, home string) types.ConfigFile {
 	configs, themeFiles := neovimMappings()
 	Expect(themeFiles).To(HaveLen(1))
-	var lazyvimJSON string
+	// LazyVim reads stdpath("config")/lazyvim.json, so the catalog must map it there.
+	lazyvimJSON := filepath.Join(home, ".config", "nvim", "lazyvim.json")
+	var mapped string
 	for _, m := range configs {
 		if filepath.Base(m.Destination) == "lazyvim.json" {
 			dest, err := configfiles.Expand(m.Destination)
 			Expect(err).NotTo(HaveOccurred())
-			lazyvimJSON = dest
+			mapped = dest
 		}
 	}
-	Expect(lazyvimJSON).NotTo(BeEmpty())
+	Expect(mapped).To(Equal(lazyvimJSON))
 	Expect(os.WriteFile(lazyvimJSON, []byte(userLazyVimJSON), 0600)).To(Succeed())
 
 	var first []string
