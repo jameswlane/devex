@@ -102,6 +102,16 @@ var _ = Describe("Install hook scope guard", func() {
 		Expect(os.ReadFile(filepath.Join(other, "zshrc"))).To(Equal([]byte("unrelated\n")))
 	})
 
+	It("refuses to restore through a link the hook made dangling elsewhere", func() {
+		real := filepath.Join(home, "real-zshrc")
+		Expect(os.WriteFile(real, []byte("# dotfiles\n"), 0o644)).To(Succeed())
+		Expect(os.Symlink(real, filepath.Join(home, ".zshrc"))).To(Succeed())
+
+		_, err := run(`rm "$HOME/real-zshrc"; ln -s "$HOME/other-file" "$HOME/real-zshrc"`)
+		Expect(err).To(MatchError(And(ContainSubstring("~/.zshrc"), ContainSubstring("resolves elsewhere"))))
+		Expect(filepath.Join(home, "other-file")).NotTo(BeAnExistingFile())
+	})
+
 	It("refuses to restore through a parent directory the hook swapped", func() {
 		elsewhere := GinkgoT().TempDir()
 		Expect(os.WriteFile(filepath.Join(elsewhere, "config"), []byte("unrelated\n"), 0o644)).To(Succeed())

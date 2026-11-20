@@ -65,8 +65,16 @@ type hookScopeSnapshot struct {
 }
 
 // resolvedDir resolves the deepest existing ancestor of dir and appends the
-// missing components, so a parent the hook creates or swaps can be compared.
+// missing components, so a parent the hook creates or swaps can be compared. A
+// dangling symlink is followed, not treated as a missing component.
 func resolvedDir(dir string) (string, error) {
+	return resolvePath(dir, 0)
+}
+
+func resolvePath(dir string, depth int) (string, error) {
+	if depth > 40 {
+		return "", fmt.Errorf("too many levels of symbolic links")
+	}
 	var missing []string
 	for current := dir; ; current = filepath.Dir(current) {
 		resolved, err := filepath.EvalSymlinks(current)
@@ -75,6 +83,20 @@ func resolvedDir(dir string) (string, error) {
 		}
 		if !errors.Is(err, fs.ErrNotExist) || filepath.Dir(current) == current {
 			return "", err
+		}
+		if info, lerr := os.Lstat(current); lerr == nil && info.Mode()&fs.ModeSymlink != 0 {
+			target, err := os.Readlink(current)
+			if err != nil {
+				return "", err
+			}
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(current), target)
+			}
+			resolved, err := resolvePath(target, depth+1)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(append([]string{resolved}, missing...)...), nil
 		}
 		missing = append([]string{filepath.Base(current)}, missing...)
 	}
