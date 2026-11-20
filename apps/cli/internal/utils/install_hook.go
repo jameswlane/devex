@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -82,12 +83,25 @@ func ExecInstallHookWithContext(ctx context.Context, command types.InstallComman
 	if err != nil {
 		return "", fmt.Errorf("resolve install hook invoking user: %w", err)
 	}
-	if privilege.Scope == sdk.ScopeUser {
-		privilege.User = userPlan.IntendedUser
-		return ExecOperationWithContext(ctx, privilege, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+	snapshot, err := snapshotHookScope(userPlan.IntendedUser.HomeDir)
+	if err != nil {
+		return "", err
 	}
 	privilege.User = userPlan.IntendedUser
-	return ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+	var output string
+	if privilege.Scope == sdk.ScopeUser {
+		output, err = ExecOperationWithContext(ctx, privilege, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+	} else {
+		output, err = ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+	}
+	// Check scope even after a failure: a hook may write and then exit non-zero.
+	if scopeErr := snapshot.verify(policy.AppName); scopeErr != nil {
+		if err != nil {
+			return output, errors.Join(scopeErr, err)
+		}
+		return output, scopeErr
+	}
+	return output, err
 }
 
 // NonInteractiveSudoShell prevents catalog shell hooks and pipelines from prompting

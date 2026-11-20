@@ -42,8 +42,16 @@ reads in raw hooks: use `config_files` for configuration and managed shell actio
 for initialization. OS validation recurses into alternatives on all platforms;
 the directory loader and `devex config validate` apply it to shipped and custom YAML.
 
-Static validation is a review guard, not a shell sandbox: computed paths, external
-scripts and system-level effects still require human scope review. Never move a
+Static validation is a review guard, not a shell sandbox. At run time every raw
+shell hook (user and system scope) also runs inside a scope guard: DevEx
+snapshots the invoking user's protected files (bash, zsh and fish rc and profile
+files, `~/.gitconfig`, `~/.config/git/config`, `~/.git-credentials`,
+`~/.ssh/config` and `~/.ssh/authorized_keys`) before the hook and compares them
+afterwards. If a hook changed one, through a computed path or an external script,
+DevEx restores the original (or removes a file the hook created) and fails the
+hook with the list of changed files. There is no trusted escape hatch: move such
+changes into `shell_init`, `path` or `config_files`. System-level effects outside
+the user's home still require human scope review. Never move a
 forbidden write into a script or disguise its path to bypass validation. Config
 file destinations must belong to the selected app.
 
