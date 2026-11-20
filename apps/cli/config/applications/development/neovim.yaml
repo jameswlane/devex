@@ -173,7 +173,8 @@ linux:
       platform_requirements:
         - os: fedora
       pre_install:
-        - shell: dnf copr enable agriffis/neovim-nightly
+        - scope: system
+          shell: dnf copr enable -y agriffis/neovim-nightly
     - install_method: yum
       install_command: neovim
       uninstall_command: neovim
@@ -184,7 +185,8 @@ linux:
         - os: rhel
           version: 8+
       pre_install:
-        - shell: yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+        - scope: system
+          shell: yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
     - install_method: pacman
       install_command: neovim python-pynvim
       uninstall_command: neovim python-pynvim

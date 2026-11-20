@@ -92,7 +92,8 @@ linux:
       platform_requirements:
         - os: fedora
       pre_install:
-        - shell: dnf copr enable scottames/ghostty
+        - scope: system
+          shell: dnf copr enable -y scottames/ghostty
     - install_method: snap
       install_command: ghostty --classic
       uninstall_command: ghostty

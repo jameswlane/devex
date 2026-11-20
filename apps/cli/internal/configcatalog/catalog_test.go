@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
@@ -53,6 +55,54 @@ var _ = Describe("Shipped configuration validation", func() {
 		for _, platform := range []types.OSConfig{app.Linux, app.MacOS, app.Windows} {
 			Expect(platform.SystemRequirements.RequiredCommands).NotTo(ContainElement(BeElementOf("make", "gcc")))
 		}
+	})
+	It("runs every shipped DNF and YUM hook unattended with system privileges", func() {
+		// Unattended installs close stdin, so a dnf/yum transaction without
+		// --assumeyes aborts, and a user-scope hook cannot write system state.
+		uses := regexp.MustCompile(`\b(dnf|yum|yum-config-manager)\b`)
+		transaction := regexp.MustCompile(`\b(dnf|yum)\s+(?:-\S+\s+)*(install|remove|erase|upgrade|update|groupinstall|copr\s+enable|module\s+(?:install|enable))\b`)
+		assumeYes := regexp.MustCompile(`(^|\s)(-y|--assumeyes)(\s|$)`)
+		segment := regexp.MustCompile(`[;&|\n]+`)
+		var hooks int
+		var problems []string
+		var check func(file string, cfg types.OSConfig)
+		check = func(file string, cfg types.OSConfig) {
+			for _, hook := range append(append([]types.InstallCommand{}, cfg.PreInstall...), cfg.PostInstall...) {
+				if !uses.MatchString(hook.Shell) {
+					continue
+				}
+				hooks++
+				if hook.Scope != "system" || strings.Contains(hook.Shell, "sudo") {
+					problems = append(problems, file+": needs scope: system without sudo: "+hook.Shell)
+				}
+				for _, part := range segment.Split(hook.Shell, -1) {
+					if transaction.MatchString(part) && !assumeYes.MatchString(part) {
+						problems = append(problems, file+": needs -y: "+strings.TrimSpace(part))
+					}
+				}
+			}
+			for _, alternative := range cfg.Alternatives {
+				check(file, alternative)
+			}
+		}
+		catalog := filepath.Join("..", "..", "config", "applications")
+		Expect(filepath.WalkDir(catalog, func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || filepath.Ext(path) != ".yaml" {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			var app types.CrossPlatformApp
+			if err := yaml.Unmarshal(data, &app); err != nil {
+				return err
+			}
+			check(filepath.Base(path), app.Linux)
+			return nil
+		})).To(Succeed())
+		Expect(hooks).To(BeNumerically(">", 0))
+		Expect(problems).To(BeEmpty())
 	})
 	It("accepts valid catalogs without creating user files", func() {
 		home := GinkgoT().TempDir()

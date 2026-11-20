@@ -66,8 +66,6 @@ linux:
           version: 8+
         - os: amazonlinux
           version: 2+
-      pre_install:
-        - shell: dnf groupinstall -y "Development Tools"
     - install_method: pacman
       install_command: base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql
       uninstall_command: base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql

@@ -73,7 +73,8 @@ linux:
         - os: centos
           version: 9+
       pre_install:
-        - shell: sudo dnf copr enable dejan/lazygit
+        - scope: system
+          shell: dnf copr enable -y dejan/lazygit
     - install_method: pacman
       install_command: lazygit
       uninstall_command: lazygit

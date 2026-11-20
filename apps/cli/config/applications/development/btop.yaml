@@ -25,7 +25,8 @@ linux:
         - os: rocky
         - os: almalinux
       pre_install:
-        - shell: dnf install -y epel-release
+        - scope: system
+          shell: dnf install -y epel-release
     - install_method: zypper
       install_command: btop
       uninstall_command: btop
