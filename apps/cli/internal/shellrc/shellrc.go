@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/hookscope"
 	managed "github.com/jameswlane/devex/packages/plugin-sdk/shellrc"
 )
 
@@ -37,6 +38,7 @@ func ApplyActions(ctx context.Context, init map[string]string, dirs []string) (b
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
+	defer hookscope.Write()()
 	shell := SelectedShell(ctx)
 	home, err := os.UserHomeDir()
 	if err != nil {

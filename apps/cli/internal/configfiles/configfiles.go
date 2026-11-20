@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/execinputs"
+	"github.com/jameswlane/devex/apps/cli/internal/hookscope"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -228,6 +229,9 @@ func Apply(ctx context.Context, app string, mappings []types.ConfigFile, dryRun 
 
 // ApplyWithOptions is Apply with options.
 func ApplyWithOptions(ctx context.Context, app string, mappings []types.ConfigFile, dryRun bool, emit func(string), opts Options) Result {
+	if !dryRun {
+		defer hookscope.Write()()
+	}
 	result := Result{}
 	if len(mappings) == 0 {
 		return result

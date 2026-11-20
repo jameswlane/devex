@@ -909,8 +909,7 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	// The lifecycle stays incomplete so the next run retries the hook.
 	hooksComplete := true
 	if err := state.AuditStep(ctx, "post-install", len(osConfig.PostInstall) > 0, func() error { return si.executeCommands(ctx, osConfig.PostInstall, policy) }); err != nil {
-		var policyErr *utils.HookPolicyError
-		if errors.As(err, &policyErr) {
+		if utils.IsHookRejection(err) {
 			return fmt.Errorf("post-install failed: %w", err)
 		}
 		if ctx.Err() != nil {
@@ -1380,7 +1379,11 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 
 		if cmd.Command != "" {
 			si.sendLog("INFO", fmt.Sprintf("Executing: %s", cmd.Command))
-			if err := si.executeCommandStream(ctx, cmd.Command); err != nil {
+			appName := ""
+			if len(policies) > 0 {
+				appName = policies[0].AppName
+			}
+			if err := utils.GuardHookScope(appName, func() error { return si.executeCommandStream(ctx, cmd.Command) }); err != nil {
 				return err
 			}
 		}

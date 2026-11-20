@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -82,12 +83,37 @@ func ExecInstallHookWithContext(ctx context.Context, command types.InstallComman
 	if err != nil {
 		return "", fmt.Errorf("resolve install hook invoking user: %w", err)
 	}
-	if privilege.Scope == sdk.ScopeUser {
-		privilege.User = userPlan.IntendedUser
-		return ExecOperationWithContext(ctx, privilege, "bash", "-c", NonInteractiveSudoShell(command.Shell))
-	}
 	privilege.User = userPlan.IntendedUser
-	return ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+	var output string
+	err = guardHookScope(userPlan.IntendedUser.HomeDir, policy.AppName, func() (runErr error) {
+		if privilege.Scope == sdk.ScopeUser {
+			output, runErr = ExecOperationWithContext(ctx, privilege, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+		} else {
+			output, runErr = ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+		}
+		return runErr
+	})
+	return output, err
+}
+
+// GuardHookScope runs a hook that does not go through ExecInstallHookWithContext
+// (such as a legacy command hook) with the same protected-file guard.
+func GuardHookScope(appName string, fn func() error) error {
+	userPlan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{
+		Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "install-hook",
+	})
+	if err != nil {
+		return fmt.Errorf("resolve install hook invoking user: %w", err)
+	}
+	return guardHookScope(userPlan.IntendedUser.HomeDir, appName, fn)
+}
+
+// IsHookRejection reports whether err is a policy or scope rejection, which
+// must fail the app even when the hook is optional.
+func IsHookRejection(err error) bool {
+	var policyErr *HookPolicyError
+	var scopeErr *HookScopeError
+	return errors.As(err, &policyErr) || errors.As(err, &scopeErr)
 }
 
 // NonInteractiveSudoShell prevents catalog shell hooks and pipelines from prompting
