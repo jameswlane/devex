@@ -172,6 +172,16 @@ var _ = Describe("Install hook scope guard", func() {
 		Expect(os.ReadFile(filepath.Join(home, ".bashrc"))).To(ContainSubstring("other init bash"))
 	})
 
+	It("does not let a concurrent hook capture and put back another hook's violation", func() {
+		bad := make(chan error, 1)
+		go func() { _, err := run(`n=zsh; echo bad >> "$HOME/.${n}rc"; sleep 0.4`); bad <- err }()
+		time.Sleep(200 * time.Millisecond)
+		_, err := run(`sleep 0.6`)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(<-bad).To(MatchError(ContainSubstring("~/.zshrc")))
+		Expect(filepath.Join(home, ".zshrc")).NotTo(BeAnExistingFile())
+	})
+
 	It("reports the scope violation when the hook also fails", func() {
 		_, err := run(`d=.ssh; mkdir -p "$HOME/$d"; echo 'Host *' > "$HOME/$d/config"; exit 3`)
 		Expect(err).To(MatchError(ContainSubstring("~/.ssh/config")))
