@@ -181,6 +181,10 @@ jobs:
       - name: Validate shipped configurations and local assets
         working-directory: apps/cli
         run: go run ./internal/tools/configcheck
+      - name: Install Neovim for the headless Neovim asset tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends neovim
       - name: Test CLI
         run: pnpm turbo:run run test --filter=@devex/cli
   test-cli-macos:
