@@ -56,6 +56,7 @@ type protectedFileState struct {
 	dataOwner  fileOwnership
 	data       []byte
 	parent     string // resolved parent directory, to detect a swapped parent
+	dest       string // resolved symlink destination, to detect a redirected link
 }
 
 type hookScopeSnapshot struct {
@@ -79,6 +80,19 @@ func resolvedDir(dir string) (string, error) {
 	}
 }
 
+// linkDestination resolves where a symlink at path writes, also when its target
+// does not exist.
+func linkDestination(path string) (string, error) {
+	target, err := os.Readlink(path)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return resolvedDir(target)
+}
+
 func readProtectedFile(path string) (protectedFileState, error) {
 	parent, err := resolvedDir(filepath.Dir(path))
 	if err != nil {
@@ -95,6 +109,9 @@ func readProtectedFile(path string) (protectedFileState, error) {
 	state.exists, state.mode, state.owner = true, info.Mode(), ownershipOf(info)
 	if info.Mode()&fs.ModeSymlink != 0 {
 		if state.link, err = os.Readlink(path); err != nil {
+			return protectedFileState{}, err
+		}
+		if state.dest, err = linkDestination(path); err != nil {
 			return protectedFileState{}, err
 		}
 	} else if !info.Mode().IsRegular() {
@@ -119,7 +136,7 @@ func readProtectedFile(path string) (protectedFileState, error) {
 func (s protectedFileState) equal(other protectedFileState) bool {
 	return s.exists == other.exists && s.link == other.link && s.mode == other.mode && s.owner == other.owner &&
 		s.dataExists == other.dataExists && s.dataMode == other.dataMode && s.dataOwner == other.dataOwner &&
-		bytes.Equal(s.data, other.data) && s.parent == other.parent
+		bytes.Equal(s.data, other.data) && s.parent == other.parent && s.dest == other.dest
 }
 
 // snapshotHookScope records protected files under home before a hook runs.
@@ -205,6 +222,10 @@ func restoreProtectedFile(path string, before protectedFileState) error {
 		if err := restoreOwnership(path, before.owner, true); err != nil {
 			return err
 		}
+		// Never write through a link chain the hook repointed elsewhere.
+		if dest, err := linkDestination(path); err != nil || dest != before.dest {
+			return fmt.Errorf("its symlink now resolves elsewhere; refusing to restore through it")
+		}
 		if !before.dataExists {
 			if _, err := os.Stat(path); err == nil {
 				return fmt.Errorf("the hook created the symlink's target; remove it by hand")
@@ -229,7 +250,10 @@ func restoreProtectedFile(path string, before protectedFileState) error {
 // mode and owner. A hook may have made the file read-only, so make it writable
 // first.
 func restoreContent(path string, data []byte, mode fs.FileMode, owner fileOwnership) error {
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+	if info, err := os.Stat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("it is no longer a regular file; refusing to write it")
+		}
 		if err := os.Chmod(path, 0o600); err != nil {
 			return err
 		}

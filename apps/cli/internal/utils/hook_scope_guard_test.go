@@ -87,6 +87,21 @@ var _ = Describe("Install hook scope guard", func() {
 		Expect(os.ReadFile(target)).To(Equal([]byte("# dotfiles\n")))
 	})
 
+	It("refuses to restore through a link chain the hook repointed", func() {
+		dotfiles := filepath.Join(home, "dotfiles")
+		other := filepath.Join(home, "other")
+		Expect(os.MkdirAll(dotfiles, 0o755)).To(Succeed())
+		Expect(os.MkdirAll(other, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(dotfiles, "zshrc"), []byte("# dotfiles\n"), 0o644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(other, "zshrc"), []byte("unrelated\n"), 0o644)).To(Succeed())
+		Expect(os.Symlink(dotfiles, filepath.Join(home, "current"))).To(Succeed())
+		Expect(os.Symlink(filepath.Join(home, "current", "zshrc"), filepath.Join(home, ".zshrc"))).To(Succeed())
+
+		_, err := run(`ln -sfn "$HOME/other" "$HOME/current"`)
+		Expect(err).To(MatchError(And(ContainSubstring("~/.zshrc"), ContainSubstring("resolves elsewhere"))))
+		Expect(os.ReadFile(filepath.Join(other, "zshrc"))).To(Equal([]byte("unrelated\n")))
+	})
+
 	It("refuses to restore through a parent directory the hook swapped", func() {
 		elsewhere := GinkgoT().TempDir()
 		Expect(os.WriteFile(filepath.Join(elsewhere, "config"), []byte("unrelated\n"), 0o644)).To(Succeed())
