@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
 
@@ -165,8 +164,9 @@ var _ = Describe("Install hook scope guard", func() {
 	It("lets a declarative rc write wait for a running guarded hook instead of being undone", func() {
 		ctx := shellrc.WithShell(context.Background(), "bash")
 		done := make(chan error, 1)
-		go func() { _, err := run(`sleep 0.5`); done <- err }()
-		time.Sleep(150 * time.Millisecond)
+		started := filepath.Join(home, "hook-started")
+		go func() { _, err := run(`touch "$HOME/hook-started"; sleep 0.5`); done <- err }()
+		Eventually(started).Should(BeAnExistingFile())
 		Expect(utils.ApplyShellActions(ctx, types.InstallCommand{ShellInit: map[string]string{"bash": `eval "$(other init bash)"`}})).To(Succeed())
 		Expect(<-done).To(Succeed())
 		Expect(os.ReadFile(filepath.Join(home, ".bashrc"))).To(ContainSubstring("other init bash"))
@@ -174,9 +174,11 @@ var _ = Describe("Install hook scope guard", func() {
 
 	It("does not let a concurrent hook capture and put back another hook's violation", func() {
 		bad := make(chan error, 1)
-		go func() { _, err := run(`n=zsh; echo bad >> "$HOME/.${n}rc"; sleep 0.4`); bad <- err }()
-		time.Sleep(200 * time.Millisecond)
-		_, err := run(`sleep 0.6`)
+		go func() { _, err := run(`n=zsh; echo bad >> "$HOME/.${n}rc"; sleep 0.5`); bad <- err }()
+		// Start the second hook only after the first one's write, while it still runs.
+		Eventually(filepath.Join(home, ".zshrc")).Should(BeAnExistingFile())
+		// The second hook outlasts the first guard's restore, which removes the file.
+		_, err := run(`for i in $(seq 100); do [ -e "$HOME/.zs""hrc" ] || break; sleep 0.05; done`)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(<-bad).To(MatchError(ContainSubstring("~/.zshrc")))
 		Expect(filepath.Join(home, ".zshrc")).NotTo(BeAnExistingFile())
