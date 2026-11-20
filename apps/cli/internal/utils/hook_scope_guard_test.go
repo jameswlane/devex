@@ -4,7 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
@@ -119,6 +126,50 @@ var _ = Describe("Install hook scope guard", func() {
 		_, err := run(`ln -s "` + elsewhere + `" "$HOME/.s""sh"`)
 		Expect(err).To(MatchError(And(ContainSubstring("~/.ssh/config"), ContainSubstring("parent directory changed"))))
 		Expect(os.ReadFile(filepath.Join(elsewhere, "config"))).To(Equal([]byte("unrelated\n")))
+	})
+
+	It("refuses to write through a hard link the hook introduced", func() {
+		Expect(os.WriteFile(filepath.Join(home, ".bashrc"), []byte("# mine\n"), 0o644)).To(Succeed())
+		other := filepath.Join(home, "notes.txt")
+		Expect(os.WriteFile(other, []byte("unrelated\n"), 0o644)).To(Succeed())
+
+		_, err := run(`b=.bash; ln -f "$HOME/notes.txt" "$HOME/${b}rc"`)
+		Expect(err).To(MatchError(And(ContainSubstring("~/.bashrc"), ContainSubstring("hard link"))))
+		Expect(os.ReadFile(other)).To(Equal([]byte("unrelated\n")))
+	})
+
+	It("restores a group the hook changed without root", func() {
+		groups, idErr := exec.Command("id", "-G").Output()
+		Expect(idErr).NotTo(HaveOccurred())
+		fields := strings.Fields(string(groups))
+		if len(fields) < 2 {
+			Skip("needs a user in at least two groups")
+		}
+		rc := filepath.Join(home, ".zshenv")
+		Expect(os.WriteFile(rc, []byte("# mine\n"), 0o644)).To(Succeed())
+		info, statErr := os.Stat(rc)
+		Expect(statErr).NotTo(HaveOccurred())
+		original := info.Sys().(*syscall.Stat_t).Gid
+		other := fields[0]
+		if other == strconv.Itoa(int(original)) {
+			other = fields[1]
+		}
+
+		_, err := run(`z=.zsh; chgrp ` + other + ` "$HOME/${z}env"`)
+		Expect(err).To(MatchError(And(ContainSubstring("~/.zshenv"), ContainSubstring("restored"))))
+		info, statErr = os.Stat(rc)
+		Expect(statErr).NotTo(HaveOccurred())
+		Expect(info.Sys().(*syscall.Stat_t).Gid).To(Equal(original))
+	})
+
+	It("lets a declarative rc write wait for a running guarded hook instead of being undone", func() {
+		ctx := shellrc.WithShell(context.Background(), "bash")
+		done := make(chan error, 1)
+		go func() { _, err := run(`sleep 0.5`); done <- err }()
+		time.Sleep(150 * time.Millisecond)
+		Expect(utils.ApplyShellActions(ctx, types.InstallCommand{ShellInit: map[string]string{"bash": `eval "$(other init bash)"`}})).To(Succeed())
+		Expect(<-done).To(Succeed())
+		Expect(os.ReadFile(filepath.Join(home, ".bashrc"))).To(ContainSubstring("other init bash"))
 	})
 
 	It("reports the scope violation when the hook also fails", func() {

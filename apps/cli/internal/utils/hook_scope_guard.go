@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/jameswlane/devex/apps/cli/internal/hookscope"
 )
 
 // HookProtectedPaths are the user files, relative to the home directory, that a
@@ -54,6 +56,7 @@ type protectedFileState struct {
 	dataExists bool
 	dataMode   fs.FileMode
 	dataOwner  fileOwnership
+	dataID     fileIdentity // inode, to detect a hook-introduced hard link
 	data       []byte
 	parent     string // resolved parent directory, to detect a swapped parent
 	dest       string // resolved symlink destination, to detect a redirected link
@@ -146,7 +149,7 @@ func readProtectedFile(path string) (protectedFileState, error) {
 	if err != nil {
 		return protectedFileState{}, err
 	}
-	state.dataExists, state.dataMode, state.dataOwner = true, target.Mode(), ownershipOf(target)
+	state.dataExists, state.dataMode, state.dataOwner, state.dataID = true, target.Mode(), ownershipOf(target), identityOf(target)
 	if target.Mode().IsRegular() {
 		if state.data, err = os.ReadFile(path); err != nil {
 			return protectedFileState{}, err
@@ -203,6 +206,7 @@ func (s *hookScopeSnapshot) verify(appName string) error {
 // A scope violation is reported even when fn fails, since a hook may write and
 // then exit non-zero.
 func guardHookScope(home, appName string, fn func() error) error {
+	defer hookscope.Hook()()
 	snapshot, err := snapshotHookScope(home)
 	if err != nil {
 		return err
@@ -255,7 +259,7 @@ func restoreProtectedFile(path string, before protectedFileState) error {
 			return nil
 		}
 		// The hook may have written through the link, or removed its target.
-		return restoreContent(path, before.data, before.dataMode, before.dataOwner)
+		return restoreContent(path, before.data, before.dataMode, before.dataOwner, before.dataID)
 	}
 	if !before.mode.IsRegular() {
 		return fmt.Errorf("cannot restore a non-regular file")
@@ -265,16 +269,20 @@ func restoreProtectedFile(path string, before protectedFileState) error {
 			return err
 		}
 	}
-	return restoreContent(path, before.data, before.mode, before.owner)
+	return restoreContent(path, before.data, before.mode, before.owner, before.dataID)
 }
 
 // restoreContent writes data to path (following a symlink), then restores the
 // mode and owner. A hook may have made the file read-only, so make it writable
 // first.
-func restoreContent(path string, data []byte, mode fs.FileMode, owner fileOwnership) error {
+func restoreContent(path string, data []byte, mode fs.FileMode, owner fileOwnership, id fileIdentity) error {
 	if info, err := os.Stat(path); err == nil {
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("it is no longer a regular file; refusing to write it")
+		}
+		// Writing in place would also change every other name of a new inode.
+		if introducedHardLink(info, id) {
+			return fmt.Errorf("it is now a hard link to another file; refusing to write it")
 		}
 		if err := os.Chmod(path, 0o600); err != nil {
 			return err
