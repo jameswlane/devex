@@ -83,25 +83,37 @@ func ExecInstallHookWithContext(ctx context.Context, command types.InstallComman
 	if err != nil {
 		return "", fmt.Errorf("resolve install hook invoking user: %w", err)
 	}
-	snapshot, err := snapshotHookScope(userPlan.IntendedUser.HomeDir)
-	if err != nil {
-		return "", err
-	}
 	privilege.User = userPlan.IntendedUser
 	var output string
-	if privilege.Scope == sdk.ScopeUser {
-		output, err = ExecOperationWithContext(ctx, privilege, "bash", "-c", NonInteractiveSudoShell(command.Shell))
-	} else {
-		output, err = ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
-	}
-	// Check scope even after a failure: a hook may write and then exit non-zero.
-	if scopeErr := snapshot.verify(policy.AppName); scopeErr != nil {
-		if err != nil {
-			return output, errors.Join(scopeErr, err)
+	err = guardHookScope(userPlan.IntendedUser.HomeDir, policy.AppName, func() (runErr error) {
+		if privilege.Scope == sdk.ScopeUser {
+			output, runErr = ExecOperationWithContext(ctx, privilege, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+		} else {
+			output, runErr = ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
 		}
-		return output, scopeErr
-	}
+		return runErr
+	})
 	return output, err
+}
+
+// GuardHookScope runs a hook that does not go through ExecInstallHookWithContext
+// (such as a legacy command hook) with the same protected-file guard.
+func GuardHookScope(appName string, fn func() error) error {
+	userPlan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{
+		Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "install-hook",
+	})
+	if err != nil {
+		return fmt.Errorf("resolve install hook invoking user: %w", err)
+	}
+	return guardHookScope(userPlan.IntendedUser.HomeDir, appName, fn)
+}
+
+// IsHookRejection reports whether err is a policy or scope rejection, which
+// must fail the app even when the hook is optional.
+func IsHookRejection(err error) bool {
+	var policyErr *HookPolicyError
+	var scopeErr *HookScopeError
+	return errors.As(err, &policyErr) || errors.As(err, &scopeErr)
 }
 
 // NonInteractiveSudoShell prevents catalog shell hooks and pipelines from prompting

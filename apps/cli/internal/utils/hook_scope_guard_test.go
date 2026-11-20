@@ -2,6 +2,7 @@ package utils_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -35,7 +36,8 @@ var _ = Describe("Install hook scope guard", func() {
 	It("rejects and removes an rc file a hook creates through a computed path", func() {
 		_, err := run(`name=zsh; echo 'eval "$(demo init)"' >> "$HOME/.${name}rc"`)
 		var scopeErr *utils.HookScopeError
-		Expect(err).To(BeAssignableToTypeOf(scopeErr))
+		Expect(errors.As(err, &scopeErr)).To(BeTrue())
+		Expect(utils.IsHookRejection(err)).To(BeTrue())
 		Expect(err.Error()).To(And(ContainSubstring(`app "demo"`), ContainSubstring("~/.zshrc"), ContainSubstring("restored")))
 		Expect(filepath.Join(home, ".zshrc")).NotTo(BeAnExistingFile())
 	})
@@ -63,6 +65,35 @@ var _ = Describe("Install hook scope guard", func() {
 		Expect(err).To(MatchError(ContainSubstring("~/.zshrc")))
 		Expect(os.Readlink(filepath.Join(home, ".zshrc"))).To(Equal(target))
 		Expect(os.ReadFile(target)).To(Equal([]byte("# dotfiles\n")))
+	})
+
+	It("restores a file the hook only made read-only", func() {
+		rc := filepath.Join(home, ".profile")
+		Expect(os.WriteFile(rc, []byte("# mine\n"), 0o644)).To(Succeed())
+		_, err := run(`p=.prof; chmod 0400 "$HOME/${p}ile"`)
+		Expect(err).To(MatchError(And(ContainSubstring("~/.profile"), ContainSubstring("restored"))))
+		info, statErr := os.Stat(rc)
+		Expect(statErr).NotTo(HaveOccurred())
+		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o644)))
+	})
+
+	It("recreates a symlink target the hook deleted", func() {
+		target := filepath.Join(home, "dotfiles-zshrc")
+		Expect(os.WriteFile(target, []byte("# dotfiles\n"), 0o644)).To(Succeed())
+		Expect(os.Symlink(target, filepath.Join(home, ".zshrc"))).To(Succeed())
+
+		_, err := run(`rm "$HOME/dotfiles-zshrc"`)
+		Expect(err).To(MatchError(And(ContainSubstring("~/.zshrc"), ContainSubstring("restored"))))
+		Expect(os.ReadFile(target)).To(Equal([]byte("# dotfiles\n")))
+	})
+
+	It("refuses to restore through a parent directory the hook swapped", func() {
+		elsewhere := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(elsewhere, "config"), []byte("unrelated\n"), 0o644)).To(Succeed())
+
+		_, err := run(`ln -s "` + elsewhere + `" "$HOME/.s""sh"`)
+		Expect(err).To(MatchError(And(ContainSubstring("~/.ssh/config"), ContainSubstring("parent directory changed"))))
+		Expect(os.ReadFile(filepath.Join(elsewhere, "config"))).To(Equal([]byte("unrelated\n")))
 	})
 
 	It("reports the scope violation when the hook also fails", func() {

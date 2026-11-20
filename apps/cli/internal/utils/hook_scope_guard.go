@@ -44,11 +44,18 @@ func (e *HookScopeError) Error() string {
 
 func (e *HookScopeError) Unwrap() error { return e.Restore }
 
+// protectedFileState is one protected path: the entry itself (Lstat) and, for a
+// regular file or a symlink, the content it resolves to (Stat).
 type protectedFileState struct {
-	exists bool
-	link   string // symlink target; empty for a regular file
-	mode   fs.FileMode
-	data   []byte
+	exists     bool
+	link       string // symlink target; empty for a regular file
+	mode       fs.FileMode
+	owner      fileOwnership
+	dataExists bool
+	dataMode   fs.FileMode
+	dataOwner  fileOwnership
+	data       []byte
+	parent     string // resolved parent directory, to detect a swapped parent
 }
 
 type hookScopeSnapshot struct {
@@ -56,32 +63,63 @@ type hookScopeSnapshot struct {
 	files map[string]protectedFileState
 }
 
+// resolvedDir resolves the deepest existing ancestor of dir and appends the
+// missing components, so a parent the hook creates or swaps can be compared.
+func resolvedDir(dir string) (string, error) {
+	var missing []string
+	for current := dir; ; current = filepath.Dir(current) {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			return filepath.Join(append([]string{resolved}, missing...)...), nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) || filepath.Dir(current) == current {
+			return "", err
+		}
+		missing = append([]string{filepath.Base(current)}, missing...)
+	}
+}
+
 func readProtectedFile(path string) (protectedFileState, error) {
+	parent, err := resolvedDir(filepath.Dir(path))
+	if err != nil {
+		return protectedFileState{}, err
+	}
+	state := protectedFileState{parent: parent}
 	info, err := os.Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return protectedFileState{}, nil
+		return state, nil
 	}
 	if err != nil {
 		return protectedFileState{}, err
 	}
-	state := protectedFileState{exists: true, mode: info.Mode()}
+	state.exists, state.mode, state.owner = true, info.Mode(), ownershipOf(info)
 	if info.Mode()&fs.ModeSymlink != 0 {
 		if state.link, err = os.Readlink(path); err != nil {
 			return protectedFileState{}, err
 		}
+	} else if !info.Mode().IsRegular() {
+		return state, nil
 	}
-	if info.Mode()&fs.ModeSymlink != 0 || info.Mode().IsRegular() {
-		data, err := os.ReadFile(path)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	target, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return state, nil
+	}
+	if err != nil {
+		return protectedFileState{}, err
+	}
+	state.dataExists, state.dataMode, state.dataOwner = true, target.Mode(), ownershipOf(target)
+	if target.Mode().IsRegular() {
+		if state.data, err = os.ReadFile(path); err != nil {
 			return protectedFileState{}, err
 		}
-		state.data = data
 	}
 	return state, nil
 }
 
 func (s protectedFileState) equal(other protectedFileState) bool {
-	return s.exists == other.exists && s.link == other.link && s.mode == other.mode && bytes.Equal(s.data, other.data)
+	return s.exists == other.exists && s.link == other.link && s.mode == other.mode && s.owner == other.owner &&
+		s.dataExists == other.dataExists && s.dataMode == other.dataMode && s.dataOwner == other.dataOwner &&
+		bytes.Equal(s.data, other.data) && s.parent == other.parent
 }
 
 // snapshotHookScope records protected files under home before a hook runs.
@@ -122,7 +160,26 @@ func (s *hookScopeSnapshot) verify(appName string) error {
 	return &HookScopeError{AppName: appName, Changed: changed, Restore: errors.Join(restoreErrs...)}
 }
 
+// guardHookScope runs fn and then verifies and restores the protected files.
+// A scope violation is reported even when fn fails, since a hook may write and
+// then exit non-zero.
+func guardHookScope(home, appName string, fn func() error) error {
+	snapshot, err := snapshotHookScope(home)
+	if err != nil {
+		return err
+	}
+	runErr := fn()
+	if scopeErr := snapshot.verify(appName); scopeErr != nil {
+		return errors.Join(scopeErr, runErr)
+	}
+	return runErr
+}
+
 func restoreProtectedFile(path string, before protectedFileState) error {
+	// Never write through a parent the hook replaced: it may point elsewhere.
+	if parent, err := resolvedDir(filepath.Dir(path)); err != nil || parent != before.parent {
+		return fmt.Errorf("its parent directory changed; refusing to restore through it")
+	}
 	current, err := os.Lstat(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -145,11 +202,17 @@ func restoreProtectedFile(path string, before protectedFileState) error {
 				return err
 			}
 		}
-		// The hook may have written through the link; put the target back too.
-		if data, err := os.ReadFile(path); err == nil && !bytes.Equal(data, before.data) {
-			return os.WriteFile(path, before.data, 0o600) // #nosec G306 -- an existing file keeps its mode
+		if err := restoreOwnership(path, before.owner, true); err != nil {
+			return err
 		}
-		return nil
+		if !before.dataExists {
+			if _, err := os.Stat(path); err == nil {
+				return fmt.Errorf("the hook created the symlink's target; remove it by hand")
+			}
+			return nil
+		}
+		// The hook may have written through the link, or removed its target.
+		return restoreContent(path, before.data, before.dataMode, before.dataOwner)
 	}
 	if !before.mode.IsRegular() {
 		return fmt.Errorf("cannot restore a non-regular file")
@@ -159,13 +222,25 @@ func restoreProtectedFile(path string, before protectedFileState) error {
 			return err
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	return restoreContent(path, before.data, before.mode, before.owner)
+}
+
+// restoreContent writes data to path (following a symlink), then restores the
+// mode and owner. A hook may have made the file read-only, so make it writable
+// first.
+func restoreContent(path string, data []byte, mode fs.FileMode, owner fileOwnership) error {
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+		if err := os.Chmod(path, 0o600); err != nil {
+			return err
+		}
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, before.data, before.mode.Perm()); err != nil {
+	if err := os.Chmod(path, mode.Perm()); err != nil {
 		return err
 	}
-	return os.Chmod(path, before.mode.Perm())
+	return restoreOwnership(path, owner, false)
 }
 
 func readlink(path string) string {
