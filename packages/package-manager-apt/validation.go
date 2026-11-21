@@ -22,8 +22,20 @@ const (
 var allowedAPTSystemDirs = []string{
 	"/etc/apt/keyrings",
 	"/usr/share/keyrings",
-	"/etc/apt/trusted.gpg.d",
 	"/etc/apt/sources.list.d",
+}
+
+// NeedsElevation reports whether path is a file in one of the root-owned APT
+// directories, which the plugin writes through sudo. Other paths are written
+// as the current user.
+func NeedsElevation(path string) bool {
+	parentDir := filepath.Dir(filepath.Clean(path))
+	for _, allowedDir := range allowedAPTSystemDirs {
+		if parentDir == allowedDir {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidatePackageName validates package names to prevent command injection (exported for testing)
@@ -224,11 +236,8 @@ func (a *APTInstaller) validateFilePath(path string) error {
 	}
 
 	// Allow direct children of standard APT system directories
-	parentDir := filepath.Dir(cleanPath)
-	for _, allowedDir := range allowedAPTSystemDirs {
-		if parentDir == allowedDir {
-			return nil
-		}
+	if NeedsElevation(cleanPath) {
+		return nil
 	}
 
 	// Prevent access to sensitive system directories

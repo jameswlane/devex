@@ -312,13 +312,19 @@ var _ = Describe("APT Package Manager Unit Tests", func() {
 				allowedAPTPaths := []string{
 					"/etc/apt/keyrings/devex-test.gpg",
 					"/usr/share/keyrings/x.gpg",
-					"/etc/apt/trusted.gpg.d/x.gpg",
 					"/etc/apt/sources.list.d/devex-test.list",
 				}
 
 				for _, path := range allowedAPTPaths {
 					err := plugin.ValidateFilePath(path)
 					Expect(err).To(Not(HaveOccurred()), "Allowed APT system path should pass validation: %s", path)
+					Expect(main.NeedsElevation(path)).To(BeTrue(), "APT system path should be written through sudo: %s", path)
+				}
+			})
+
+			It("should write other paths as the current user", func() {
+				for _, path := range []string{"/tmp/test-key.gpg", "/home/user/keys/repo.gpg", "/etc/apt/keyrings/sub/x.gpg"} {
+					Expect(main.NeedsElevation(path)).To(BeFalse(), "path should not need sudo: %s", path)
 				}
 			})
 		})
@@ -328,6 +334,7 @@ var _ = Describe("APT Package Manager Unit Tests", func() {
 				"../../../etc/passwd",
 				"/etc/shadow",
 				"/etc/apt/apt.conf",
+				"/etc/apt/trusted.gpg.d/x.gpg",
 				"/etc/apt/keyrings/sub/x.gpg",
 				"/etc/apt/keyrings/../../shadow",
 				"/root/.ssh/authorized_keys",

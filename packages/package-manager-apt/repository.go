@@ -119,8 +119,9 @@ func (a *APTInstaller) addRepositorySource(ctx context.Context, source APTSource
 		return fmt.Errorf("failed to close temporary source file: %w", closeErr)
 	}
 
-	// Install temporary file to final location with sudo (-D creates parent directories)
-	if err := sdk.ExecCommandWithContext(ctx, true, "install", "-D", "-m", "0644", tempPath, source.SourceFile); err != nil {
+	// Install the temporary file to its final location (-D creates parent
+	// directories), through sudo when it lives in a root-owned APT directory
+	if err := sdk.ExecCommandWithContext(ctx, NeedsElevation(source.SourceFile), "install", "-D", "-m", "0644", tempPath, source.SourceFile); err != nil {
 		return fmt.Errorf("failed to install repository source from '%s' to '%s': %w", tempPath, source.SourceFile, err)
 	}
 
@@ -149,7 +150,7 @@ func (a *APTInstaller) validateRepositorySource(ctx context.Context, source APTS
 
 	// Test APT configuration
 	a.getLogger().Debug("Testing APT configuration validity")
-	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "update", "-o", "Dir::Etc::sourcelist=/dev/null", "-o", fmt.Sprintf("Dir::Etc::sourceparts=%s", filepath.Dir(source.SourceFile))); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "update", "--no-list-cleanup", "-o", "Dir::Etc::sourcelist=/dev/null", "-o", fmt.Sprintf("Dir::Etc::sourceparts=%s", filepath.Dir(source.SourceFile))); err != nil {
 		return fmt.Errorf("repository configuration test failed: %w", err)
 	}
 

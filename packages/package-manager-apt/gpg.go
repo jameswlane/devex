@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
@@ -96,15 +99,14 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 	if source.RequireDearmor {
 		a.getLogger().Debug("Converting ASCII-armored key to binary format")
 
-		// For dearmor operations, validate the content looks like an ASCII-armored key
-		tempFileContent, err := os.ReadFile(downloadPath)
+		// Dearmor in-process so hosts without gnupg (e.g. Debian cloud images) work
+		armored, err := os.ReadFile(downloadPath)
 		if err != nil {
-			return fmt.Errorf("failed to read temporary key file for validation: %w", err)
+			return fmt.Errorf("failed to read temporary key file: %w", err)
 		}
-
-		contentStr := string(tempFileContent)
-		if !strings.Contains(contentStr, "BEGIN PGP PUBLIC KEY BLOCK") || !strings.Contains(contentStr, "END PGP PUBLIC KEY BLOCK") {
-			return fmt.Errorf("downloaded content is not a valid ASCII-armored GPG key from '%s'", source.KeyURL)
+		keyring, err := DearmorPublicKey(armored)
+		if err != nil {
+			return fmt.Errorf("downloaded content from '%s' is not a valid ASCII-armored GPG public key: %w", source.KeyURL, err)
 		}
 
 		dearmoredFile, err := os.CreateTemp("", "repo_key_*.gpg")
@@ -117,19 +119,19 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 				a.getLogger().Warning("Failed to remove temporary file: %v", err)
 			}
 		}()
-		if err := dearmoredFile.Close(); err != nil {
-			return fmt.Errorf("failed to close temporary dearmored key file: %w", err)
+		_, writeErr := dearmoredFile.Write(keyring)
+		if closeErr := dearmoredFile.Close(); writeErr == nil {
+			writeErr = closeErr
 		}
-
-		// Use gpg to dearmor the key into the temporary output file
-		if err := sdk.ExecCommandWithContext(ctx, false, "gpg", "--yes", "--dearmor", "-o", dearmoredPath, downloadPath); err != nil {
-			return fmt.Errorf("failed to dearmor GPG key from '%s' to '%s': %w", source.KeyURL, source.KeyPath, err)
+		if writeErr != nil {
+			return fmt.Errorf("failed to write temporary dearmored key file: %w", writeErr)
 		}
 		installSource = dearmoredPath
 	}
 
-	// Install the key to its final destination with sudo (-D creates parent directories)
-	if err := sdk.ExecCommandWithContext(ctx, true, "install", "-D", "-m", "0644", installSource, source.KeyPath); err != nil {
+	// Install the key to its final destination (-D creates parent directories),
+	// through sudo when it lives in a root-owned APT directory
+	if err := sdk.ExecCommandWithContext(ctx, NeedsElevation(source.KeyPath), "install", "-D", "-m", "0644", installSource, source.KeyPath); err != nil {
 		return fmt.Errorf("failed to install GPG key to '%s': %w", source.KeyPath, err)
 	}
 
@@ -154,15 +156,74 @@ func (a *APTInstaller) validateGPGKeyFormat(keyPath string, requireDearmor bool)
 	}
 
 	if requireDearmor {
-		// For binary keys, check if it's a valid GPG keyring
-		output, err := sdk.ExecCommandOutputWithContext(context.Background(), "file", keyPath)
+		keyring, err := os.ReadFile(keyPath)
 		if err != nil {
-			return fmt.Errorf("failed to check key file format: %w", err)
+			return fmt.Errorf("failed to read key file: %w", err)
 		}
-		if !strings.Contains(output, "GPG key") && !strings.Contains(output, "data") {
-			return fmt.Errorf("key file does not appear to be a valid GPG keyring: %s", output)
+		if _, err := openpgp.ReadKeyRing(bytes.NewReader(keyring)); err != nil {
+			return fmt.Errorf("key file does not appear to be a valid GPG keyring: %s: %w", keyPath, err)
 		}
 	}
 
 	return nil
+}
+
+const (
+	armorBeginPublicKey = "-----BEGIN PGP PUBLIC KEY BLOCK-----"
+	armorEndPublicKey   = "-----END PGP PUBLIC KEY BLOCK-----"
+)
+
+// DearmorPublicKey converts ASCII-armored public keys into the binary keyring
+// format that `gpg --dearmor` produces and APT's signed-by option reads. Like
+// gpg, it decodes every armored block, so vendors that ship rollover keys in
+// separate blocks keep all of them.
+func DearmorPublicKey(armored []byte) ([]byte, error) {
+	var keyring []byte
+	var block []string
+	inBlock := false
+	for _, line := range strings.Split(string(armored), "\n") {
+		marker := strings.TrimRight(line, " \t\r")
+		switch {
+		case marker == armorBeginPublicKey:
+			if inBlock {
+				return nil, fmt.Errorf("armored key block is missing its END line")
+			}
+			inBlock = true
+			block = []string{marker}
+		case marker == armorEndPublicKey && inBlock:
+			inBlock = false
+			block = append(block, marker)
+			decoded, err := armor.Decode(strings.NewReader(strings.Join(block, "\n") + "\n"))
+			if err != nil {
+				return nil, err
+			}
+			if decoded.Type != openpgp.PublicKeyType {
+				return nil, fmt.Errorf("unexpected armor type %q", decoded.Type)
+			}
+			body, err := io.ReadAll(decoded.Body)
+			if err != nil {
+				return nil, err
+			}
+			if len(body) == 0 {
+				return nil, fmt.Errorf("armored key block is empty")
+			}
+			keyring = append(keyring, body...)
+		case inBlock:
+			block = append(block, line)
+		}
+	}
+	if inBlock {
+		return nil, fmt.Errorf("armored key block is missing its END line")
+	}
+	if len(keyring) == 0 {
+		return nil, fmt.Errorf("no public key block found")
+	}
+	entities, err := openpgp.ReadKeyRing(bytes.NewReader(keyring))
+	if err != nil {
+		return nil, err
+	}
+	if len(entities) == 0 {
+		return nil, fmt.Errorf("no public keys found")
+	}
+	return keyring, nil
 }
