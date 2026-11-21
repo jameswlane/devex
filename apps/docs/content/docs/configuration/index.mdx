@@ -61,7 +61,7 @@ devex config validate
 devex config edit applications
 ```
 
-Init fills in missing shipped files and preserves user-edited files, recording digests of unmodified shipped files in `.devex-shipped.json`. On subsequent runs after upgrading DevEx, unmodified shipped files are refreshed automatically without recreating deleted files or overwriting local edits. Run `devex init --force` to overwrite all shipped files with the current CLI's copies. `devex.yaml` records profile and initialization choices; application definitions live under `applications/`.
+Init fills in missing shipped files, preserves files you edited, and records the shipped files it wrote in `.devex-shipped.json`. After you upgrade DevEx, the next command that isn't a preview or read-only command replaces the shipped files you haven't edited with the new versions. It keeps your edits and doesn't recreate files you deleted. Run `devex init --force` to replace every shipped file with the current version, including files you edited and files from configurations created before DevEx recorded shipped files. `devex.yaml` records profile and initialization choices; application definitions live under `applications/`.
 
 `config show` summarizes the default tree, including nested YAML sizes and syntax errors. `config validate` checks nested YAML and application content. `config edit environment` opens the files under `environments/`; `config edit all` also includes existing `dotfiles.yaml` and `security.yaml`. These commands operate on the default configuration directory; put personal or team overrides in the corresponding tier when editing those tiers directly.
 

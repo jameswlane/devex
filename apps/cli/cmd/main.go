@@ -130,13 +130,7 @@ func main() {
 	}
 	defer func() { _ = db.Close() }()
 
-	// Refresh unmodified shipped catalog files when the CLI has been upgraded.
-	defaultConfigDir := (&config.CrossPlatformSettings{HomeDir: homeDir}).GetConfigDir()
-	if updated, refreshErr := config.RefreshShippedConfig(defaultConfigDir); refreshErr != nil {
-		log.Warn("Failed to refresh shipped configuration", "dir", defaultConfigDir, "error", refreshErr)
-	} else if len(updated) > 0 {
-		log.Info("Refreshed shipped configuration files", "dir", defaultConfigDir, "count", len(updated))
-	}
+	refreshShippedConfig(homeDir, dryRun)
 
 	// Load cross-platform configuration
 	crossPlatformSettings, err := config.LoadCrossPlatformSettings(homeDir)
@@ -202,6 +196,20 @@ func exitCode(err error) int {
 		return childExit.ExitCode()
 	}
 	return 1
+}
+
+// refreshShippedConfig replaces unmodified copies of older shipped catalog
+// files after an upgrade. Previews and read commands never change files.
+func refreshShippedConfig(homeDir string, dryRun bool) {
+	if dryRun {
+		return
+	}
+	configDir := (&config.CrossPlatformSettings{HomeDir: homeDir}).GetConfigDir()
+	if updated, err := config.RefreshShippedConfig(configDir); err != nil {
+		log.Warn("Failed to refresh shipped configuration", "dir", configDir, "error", err)
+	} else if len(updated) > 0 {
+		log.Info("Refreshed shipped configuration files", "dir", configDir, "count", len(updated))
+	}
 }
 
 func initializeDatabase(ctx context.Context, homeDir string, dryRun bool) (types.Repository, *datastore.SQLite, error) {

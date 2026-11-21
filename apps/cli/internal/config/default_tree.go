@@ -227,10 +227,6 @@ func writeShippedManifest(configDir string, manifest shippedManifest) error {
 		}
 	}()
 
-	if err := tmp.Chmod(0600); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("chmod temp shipped manifest: %w", err)
-	}
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write temp shipped manifest: %w", err)
