@@ -118,8 +118,8 @@ var _ = Describe("Shipped starter lifecycles with a fake plugin executor", func(
 
 		execute(planWith("devops", templates.LifecycleStatus, "linux", nil, known))
 		Expect(callsOf()).To(ConsistOf(
-			[]string{"package-manager-mise", "is-installed", "kubectl"},
-			[]string{"package-manager-mise", "is-installed", "helm"},
+			[]string{"package-manager-mise", "is-installed", "kubectl@1.37"},
+			[]string{"package-manager-mise", "is-installed", "helm@3.19"},
 		))
 
 		execute(planWith("devops", templates.LifecycleRemove, "linux", nil, known))

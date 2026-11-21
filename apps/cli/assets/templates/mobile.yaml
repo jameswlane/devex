@@ -244,7 +244,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.node.metadata.tool }}"
+          - "{{ resource.node.external_id }}"
     - id: java-status
       order: 20
       if: has_resource("java")
@@ -252,7 +252,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.java.metadata.tool }}"
+          - "{{ resource.java.external_id }}"
     - id: flutter-status
       order: 30
       if: has_resource("flutter")
@@ -260,7 +260,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.flutter.metadata.tool }}"
+          - "{{ resource.flutter.external_id }}"
     - id: android-studio-linux-status
       order: 40
       if: has_resource("android-studio-linux")
