@@ -130,12 +130,14 @@ type templateCommandFakePluginExecutor struct {
 type templateCommandPluginCall struct {
 	name string
 	args []string
+	opts templateexec.PluginExecOptions
 }
 
-func (e *templateCommandFakePluginExecutor) ExecutePlugin(_ context.Context, pluginName string, args []string) error {
+func (e *templateCommandFakePluginExecutor) ExecutePlugin(_ context.Context, pluginName string, args []string, opts templateexec.PluginExecOptions) error {
 	e.calls = append(e.calls, templateCommandPluginCall{
 		name: pluginName,
 		args: append([]string(nil), args...),
+		opts: opts,
 	})
 	return nil
 }

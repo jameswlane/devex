@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
@@ -21,8 +22,23 @@ import (
 
 type retryLifecycleExecutor struct{ bootstrap *bootstrap.PluginBootstrap }
 
-func (e retryLifecycleExecutor) ExecutePlugin(ctx context.Context, name string, args []string) error {
-	return e.bootstrap.ExecutePluginWithIO(ctx, name, args, sdk.OperationIO{})
+func (e retryLifecycleExecutor) ExecutePlugin(ctx context.Context, name string, args []string, opts templateexec.PluginExecOptions) error {
+	var env []string
+	if len(opts.Env) > 0 {
+		keys := make([]string, 0, len(opts.Env))
+		for k := range opts.Env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		env = make([]string, 0, len(keys))
+		for _, k := range keys {
+			env = append(env, k+"="+opts.Env[k])
+		}
+	}
+	return e.bootstrap.ExecutePluginWithOptions(ctx, name, args, sdk.PluginRunOptions{
+		Env: env,
+		Dir: opts.WorkingDir,
+	})
 }
 
 var _ = Describe("APT retry lifecycle", func() {

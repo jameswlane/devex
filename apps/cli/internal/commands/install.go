@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -481,14 +482,34 @@ type pluginBootstrapExecutor struct {
 
 var templateInstallPluginExecutorResolver = resolveTemplateInstallPluginExecutor
 
-func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName string, args []string) error {
+func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName string, args []string, opts templateexec.PluginExecOptions) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if e.bootstrap == nil {
 		return fmt.Errorf("plugin bootstrap is required")
 	}
-	return e.bootstrap.ExecutePluginWithIO(ctx, pluginName, args, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stderr, Stderr: os.Stderr})
+	return e.bootstrap.ExecutePluginWithOptions(ctx, pluginName, args, sdk.PluginRunOptions{
+		IO:  sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stderr, Stderr: os.Stderr},
+		Env: sortedEnvSlice(opts.Env),
+		Dir: opts.WorkingDir,
+	})
+}
+
+func sortedEnvSlice(env map[string]string) []string {
+	if len(env) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k+"="+env[k])
+	}
+	return out
 }
 
 func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateInstallOptions, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) error {
