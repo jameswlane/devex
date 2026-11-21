@@ -167,11 +167,14 @@ func (m *MisePlugin) configureZshIntegration(homeDir string) error {
 		return nil
 	}
 
-	// Add configuration to .zshrc
+	// The installer puts mise in ~/.local/bin, which is often not on PATH yet
+	// when .zshrc runs, so fall back to that path.
 	config := `
 # Mise configuration
 if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate zsh)"
+elif [ -x "$HOME/.local/bin/mise" ]; then
+  eval "$("$HOME/.local/bin/mise" activate zsh)"
 fi
 `
 
@@ -193,11 +196,14 @@ func (m *MisePlugin) configureFishIntegration(homeDir string) error {
 		return nil
 	}
 
-	// Add configuration to config.fish
+	// The installer puts mise in ~/.local/bin, which is often not on PATH yet
+	// when config.fish runs, so fall back to that path.
 	config := `
 # Mise configuration
 if command -v mise >/dev/null 2>&1
   mise activate fish | source
+else if test -x "$HOME/.local/bin/mise"
+  "$HOME/.local/bin/mise" activate fish | source
 end
 `
 
