@@ -184,6 +184,20 @@ var _ = Describe("Tool Manager", func() {
 				}))
 			})
 
+			It("returns a wrapped error when mise where fails for another reason", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				recorder.Script("mise", []string{"where", "node@24"}, sdktest.Response{
+					ExitCode: 1,
+					Stderr:   "mise ERROR Invalid TOML in config file\n",
+				})
+
+				err := plugin.HandleIsInstalled(context.Background(), []string{"node@24"})
+				Expect(err).To(HaveOccurred())
+				var notInstalled *sdk.NotInstalledError
+				Expect(errors.As(err, &notInstalled)).To(BeFalse())
+				Expect(err.Error()).To(ContainSubstring("failed to check whether tool 'node@24' is installed"))
+			})
+
 			It("returns NotInstalledError when mise where prints empty output", func() {
 				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
 				recorder.Script("mise", []string{"where", "node@24"}, sdktest.Response{

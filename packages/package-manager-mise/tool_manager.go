@@ -111,7 +111,7 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 	// project's own mise.toml pin alone (or, with MISE_LOCAL, edits the local
 	// config), and prunes the install when nothing else needs it. `mise
 	// uninstall` would delete the files but leave the config entry, so `mise
-	// current` and is-installed would still report the tool. One call edits
+	// current` would still report the tool. One call edits
 	// the config once, so tools never race on the file.
 	unuseArgs := []string{"unuse"}
 	if m.useGlobalConfig() {
@@ -211,9 +211,14 @@ func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error
 	// Check if tool is installed
 	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "where", tool)
 	if err != nil {
+		// mise also exits 1 for errors such as an invalid config file, so
+		// only its "missing version" messages mean the tool is absent.
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return &sdk.NotInstalledError{Packages: []string{tool}}
+			stderr := string(exitErr.Stderr)
+			if strings.Contains(stderr, "not installed") || strings.Contains(stderr, "no versions found") {
+				return &sdk.NotInstalledError{Packages: []string{tool}}
+			}
 		}
 		return fmt.Errorf("failed to check whether tool '%s' is installed: %w", tool, err)
 	}
