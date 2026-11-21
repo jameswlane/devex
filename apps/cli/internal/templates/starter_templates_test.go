@@ -264,6 +264,64 @@ var _ = Describe("Shipped lifecycle templates", func() {
 			}
 		})
 
+		It("gives the generated ensure-mise step an unused id when a legacy template has an app named ensure-mise", func() {
+			dir := GinkgoT().TempDir()
+			path := writeSpecFile(dir, `metadata:
+  name: collision
+  version: 1.0.0
+  category: development
+  description: Legacy template with ensure-mise app name
+applications:
+  - name: ensure-mise
+    category: development
+    description: Example
+    install_method: apt
+    install_command: jq
+  - name: kubectl
+    category: container
+    description: Kubernetes command-line tool
+    install_method: mise
+    install_command: kubectl@1.37
+`)
+			planner := templates.TemplatePlanner{
+				Manager:         templates.NewTemplateManager(dir),
+				AppResolver:     testAppResolver{},
+				PluginAvailable: allPluginsAvailable,
+				System:          map[string]string{"os": "linux"},
+			}
+			plan, err := planner.Plan(context.Background(), path, templates.PlanOptions{
+				Action:          templates.LifecycleInstall,
+				InputOptions:    templates.InputResolverOptions{NonInteractive: true},
+				ValidatePlugins: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			appStep := plannedStep(plan, "ensure-mise")
+			Expect(appStep.Request).To(And(
+				HaveField("Plugin", "package-manager-apt"),
+				HaveField("Command", "install"),
+				HaveField("Args", []string{"jq"}),
+			))
+
+			var generated templates.PlannedStep
+			found := false
+			for _, step := range plan.Steps {
+				if step.ID != "ensure-mise" && step.Request.Plugin == "package-manager-mise" && step.Request.Command == "ensure-installed" {
+					generated = step
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "expected a distinct generated package-manager-mise ensure-installed step")
+
+			kubectl := plannedStep(plan, "kubectl")
+			Expect(kubectl.DependsOn).To(Equal([]string{generated.ID}))
+			Expect(kubectl.Request).To(And(
+				HaveField("Plugin", "package-manager-mise"),
+				HaveField("Args", []string{"kubectl@1.37"}),
+			))
+		})
+
 		It("installs mise before Node.js for web development", func() {
 			plan, err := planStarter("web-development", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
 			Expect(err).NotTo(HaveOccurred())
