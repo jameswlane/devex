@@ -141,6 +141,16 @@ var _ = Describe("Shipped default configuration tree and manifest", func() {
 			manifest := readManifest(configDir)
 			Expect(manifest.Files).NotTo(HaveKey(relPath))
 		})
+
+		It("leaves a legacy file identical to the shipped copy untracked", func() {
+			Expect(os.MkdirAll(filepath.Dir(targetPath), 0750)).To(Succeed())
+			Expect(os.WriteFile(targetPath, shippedBytes, 0600)).To(Succeed())
+
+			Expect(config.WriteDefaultConfig(configDir)).To(Succeed())
+
+			manifest := readManifest(configDir)
+			Expect(manifest.Files).NotTo(HaveKey(relPath))
+		})
 	})
 
 	Describe("OverwriteDefaultConfig", func() {

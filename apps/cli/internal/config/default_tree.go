@@ -168,7 +168,6 @@ func writeDefaultConfig(configDir string, force bool) error {
 
 		existingHash := sha256Hex(existing)
 		if existingHash == shippedHash {
-			manifest.Files[path] = shippedHash
 			return nil
 		}
 		if recordedHash, ok := manifest.Files[path]; ok && existingHash == recordedHash {
