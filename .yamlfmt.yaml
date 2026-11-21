@@ -1,3 +1,7 @@
+# doublestar matching keeps the ** excludes working on Windows. With it, yamlfmt
+# does not walk a directory argument: format files or pass globs, for example
+#   yamlfmt '**/*.yaml' '**/*.yml'
+# The excludes below still apply to glob matches.
 match_type: doublestar
 exclude:
   - "node_modules"

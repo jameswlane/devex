@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
@@ -48,8 +49,31 @@ var _ = Describe("Agent API startup", func() {
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		Expect(string(output)).To(ContainSubstring("Would install"))
 		Expect(startupSnapshot(home)).To(Equal(before))
+		Expect(profileWrites(profile)).To(BeEmpty())
 	})
 })
+
+// profileWrites lists what was created under a temporary Windows profile,
+// leaving out what PowerShell (started for platform detection) creates there:
+// its cache under AppData\Local\Microsoft and the empty AppData\Local and
+// AppData\Roaming directories.
+func profileWrites(profile string) []string {
+	cache := filepath.Join(profile, "AppData", "Local", "Microsoft")
+	ancestors := map[string]bool{
+		profile:                           true,
+		filepath.Join(profile, "AppData"): true,
+		filepath.Join(profile, "AppData", "Local"):   true,
+		filepath.Join(profile, "AppData", "Roaming"): true,
+	}
+	var writes []string
+	for path := range startupSnapshot(profile) {
+		if ancestors[path] || path == cache || strings.HasPrefix(path, cache+string(filepath.Separator)) {
+			continue
+		}
+		writes = append(writes, path)
+	}
+	return writes
+}
 
 func startupSnapshot(root string) map[string]string {
 	entries := map[string]string{}
