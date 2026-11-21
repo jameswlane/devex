@@ -73,6 +73,11 @@ func (a *APTInstaller) handleAddRepository(ctx context.Context, args []string) e
 func (a *APTInstaller) addRepositorySource(ctx context.Context, source APTSource) error {
 	a.getLogger().Printf("Adding repository source to %s\n", source.SourceFile)
 
+	// Validate destination path before any file operations
+	if err := a.validateFilePath(source.SourceFile); err != nil {
+		return fmt.Errorf("invalid destination file path: %w", err)
+	}
+
 	// Check if source file already exists
 	if _, err := os.Stat(source.SourceFile); err == nil {
 		a.getLogger().Printf("Source file already exists at %s, checking content\n", source.SourceFile)
@@ -90,42 +95,33 @@ func (a *APTInstaller) addRepositorySource(ctx context.Context, source APTSource
 		}
 	}
 
-	// Create sources.list.d directory if it doesn't exist
-	sourcesDir := filepath.Dir(source.SourceFile)
-	if err := os.MkdirAll(sourcesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create sources directory '%s' for repository configuration: %w", sourcesDir, err)
+	// Write the source line to a user-writable temporary file before installing via sudo
+	tempFile, err := os.CreateTemp("", "apt_source_*.list")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary source file: %w", err)
 	}
-
-	// Write the source line to file securely
-	tempFile := source.SourceFile + ".tmp"
-	if err := os.WriteFile(tempFile, []byte(source.SourceLine+"\n"), 0644); err != nil {
-		return fmt.Errorf("failed to write temporary source file: %w", err)
-	}
-
-	// Validate paths before moving files
-	if err := a.validateFilePath(tempFile); err != nil {
-		return fmt.Errorf("invalid temporary file path: %w", err)
-	}
-	if err := a.validateFilePath(source.SourceFile); err != nil {
-		return fmt.Errorf("invalid destination file path: %w", err)
-	}
-
-	// Move temporary file to final location with sudo
-	if err := sdk.ExecCommandWithContext(ctx, true, "mv", tempFile, source.SourceFile); err != nil {
-		if rmErr := os.Remove(tempFile); rmErr != nil {
-			a.getLogger().Warning("Failed to remove temporary file: %v", rmErr)
+	tempPath := tempFile.Name()
+	defer func() {
+		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+			a.getLogger().Warning("Failed to remove temporary file: %v", err)
 		}
-		return fmt.Errorf("failed to install repository source from '%s' to '%s': %w", tempFile, source.SourceFile, err)
+	}()
+
+	_, writeErr := tempFile.WriteString(source.SourceLine + "\n")
+	closeErr := tempFile.Close()
+	if writeErr != nil {
+		if closeErr != nil {
+			a.getLogger().Warning("Failed to close temporary source file after write error: %v", closeErr)
+		}
+		return fmt.Errorf("failed to write temporary source file: %w", writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("failed to close temporary source file: %w", closeErr)
 	}
 
-	// Validate file path before setting permissions
-	if err := a.validateFilePath(source.SourceFile); err != nil {
-		return fmt.Errorf("invalid source file path for chmod: %w", err)
-	}
-
-	// Set proper permissions
-	if err := sdk.ExecCommandWithContext(ctx, true, "chmod", "644", source.SourceFile); err != nil {
-		a.getLogger().Warning("Failed to set source file permissions: %v", err)
+	// Install temporary file to final location with sudo (-D creates parent directories)
+	if err := sdk.ExecCommandWithContext(ctx, true, "install", "-D", "-m", "0644", tempPath, source.SourceFile); err != nil {
+		return fmt.Errorf("failed to install repository source from '%s' to '%s': %w", tempPath, source.SourceFile, err)
 	}
 
 	a.getLogger().Success("Repository source added to %s", source.SourceFile)
@@ -153,7 +149,7 @@ func (a *APTInstaller) validateRepositorySource(ctx context.Context, source APTS
 
 	// Test APT configuration
 	a.getLogger().Debug("Testing APT configuration validity")
-	if err := sdk.ExecCommandWithContext(ctx, false, "apt-get", "update", "-o", "Dir::Etc::sourcelist=/dev/null", "-o", fmt.Sprintf("Dir::Etc::sourceparts=%s", filepath.Dir(source.SourceFile))); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "update", "-o", "Dir::Etc::sourcelist=/dev/null", "-o", fmt.Sprintf("Dir::Etc::sourceparts=%s", filepath.Dir(source.SourceFile))); err != nil {
 		return fmt.Errorf("repository configuration test failed: %w", err)
 	}
 

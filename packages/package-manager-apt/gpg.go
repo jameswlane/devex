@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,12 +38,6 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		return nil
 	}
 
-	// Create keyring directory if it doesn't exist
-	keyringDir := filepath.Dir(source.KeyPath)
-	if err := os.MkdirAll(keyringDir, 0755); err != nil {
-		return fmt.Errorf("failed to create keyring directory '%s' for GPG key storage: %w", keyringDir, err)
-	}
-
 	// Download the key using HTTP client
 	downloadCtx, cancel := context.WithTimeout(ctx, GPGKeyDownloadTimeout)
 	defer cancel()
@@ -69,42 +62,42 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		return fmt.Errorf("failed to download GPG key from '%s': HTTP %d", source.KeyURL, resp.StatusCode)
 	}
 
+	// Download key into a user-writable temporary file before installing via sudo
+	downloadFile, err := os.CreateTemp("", "repo_key_*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary key file: %w", err)
+	}
+	downloadPath := downloadFile.Name()
+	defer func() {
+		if err := os.Remove(downloadPath); err != nil && !os.IsNotExist(err) {
+			a.getLogger().Warning("Failed to remove temporary file: %v", err)
+		}
+	}()
+
+	bytesWritten, copyErr := io.Copy(downloadFile, resp.Body)
+	closeErr := downloadFile.Close()
+	if copyErr != nil {
+		if closeErr != nil {
+			a.getLogger().Warning("Failed to close temporary file after copy error: %v", closeErr)
+		}
+		return fmt.Errorf("failed to stream GPG key to temporary file: %w", copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("failed to close temporary key file: %w", closeErr)
+	}
+
+	// Validate that we actually received some data
+	if bytesWritten == 0 {
+		return fmt.Errorf("received empty response for GPG key from '%s'", source.KeyURL)
+	}
+
 	// Process the key based on dearmor requirement
+	installSource := downloadPath
 	if source.RequireDearmor {
 		a.getLogger().Debug("Converting ASCII-armored key to binary format")
 
-		// Create secure temporary file for GPG key
-		tempFile, err := os.CreateTemp("", "repo_key_*.asc")
-		if err != nil {
-			return fmt.Errorf("failed to create temporary key file: %w", err)
-		}
-		tempFileName := tempFile.Name()
-		defer func() {
-			if err := os.Remove(tempFileName); err != nil {
-				a.getLogger().Warning("Failed to remove temporary file: %v", err)
-			}
-		}()
-
-		// Stream key data directly to temporary file
-		bytesWritten, err := io.Copy(tempFile, resp.Body)
-		if err != nil {
-			if closeErr := tempFile.Close(); closeErr != nil {
-				a.getLogger().Warning("Failed to close temporary file after copy error: %v", closeErr)
-			}
-			return fmt.Errorf("failed to stream GPG key to temporary file: %w", err)
-		}
-
-		// Validate that we actually received some data
-		if bytesWritten == 0 {
-			if closeErr := tempFile.Close(); closeErr != nil {
-				a.getLogger().Warning("Failed to close temporary file after empty response: %v", closeErr)
-			}
-			return fmt.Errorf("received empty response for GPG key from '%s'", source.KeyURL)
-		}
-
 		// For dearmor operations, validate the content looks like an ASCII-armored key
-		// Read back the content to validate format
-		tempFileContent, err := os.ReadFile(tempFileName)
+		tempFileContent, err := os.ReadFile(downloadPath)
 		if err != nil {
 			return fmt.Errorf("failed to read temporary key file for validation: %w", err)
 		}
@@ -114,52 +107,30 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 			return fmt.Errorf("downloaded content is not a valid ASCII-armored GPG key from '%s'", source.KeyURL)
 		}
 
-		// Close the file before passing to gpg command
-		if err := tempFile.Close(); err != nil {
-			return fmt.Errorf("failed to close temporary key file: %w", err)
-		}
-
-		// Validate destination path before GPG operation
-		if err := a.validateFilePath(source.KeyPath); err != nil {
-			return fmt.Errorf("invalid GPG key destination path: %w", err)
-		}
-
-		// Use gpg to dearmor the key
-		if err := sdk.ExecCommandWithContext(ctx, false, "gpg", "--dearmor", "-o", source.KeyPath, tempFileName); err != nil {
-			return fmt.Errorf("failed to dearmor GPG key from '%s' to '%s': %w", source.KeyURL, source.KeyPath, err)
-		}
-	} else {
-		// Validate destination path before writing
-		if err := a.validateFilePath(source.KeyPath); err != nil {
-			return fmt.Errorf("invalid GPG key destination path: %w", err)
-		}
-
-		// Create the destination file
-		keyFile, err := os.Create(source.KeyPath)
+		dearmoredFile, err := os.CreateTemp("", "repo_key_*.gpg")
 		if err != nil {
-			return fmt.Errorf("failed to create GPG key file '%s': %w", source.KeyPath, err)
+			return fmt.Errorf("failed to create temporary dearmored key file: %w", err)
 		}
+		dearmoredPath := dearmoredFile.Name()
 		defer func() {
-			if closeErr := keyFile.Close(); closeErr != nil {
-				a.getLogger().Warning("Failed to close key file: %v", closeErr)
+			if err := os.Remove(dearmoredPath); err != nil && !os.IsNotExist(err) {
+				a.getLogger().Warning("Failed to remove temporary file: %v", err)
 			}
 		}()
-
-		// Stream key data directly to destination file
-		bytesWritten, err := io.Copy(keyFile, resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to stream GPG key to '%s': %w", source.KeyPath, err)
+		if err := dearmoredFile.Close(); err != nil {
+			return fmt.Errorf("failed to close temporary dearmored key file: %w", err)
 		}
 
-		// Validate that we actually received some data
-		if bytesWritten == 0 {
-			return fmt.Errorf("received empty response for GPG key from '%s'", source.KeyURL)
+		// Use gpg to dearmor the key into the temporary output file
+		if err := sdk.ExecCommandWithContext(ctx, false, "gpg", "--yes", "--dearmor", "-o", dearmoredPath, downloadPath); err != nil {
+			return fmt.Errorf("failed to dearmor GPG key from '%s' to '%s': %w", source.KeyURL, source.KeyPath, err)
 		}
+		installSource = dearmoredPath
+	}
 
-		// Set proper permissions
-		if err := keyFile.Chmod(0644); err != nil {
-			return fmt.Errorf("failed to set permissions on GPG key file '%s': %w", source.KeyPath, err)
-		}
+	// Install the key to its final destination with sudo (-D creates parent directories)
+	if err := sdk.ExecCommandWithContext(ctx, true, "install", "-D", "-m", "0644", installSource, source.KeyPath); err != nil {
+		return fmt.Errorf("failed to install GPG key to '%s': %w", source.KeyPath, err)
 	}
 
 	// Verify the key was written correctly
