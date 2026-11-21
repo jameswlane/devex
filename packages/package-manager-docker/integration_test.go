@@ -3,10 +3,8 @@
 package main_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,16 +14,11 @@ import (
 
 var _ = Describe("Docker Package Manager Integration Tests", func() {
 	var (
-		plugin     *main.DockerInstaller
-		ctx        context.Context
-		cancelFunc context.CancelFunc
-		tmpDir     string
+		plugin *main.DockerInstaller
+		tmpDir string
 	)
 
 	BeforeEach(func() {
-		// Create context with timeout for all operations
-		ctx, cancelFunc = context.WithTimeout(context.Background(), 60*time.Second)
-
 		// Create temporary directory for test files
 		var err error
 		tmpDir, err = os.MkdirTemp("", "docker-integration-test-")
@@ -33,9 +26,6 @@ var _ = Describe("Docker Package Manager Integration Tests", func() {
 
 		// Ensure cleanup even on test failure
 		DeferCleanup(func() {
-			if cancelFunc != nil {
-				cancelFunc()
-			}
 			if tmpDir != "" {
 				_ = os.RemoveAll(tmpDir)
 			}
@@ -43,13 +33,6 @@ var _ = Describe("Docker Package Manager Integration Tests", func() {
 
 		// Initialize plugin
 		plugin = main.NewDockerPlugin()
-	})
-
-	AfterEach(func() {
-		cancelFunc()
-		if tmpDir != "" {
-			os.RemoveAll(tmpDir)
-		}
 	})
 
 	Describe("Docker Engine Installation Flow", func() {
@@ -98,7 +81,7 @@ var _ = Describe("Docker Package Manager Integration Tests", func() {
 			It("should check if Docker daemon is running", func() {
 				Skip("Requires Docker installation")
 
-				err := plugin.Execute("status", []string{})
+				_ = plugin.Execute("status", []string{})
 				// Might succeed or fail depending on daemon status
 				// The command should not error on checking status itself
 			})
@@ -106,7 +89,7 @@ var _ = Describe("Docker Package Manager Integration Tests", func() {
 			It("should handle daemon not running gracefully", func() {
 				Skip("Requires Docker installed but daemon stopped")
 
-				err := plugin.Execute("status", []string{})
+				_ = plugin.Execute("status", []string{})
 				// Should report status but not fail the command
 			})
 		})
@@ -336,7 +319,7 @@ var _ = Describe("Docker Package Manager Integration Tests", func() {
 			})
 
 			It("should handle removal of non-existent containers", func() {
-				err := plugin.Execute("remove", []string{"nonexistent-container"})
+				_ = plugin.Execute("remove", []string{"nonexistent-container"})
 				// Should handle gracefully, might not error depending on implementation
 			})
 		})
@@ -375,7 +358,7 @@ var _ = Describe("Docker Package Manager Integration Tests", func() {
 				containerName := "test-logs-follow"
 
 				// This would test streaming logs - complex to test properly
-				err := plugin.Execute("logs", []string{containerName, "--follow"})
+				_ = plugin.Execute("logs", []string{containerName, "--follow"})
 				// Note: Following logs might not terminate, need careful timeout handling
 			})
 
@@ -570,7 +553,7 @@ RUN echo "custom dockerfile" > /test.txt
 			It("should build without cache", func() {
 				Skip("Requires Docker daemon running and Dockerfile")
 
-				err = plugin.Execute("build", []string{
+				err := plugin.Execute("build", []string{
 					"--tag=test-no-cache:latest",
 					"--context=" + tmpDir,
 					"--no-cache",
