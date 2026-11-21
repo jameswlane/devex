@@ -2,7 +2,9 @@ package main_test
 
 import (
 	"context"
+	"errors"
 	"os"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -139,8 +141,44 @@ var _ = Describe("Tool Manager", func() {
 
 	Describe("HandleIsInstalled", func() {
 		Context("with valid tool", func() {
-			It("should check if tool is installed", func() {
-				Skip("Integration test - requires mise to be installed")
+			BeforeEach(func() {
+				binDir := GinkgoT().TempDir()
+				fakeMise := filepath.Join(binDir, "mise")
+				script := `#!/bin/sh
+if [ "$#" -eq 2 ] && [ "$1" = "current" ] && [ "$2" = "node" ]; then
+	echo "24.11.1"
+	exit 0
+fi
+if [ "$#" -eq 2 ] && [ "$1" = "current" ] && [ "$2" = "go" ]; then
+	exit 0
+fi
+echo "mise ERROR $* not found in mise tool registry" >&2
+exit 1
+`
+				Expect(os.WriteFile(fakeMise, []byte(script), 0o755)).To(Succeed())
+
+				origPath, hadPath := os.LookupEnv("PATH")
+				Expect(os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)).To(Succeed())
+				DeferCleanup(func() {
+					if hadPath {
+						_ = os.Setenv("PATH", origPath)
+					} else {
+						_ = os.Unsetenv("PATH")
+					}
+				})
+			})
+
+			It("should check versioned tool specs by tool name", func() {
+				err := plugin.HandleIsInstalled(context.Background(), []string{"node@lts"})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return NotInstalledError when no version is active", func() {
+				err := plugin.HandleIsInstalled(context.Background(), []string{"go@latest"})
+				Expect(err).To(HaveOccurred())
+				var notInstalled *sdk.NotInstalledError
+				Expect(errors.As(err, &notInstalled)).To(BeTrue())
+				Expect(notInstalled.Packages).To(Equal([]string{"go@latest"}))
 			})
 		})
 

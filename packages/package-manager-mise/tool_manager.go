@@ -206,8 +206,10 @@ func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error
 		return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 	}
 
+	toolName, _, _ := strings.Cut(tool, "@")
+
 	// Check if tool is installed
-	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "current", tool)
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "current", toolName)
 	if err != nil {
 		return fmt.Errorf("failed to check whether tool '%s' is installed: %w", tool, err)
 	}
