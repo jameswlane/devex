@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -161,7 +161,7 @@ var _ = Describe("Stack detection", func() {
 		Expect(err).To(MatchError(ContainSubstring("not a directory")))
 		resolved, err := stackdetect.ResolveDir(GinkgoT().TempDir())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(strings.HasPrefix(resolved, "/")).To(BeTrue())
+		Expect(filepath.IsAbs(resolved)).To(BeTrue())
 	})
 })
 

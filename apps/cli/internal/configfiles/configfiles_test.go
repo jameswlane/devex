@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,7 +18,7 @@ func TestConfigFiles(t *testing.T) { RegisterFailHandler(Fail); RunSpecs(t, "Con
 var _ = Describe("Config file plans", func() {
 	It("previews copy, backup and parent creation without changing any files", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		source, dest := filepath.Join(home, "source"), filepath.Join(home, "destination")
 		Expect(os.WriteFile(source, []byte("new"), 0600)).To(Succeed())
 		Expect(os.WriteFile(dest, []byte("old"), 0600)).To(Succeed())
@@ -34,7 +35,7 @@ var _ = Describe("Config file plans", func() {
 	})
 	It("expands the documented variable syntaxes and rejects unknown variables", func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("CONFIG_TEST", home)
 		for _, path := range []string{"~/config", "$HOME/config", "${CONFIG_TEST}/config", "%CONFIG_TEST%/config"} {
 			expanded, err := configfiles.Expand(path)
@@ -51,7 +52,7 @@ var _ = Describe("Config file plans", func() {
 
 		BeforeEach(func() {
 			home = GinkgoT().TempDir()
-			GinkgoT().Setenv("HOME", home)
+			testhelper.SetProfileEnv(GinkgoT(), home)
 			source = filepath.Join(home, "source.lua")
 			destination = filepath.Join(home, ".config", "nvim", "lazyvim.json")
 			Expect(os.WriteFile(source, []byte("managed"), 0600)).To(Succeed())

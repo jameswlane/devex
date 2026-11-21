@@ -18,6 +18,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("Profile commands", func() {
@@ -44,7 +45,7 @@ var _ = Describe("Profile commands", func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		for _, key := range []string{"DEVEX_ENV", "ENVIRONMENT", "NODE_ENV", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "DEVEX_CONFIG_DIR", "DEVEX_STATE_DIR", "DEVEX_DATA_DIR", "DEVEX_TEAM_CONFIG_DIR"} {
 			GinkgoT().Setenv(key, "")
 		}

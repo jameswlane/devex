@@ -74,7 +74,7 @@ var _ = Describe("Main", func() {
 
 	Context("CLI error execution", func() {
 		It("prints the error message exactly once on stderr and exits nonzero for unknown commands", func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			goBin, goEnv := isolatedGoRunEnv(GinkgoT().TempDir())
@@ -88,7 +88,7 @@ var _ = Describe("Main", func() {
 			Expect(err).To(HaveOccurred())
 
 			stderrOutput := stderr.String()
-			Expect(strings.Count(stderrOutput, "Error:")).To(Equal(1))
+			Expect(strings.Count(stderrOutput, "Error:")).To(Equal(1), stderrOutput)
 			Expect(stderrOutput).To(ContainSubstring(`unknown command "notacommand" for "devex"`))
 			Expect(stderrOutput).To(ContainSubstring("Run 'devex --help' for usage."))
 			Expect(stderrOutput).NotTo(ContainSubstring("Error executing root command"))
@@ -103,6 +103,9 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	Expect(err).ToNot(HaveOccurred(), "failed to read go env")
 	values := strings.Split(strings.TrimSpace(string(out)), "\n")
 	Expect(values).To(HaveLen(4))
+	for i := range values {
+		values[i] = strings.TrimSpace(values[i])
+	}
 
 	overrides := map[string]string{
 		"DEVEX_OFFLINE":              "true",
@@ -120,7 +123,8 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	env := make([]string, 0, len(os.Environ())+len(overrides))
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
-		if _, overridden := overrides[key]; overridden || excluded[key] {
+		upper := strings.ToUpper(key)
+		if _, overridden := overrides[upper]; overridden || excluded[upper] {
 			continue
 		}
 		env = append(env, kv)
@@ -161,6 +165,9 @@ var _ = Describe("CLI startup regression coverage", func() {
 			Expect(stderr.String()).To(And(ContainSubstring("Warning: legacy migration skipped"), ContainSubstring("devex paths")))
 		}
 		state := filepath.Join(home, ".local", "state", "devex")
+		if runtime.GOOS == "windows" {
+			state = filepath.Join(home, "AppData", "Local", "DevEx")
+		}
 		Expect(os.MkdirAll(state, 0700)).To(Succeed())
 		path := filepath.Join(state, "datastore.db")
 		db, err := datastore.NewSQLiteContext(ctx, path)
@@ -189,7 +196,7 @@ var _ = Describe("Runtime registry catalog", func() {
 	It("uses the registry for filtered JSON listings and explicit install resolution", func(ctx SpecContext) {
 		// A registry-only application in the registry's snake_case schema; the
 		// bundled applications stay in the catalog alongside it.
-		fixture := []byte(`{"items":[{"name":"registry-only","description":"Only in the registry","category":"Dependency","default":false,"desktopEnvironments":[],"platforms":{"linux":{"install_method":"apt","install_command":"registry-only","uninstall_command":"registry-only"},"macos":{"install_method":"brew","install_command":"registry-only","uninstall_command":"registry-only"},"windows":null}}],"pagination":{"total":1,"count":1,"limit":100,"offset":0,"page":1,"totalPages":1,"hasNext":false,"hasPrevious":false}}`)
+		fixture := []byte(`{"items":[{"name":"registry-only","description":"Only in the registry","category":"Dependency","default":false,"desktopEnvironments":[],"platforms":{"linux":{"install_method":"apt","install_command":"registry-only","uninstall_command":"registry-only"},"macos":{"install_method":"brew","install_command":"registry-only","uninstall_command":"registry-only"},"windows":{"install_method":"winget","install_command":"registry-only","uninstall_command":"registry-only"}}}],"pagination":{"total":1,"count":1,"limit":100,"offset":0,"page":1,"totalPages":1,"hasNext":false,"hasPrevious":false}}`)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(fixture) }))
 		defer server.Close()
 		home := GinkgoT().TempDir()

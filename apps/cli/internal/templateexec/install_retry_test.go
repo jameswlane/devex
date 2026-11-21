@@ -11,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -49,6 +50,9 @@ var _ = Describe("APT retry lifecycle", func() {
 		viper.Set("install-retry-max-delay", "1ns")
 	})
 	DescribeTable("runs lifecycle hooks once around bounded package attempts", func(succeed bool) {
+		goBin, lookErr := exec.LookPath("go")
+		Expect(lookErr).NotTo(HaveOccurred())
+		hostEnv := append([]string(nil), os.Environ()...)
 		recorder := sdktest.NewRecorder(GinkgoT(), "bash")
 		originalExecutor := utils.CommandExec
 		DeferCleanup(func() { utils.CommandExec = originalExecutor })
@@ -58,21 +62,36 @@ var _ = Describe("APT retry lifecycle", func() {
 		dir := runtime.GetManager().GetPluginDir()
 		Expect(os.MkdirAll(dir, 0700)).To(Succeed())
 		count := filepath.Join(dir, "attempts")
-		plugin := filepath.Join(dir, "devex-plugin-package-manager-apt")
-		script := fmt.Sprintf(`#!/bin/sh
-if [ "${1-}" = --plugin-info ]; then
- echo '{"name":"package-manager-apt","version":"1.0.0"}'
- exit 0
-fi
-if [ -f %q ] && [ %q = true ]; then
- echo attempt >> %q
- exit 0
-fi
-echo attempt >> %q
-echo 'E: Failed to fetch https://repo/git.deb 503 Service Unavailable' >&2
-exit 100
-`, count, fmt.Sprint(succeed), count, count)
-		Expect(os.WriteFile(plugin, []byte(script), 0700)).To(Succeed())
+		plugin := testhelper.Executable(dir, "devex-plugin-package-manager-apt")
+		srcDir := GinkgoT().TempDir()
+		src := fmt.Sprintf(`package main
+import ("fmt"; "os")
+func appendAttempt(p string) {
+	f, _ := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if f != nil { _, _ = f.WriteString("attempt\n"); _ = f.Close() }
+}
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--plugin-info" {
+		fmt.Println("{\"name\":\"package-manager-apt\",\"version\":\"1.0.0\"}")
+		return
+	}
+	countPath := %q
+	succeed := %v
+	if _, err := os.Stat(countPath); err == nil && succeed {
+		appendAttempt(countPath)
+		return
+	}
+	appendAttempt(countPath)
+	fmt.Fprintln(os.Stderr, "E: Failed to fetch https://repo/git.deb 503 Service Unavailable")
+	os.Exit(100)
+}
+`, count, succeed)
+		Expect(os.WriteFile(filepath.Join(srcDir, "main.go"), []byte(src), 0o600)).To(Succeed())
+		build := exec.CommandContext(context.Background(), goBin, "build", "-o", plugin, "main.go")
+		build.Dir = srcDir
+		build.Env = hostEnv
+		buildOut, buildErr := build.CombinedOutput()
+		Expect(buildErr).NotTo(HaveOccurred(), string(buildOut))
 		previousCommand := sdk.NewCommandContext
 		sdk.NewCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			if name == plugin {

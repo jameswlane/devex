@@ -10,6 +10,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configcatalog"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -106,7 +107,7 @@ var _ = Describe("Shipped configuration validation", func() {
 	})
 	It("accepts valid catalogs without creating user files", func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		Expect(errors()).To(BeEmpty())
 		entries, err := os.ReadDir(home)
 		Expect(err).NotTo(HaveOccurred())

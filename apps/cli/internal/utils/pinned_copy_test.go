@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -52,6 +53,9 @@ var _ = Describe("Copy hooks in a confirmed install that switch users", func() {
 	var dir, source, destination, sudoLog string
 	var ctx context.Context
 	BeforeEach(func() {
+		if runtime.GOOS == "windows" {
+			Skip("UnixSudoAdapter user-switching tests require Unix")
+		}
 		dir = GinkgoT().TempDir()
 		source, destination, sudoLog = filepath.Join(dir, "source"), filepath.Join(dir, "destination"), filepath.Join(dir, "sudo.log")
 		Expect(os.WriteFile(source, []byte("confirmed"), 0o600)).To(Succeed())

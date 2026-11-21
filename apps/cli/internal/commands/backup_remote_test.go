@@ -18,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
 	"github.com/jameswlane/devex/apps/cli/internal/backup/remote"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 type memoryStore struct {
@@ -67,7 +68,7 @@ var _ = Describe("Remote backup commands", func() {
 	// local backup there.
 	isolate := func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		for _, key := range []string{
 			"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
 			"DEVEX_CONFIG_DIR", "DEVEX_DATA_DIR", "DEVEX_STATE_DIR", "DEVEX_CACHE_DIR",

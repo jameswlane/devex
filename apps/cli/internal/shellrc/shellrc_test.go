@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	rc "github.com/jameswlane/devex/apps/cli/internal/shellrc"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -21,7 +22,7 @@ var _ = Describe("Declarative shell actions", func() {
 	var home string
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("SHELL", "/bin/bash")
 	})
 	It("honors setup's selection and never creates another shell's rc", func() {
@@ -66,7 +67,7 @@ var _ = Describe("Declarative shell actions", func() {
 		Expect(data).To(Equal(original))
 	})
 	It("does not create an rc file for a directory already on PATH", func() {
-		GinkgoT().Setenv("PATH", "/usr/bin:/opt/nvim/bin")
+		GinkgoT().Setenv("PATH", strings.Join([]string{"/usr/bin", "/opt/nvim/bin"}, string(os.PathListSeparator)))
 		changed, err := rc.ApplyActions(context.Background(), nil, []string{"/opt/nvim/bin"})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(changed).To(BeFalse())

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,10 +21,14 @@ var _ = Describe("Installer failure reporting", func() {
 		installer := NewStreamingInstaller(nil, repo, ctx, config.CrossPlatformSettings{})
 		DeferCleanup(installer.cancel)
 		installer.performanceAnalyzer = nil
+		okCmd, failCmd := "true", "false"
+		if runtime.GOOS == "windows" {
+			okCmd, failCmd = "cmd /c exit 0", "cmd /c exit 1"
+		}
 		apps := []types.CrossPlatformApp{
-			{Name: "first-failure", AllPlatforms: types.OSConfig{InstallMethod: "generic", InstallCommand: "false"}},
-			{Name: "success", AllPlatforms: types.OSConfig{InstallMethod: "generic", InstallCommand: "true"}},
-			{Name: "second-failure", AllPlatforms: types.OSConfig{InstallMethod: "generic", InstallCommand: "false"}},
+			{Name: "first-failure", AllPlatforms: types.OSConfig{InstallMethod: "generic", InstallCommand: failCmd}},
+			{Name: "success", AllPlatforms: types.OSConfig{InstallMethod: "generic", InstallCommand: okCmd}},
+			{Name: "second-failure", AllPlatforms: types.OSConfig{InstallMethod: "generic", InstallCommand: failCmd}},
 		}
 		err := installer.InstallApps(ctx, apps, config.CrossPlatformSettings{})
 		Expect(err).To(HaveOccurred())
@@ -35,7 +40,7 @@ var _ = Describe("Installer failure reporting", func() {
 	})
 
 	It("warns about optional post-install failures and still registers the installed package", func(ctx SpecContext) {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 		Expect(log.InitFileLogger(false)).To(Succeed())
 		DeferCleanup(func() { Expect(log.Close()).To(Succeed()); log.InitTestLogger() })
@@ -43,8 +48,12 @@ var _ = Describe("Installer failure reporting", func() {
 		installer := NewStreamingInstaller(nil, repo, ctx, config.CrossPlatformSettings{})
 		DeferCleanup(installer.cancel)
 		installer.performanceAnalyzer = nil
+		okCmd := "true"
+		if runtime.GOOS == "windows" {
+			okCmd = "cmd /c exit 0"
+		}
 		app := types.CrossPlatformApp{Name: "fd-find", AllPlatforms: types.OSConfig{
-			InstallMethod: "generic", InstallCommand: "true", PostInstall: []types.InstallCommand{{Shell: "false"}},
+			InstallMethod: "generic", InstallCommand: okCmd, PostInstall: []types.InstallCommand{{Shell: "false"}},
 		}}
 		Expect(installer.InstallApp(ctx, app, config.CrossPlatformSettings{})).To(Succeed())
 		installed, err := repo.GetApps()
@@ -71,7 +80,7 @@ var _ = Describe("Installer failure reporting", func() {
 		Expect(os.MkdirAll(bin, 0755)).To(Succeed())
 		target := filepath.Join(bin, "fdfind")
 		Expect(os.WriteFile(target, []byte("#!/bin/sh\nexit 0\n"), 0755)).To(Succeed())
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		runHooks := func() {
 			for _, hook := range app.Linux.PostInstall {

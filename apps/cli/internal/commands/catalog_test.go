@@ -6,6 +6,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/catalog"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
@@ -30,7 +31,7 @@ var _ = Describe("Catalog opt-ins", func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		for _, key := range []string{"DEVEX_DATA_DIR", "DEVEX_CONFIG_DIR", "DEVEX_CACHE_DIR", "DEVEX_STATE_DIR"} {
 			GinkgoT().Setenv(key, filepath.Join(home, key))
 		}

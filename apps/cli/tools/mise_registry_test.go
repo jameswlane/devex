@@ -197,8 +197,10 @@ func TestGenerateMiseRegistryYAML_InvalidOutputPath(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Try to write to an invalid path (directory that doesn't exist and can't be created)
-	invalidPath := "/invalid/nonexistent/path/mise.yaml"
+	// Point beneath a regular file so directory creation fails on every OS.
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
+	invalidPath := filepath.Join(blocker, "nested", "mise.yaml")
 
 	err := generateMiseRegistryYAMLWithURL(server.URL, invalidPath)
 	assert.Error(t, err)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -223,7 +224,7 @@ var _ = Describe("Shipped Neovim configuration in a LazyVim layout", func() {
 			Skip("the theme check needs Neovim 0.9 or later")
 		}
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		installAssets(home)
 		config := filepath.Join(home, ".config", "nvim")
 		stub := filepath.Join(home, "stub")
@@ -263,7 +264,7 @@ var _ = Describe("Shipped Neovim configuration in a LazyVim layout", func() {
 			Skip("LazyVim requires Neovim 0.11.2 or later")
 		}
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		installAssets(home)
 		config := filepath.Join(home, ".config", "nvim")
 		clone := exec.CommandContext(ctx, "git", "clone", "--quiet", "--depth", "1", "https://github.com/LazyVim/starter", config)

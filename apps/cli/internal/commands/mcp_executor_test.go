@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/mcpserver"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -75,7 +77,8 @@ var _ = Describe("MCP executor", func() {
 		ctx = context.Background()
 		viper.Reset()
 		DeferCleanup(viper.Reset)
-		home = os.Getenv("HOME")
+		home = GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		repo = mocks.NewMockRepository()
 		progress = &bytes.Buffer{}
 		executor = &mcpExecutor{repo: repo, settings: config.CrossPlatformSettings{HomeDir: home}, log: progress}
@@ -173,6 +176,9 @@ var _ = Describe("MCP executor", func() {
 		})
 
 		It("executes an unchanged approved definition", func() {
+			if runtime.GOOS == "windows" {
+				Skip("curlpipe inline uninstall uses POSIX sh")
+			}
 			track("canary", canary(`touch "$DEVEX_TEST_MARKER_A"`, dataA))
 			configFile := filepath.Join(home, ".config", "canary", "a.conf")
 			recordConfig("canary", configFile)
@@ -243,6 +249,9 @@ var _ = Describe("MCP executor", func() {
 		})
 
 		DescribeTable("retains truthful cleanup failures and retry records", func(kind string) {
+			if runtime.GOOS == "windows" {
+				Skip("curlpipe inline uninstall and POSIX 0500 directory permissions require Unix")
+			}
 			configFile := filepath.Join(home, ".config", "canary", "retry.conf")
 			recordConfig("canary", configFile)
 			record := filepath.Join(home, ".local", "state", "devex", "config-files", fmt.Sprintf("%x.json", sha256.Sum256([]byte("canary"))))
@@ -281,6 +290,9 @@ var _ = Describe("MCP executor", func() {
 		}, Entry("changed managed-file record", "record"), Entry("ordinary config removal failure", "config"), Entry("ordinary data removal failure", "data"))
 
 		It("retries retained cleanup even when the native package is already absent", func() {
+			if runtime.GOOS == "windows" {
+				Skip("POSIX 0500 directory mode does not prevent owner writes on Windows")
+			}
 			track("canary", types.OSConfig{InstallMethod: "apt", InstallCommand: "canary", CleanupFiles: []string{dataA}})
 			getUninstallInstaller = func(context.Context, string) types.BaseInstaller {
 				return &mcpAbsentInstaller{&mcpRecordingInstaller{mu: &callsMu, calls: &installerCalls}}

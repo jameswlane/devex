@@ -19,6 +19,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("PluginBootstrap", func() {
@@ -33,13 +34,11 @@ var _ = Describe("PluginBootstrap", func() {
 		tempHomeDir, err = os.MkdirTemp("", "plugin-bootstrap-test-*")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Set HOME environment variable to temp directory
-		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tempHomeDir)
+		// Isolate per-user profile directories (Unix HOME and Windows AppData/USERPROFILE)
+		testhelper.SetProfileEnv(GinkgoT(), tempHomeDir)
 
 		// Clean up in AfterEach
 		DeferCleanup(func() {
-			os.Setenv("HOME", originalHome)
 			os.RemoveAll(tempHomeDir)
 		})
 
@@ -73,7 +72,7 @@ var _ = Describe("PluginBootstrap", func() {
 		It("reports an installed plugin without asking the registry", func() {
 			pb, err := bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
-			plugin := filepath.Join(sdk.PathsForHome(tempHomeDir).Plugins(), "devex-plugin-package-manager-apt")
+			plugin := testhelper.Executable(sdk.PathsForHome(tempHomeDir).Plugins(), "devex-plugin-package-manager-apt")
 			Expect(os.MkdirAll(filepath.Dir(plugin), 0o750)).To(Succeed())
 			Expect(os.WriteFile(plugin, []byte("#!/bin/sh\n"), 0o755)).To(Succeed())
 			Expect(pb.IsPluginAvailable(ctx, "package-manager-apt")).To(BeTrue())
@@ -104,6 +103,9 @@ var _ = Describe("PluginBootstrap", func() {
 			Expect(b.GetManager().GetPluginDir()).To(BeADirectory())
 		})
 		It("uses the original account home under sudo and prepares user-owned storage", func() {
+			if runtime.GOOS == "windows" {
+				Skip("sudo privilege ownership requires Unix numeric UID/GID")
+			}
 			resolver := sdk.NewPrivilegeResolver()
 			account, err := resolver.CurrentUser()
 			Expect(err).NotTo(HaveOccurred())
@@ -147,12 +149,13 @@ var _ = Describe("PluginBootstrap", func() {
 
 		Context("when home directory is not accessible", func() {
 			BeforeEach(func() {
-				GinkgoT().Setenv("HOME", "/nonexistent/directory")
+				missingHome := filepath.Join(tempHomeDir, "nonexistent", "directory")
+				testhelper.SetProfileEnv(GinkgoT(), missingHome)
 				resolver := sdk.NewPrivilegeResolver()
 				account, err := resolver.CurrentUser()
 				Expect(err).NotTo(HaveOccurred())
 				copyAccount := *account
-				copyAccount.HomeDir = "/nonexistent/directory"
+				copyAccount.HomeDir = missingHome
 				resolver.CurrentUser = func() (*user.User, error) { return &copyAccount, nil }
 				sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
 			})

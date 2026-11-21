@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
@@ -15,7 +16,7 @@ import (
 
 var _ = Describe("Homebrew Cask dispatch", func() {
 	It("carries shipped Cask selections through the real Brew plugin to native argv", func() {
-		path := filepath.Join(GinkgoT().TempDir(), "brew-plugin")
+		path := testhelper.Executable(GinkgoT().TempDir(), "brew-plugin")
 		build := exec.CommandContext(context.Background(), "go", "build", "-o", path, ".")
 		build.Dir = "../../../../packages/package-manager-brew"
 		build.Env = append(os.Environ(), "GOFLAGS="+os.Getenv("GOFLAGS")+" -modcacherw")

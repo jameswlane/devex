@@ -6,10 +6,12 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,8 +19,8 @@ import (
 
 var _ = Describe("Install privilege previews", func() {
 	It("shows installed metadata and original account without executing an install", func() {
-		if os.Geteuid() == 0 {
-			Skip("requires a non-root runner; elevated planning is covered by SDK contracts")
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			Skip("requires a non-root Unix runner; elevated planning is covered by SDK contracts")
 		}
 		home := GinkgoT().TempDir()
 		GinkgoT().Setenv("HOME", "/root")
@@ -61,7 +63,7 @@ var _ = Describe("Install privilege previews", func() {
 	})
 	It("previews configuration copies and backups without writes even with unavailable plugin metadata", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		source, destination := filepath.Join(home, "source"), filepath.Join(home, "config")
 		Expect(os.WriteFile(source, []byte("new"), 0600)).To(Succeed())
 		Expect(os.WriteFile(destination, []byte("original"), 0600)).To(Succeed())
@@ -81,7 +83,7 @@ var _ = Describe("Install privilege previews", func() {
 
 	It("never runs a plugin the organization policy denies while previewing", func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		teamDir := filepath.Join(home, "team")
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
 		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())

@@ -4,8 +4,11 @@ import (
 	"os"
 	"path/filepath"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("CommandValidator", func() {
@@ -537,6 +540,7 @@ var _ = Describe("SecurityConfig", func() {
 			var err error
 			tempDir, err = os.MkdirTemp("", "devex-security-defaults-test")
 			Expect(err).ToNot(HaveOccurred())
+			testhelper.SetProfileEnv(GinkgoT(), tempDir)
 		})
 
 		AfterEach(func() {
@@ -551,7 +555,7 @@ var _ = Describe("SecurityConfig", func() {
 
 		It("should load system config when available", func() {
 			// Create system config
-			systemConfigDir := filepath.Join(tempDir, ".local/share/devex/config")
+			systemConfigDir := devexpaths.ForHome(tempDir).Defaults()
 			err := os.MkdirAll(systemConfigDir, 0755)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -572,7 +576,7 @@ var _ = Describe("SecurityConfig", func() {
 
 		It("should load user config with override priority", func() {
 			// Create system config first
-			systemConfigDir := filepath.Join(tempDir, ".local/share/devex/config")
+			systemConfigDir := devexpaths.ForHome(tempDir).Defaults()
 			err := os.MkdirAll(systemConfigDir, 0755)
 			Expect(err).ToNot(HaveOccurred())
 

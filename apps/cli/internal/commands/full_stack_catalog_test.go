@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	shipconfig "github.com/jameswlane/devex/apps/cli/config"
@@ -81,10 +82,12 @@ var _ = Describe("Full-stack catalog applications", func() {
 				Expect(hook.Shell).NotTo(ContainSubstring("sudo"), distro)
 				Expect(validator.ValidateCommandForApp(hook.Shell, app.Name)).To(Succeed())
 
-				cmd := exec.CommandContext(context.Background(), "bash", "-n")
-				cmd.Stdin = strings.NewReader(hook.Shell)
-				output, synErr := cmd.CombinedOutput()
-				Expect(synErr).NotTo(HaveOccurred(), "%s hook syntax: %s", ref, output)
+				if runtime.GOOS != "windows" {
+					cmd := exec.CommandContext(context.Background(), "bash", "-n")
+					cmd.Stdin = strings.NewReader(hook.Shell)
+					output, synErr := cmd.CombinedOutput()
+					Expect(synErr).NotTo(HaveOccurred(), "%s hook syntax: %s", ref, output)
+				}
 			}
 		},
 		Entry("Visual Studio Code", "Visual Studio Code", "code", "code", "https://packages.microsoft.com/repos/code"),
@@ -93,6 +96,9 @@ var _ = Describe("Full-stack catalog applications", func() {
 	)
 
 	It("rejects non-amd64 architectures before running apt for Google Chrome", func() {
+		if runtime.GOOS == "windows" {
+			Skip("Linux apt pre-install hook execution requires bash")
+		}
 		app, ok := byName["google chrome"]
 		Expect(ok).To(BeTrue())
 		script := "dpkg() { echo arm64; }\napt-get() { echo 'apt-get-called'; exit 99; }\n" + app.Linux.PreInstall[0].Shell

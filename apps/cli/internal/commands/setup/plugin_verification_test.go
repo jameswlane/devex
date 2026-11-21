@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
@@ -42,7 +42,7 @@ var _ = Describe("Installed plugin validation integrity", func() {
 		if tampered {
 			installed = []byte("tampered")
 		}
-		Expect(os.WriteFile(filepath.Join(dir, "devex-plugin-demo"), installed, 0700)).To(Succeed())
+		Expect(os.WriteFile(testhelper.Executable(dir, "devex-plugin-demo"), installed, 0700)).To(Succeed())
 		validator := NewPluginValidator(boot, PluginValidatorConfig{VerifyChecksums: true, AllowInsecurePlugins: bypass, VerificationTimeout: time.Second * 5})
 		result := validator.validateSinglePlugin(context.Background(), "demo", map[string]bool{"demo": true})
 		Expect(result.IsValid).To(Equal(wantValid))

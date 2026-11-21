@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"os/exec"
+	"runtime"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -24,6 +25,9 @@ func NewMockCommandExecutorForStreaming() *MockCommandExecutorForStreaming {
 func (m *MockCommandExecutorForStreaming) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
 	m.commands = append(m.commands, command)
 	// Return a simple echo command that will complete successfully
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "cmd", "/c", "echo", "test output"), nil
+	}
 	cmd := exec.CommandContext(ctx, "echo", "test output")
 	return cmd, nil
 }

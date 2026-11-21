@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -17,7 +18,7 @@ var _ = Describe("Setup plugin lifecycle", func() {
 		DeferCleanup(viper.Reset)
 		DeferCleanup(func() { installers.InitializeWithPluginBootstrap(nil) })
 		viper.Set("offline", true)
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 	})
 
 	It("reuses the plugin stage bootstrap for later stages without initializing again", func() {
@@ -29,7 +30,7 @@ var _ = Describe("Setup plugin lifecycle", func() {
 		// A new bootstrap cannot be created under this HOME. Later stages must reuse the first.
 		blockedHome := filepath.Join(GinkgoT().TempDir(), "file")
 		Expect(os.WriteFile(blockedHome, nil, 0600)).To(Succeed())
-		GinkgoT().Setenv("HOME", blockedHome)
+		testhelper.SetProfileEnv(GinkgoT(), blockedHome)
 		second, err := model.initializePlugins(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(second).To(BeIdenticalTo(first))
@@ -38,11 +39,11 @@ var _ = Describe("Setup plugin lifecycle", func() {
 	It("does not retry a failed initialization during later stages", func() {
 		blockedHome := filepath.Join(GinkgoT().TempDir(), "file")
 		Expect(os.WriteFile(blockedHome, nil, 0600)).To(Succeed())
-		GinkgoT().Setenv("HOME", blockedHome)
+		testhelper.SetProfileEnv(GinkgoT(), blockedHome)
 		model := &SetupModel{}
 		_, firstErr := model.initializePlugins(context.Background())
 		Expect(firstErr).To(HaveOccurred())
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		_, secondErr := model.initializePlugins(context.Background())
 		Expect(secondErr).To(BeIdenticalTo(firstErr))
 	})

@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -16,6 +18,9 @@ var _ = Describe("Installed binary detection", func() {
 
 	writeExecutable := func(dir, name string, mode os.FileMode) {
 		Expect(os.MkdirAll(dir, 0o755)).To(Succeed())
+		if runtime.GOOS == "windows" && mode&0o111 != 0 && filepath.Ext(name) == "" {
+			name += ".exe"
+		}
 		Expect(os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), mode)).To(Succeed())
 	}
 	scriptApp := func(cfg types.OSConfig) types.CrossPlatformApp {
@@ -28,7 +33,7 @@ var _ = Describe("Installed binary detection", func() {
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
 		pathDir = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("PATH", pathDir)
 	})
 
@@ -45,9 +50,13 @@ var _ = Describe("Installed binary detection", func() {
 	})
 
 	It("checks the app's destination and declared path entries", func() {
-		writeExecutable(filepath.Join(home, "Applications"), "Tool.AppImage", 0o755)
+		appImageName := "Tool.AppImage"
+		if runtime.GOOS == "windows" {
+			appImageName = "Tool.exe"
+		}
+		writeExecutable(filepath.Join(home, "Applications"), appImageName, 0o755)
 		writeExecutable(filepath.Join(home, "opt", "tool", "bin"), "nvim", 0o755)
-		appimage := scriptApp(types.OSConfig{InstallMethod: "appimage", Destination: "~/Applications/", InstalledBinary: "Tool.AppImage"})
+		appimage := scriptApp(types.OSConfig{InstallMethod: "appimage", Destination: "~/Applications/", InstalledBinary: appImageName})
 		tarball := scriptApp(types.OSConfig{InstalledBinary: "nvim", PostInstall: []types.InstallCommand{{Path: []string{filepath.Join(home, "opt", "tool", "bin")}}}})
 		tarball.Name = "tarball"
 		Expect(InstalledApps(context.Background(), []types.CrossPlatformApp{appimage, tarball})).To(SatisfyAll(HaveKey("tool"), HaveKey("tarball")))

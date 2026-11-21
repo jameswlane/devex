@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,7 +16,7 @@ var _ = Describe("Shared semantic validation", func() {
 	var settings config.CrossPlatformSettings
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
 		settings = config.CrossPlatformSettings{HomeDir: home}
 	})

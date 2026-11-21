@@ -533,8 +533,8 @@ func getDirectoryFilesRecursive(rootPath string, maxDepth int) ([]string, error)
 			return nil
 		}
 
-		// Store relative path for consistency with getDirectoryFiles
-		yamlFiles = append(yamlFiles, relPath)
+		// Store slash-normalized relative path for cross-platform consistency
+		yamlFiles = append(yamlFiles, filepath.ToSlash(relPath))
 		return nil
 	})
 

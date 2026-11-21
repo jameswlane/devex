@@ -183,6 +183,15 @@ func (d *Detector) detectWindowsVersion(platform *Platform) error {
 	return d.detectWindowsVersionContext(context.Background(), platform)
 }
 func (d *Detector) detectWindowsVersionContext(parent context.Context, platform *Platform) error {
+	if err := parent.Err(); err != nil {
+		return err
+	}
+	if version, err := detectNativeWindowsVersion(); err == nil && version != "" {
+		platform.Version = version
+		platform.Distribution = "windows"
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 

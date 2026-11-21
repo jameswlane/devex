@@ -14,6 +14,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("Init command configuration layout", func() {
@@ -21,7 +22,7 @@ var _ = Describe("Init command configuration layout", func() {
 
 	BeforeEach(func() {
 		homeDir = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", homeDir)
+		testhelper.SetProfileEnv(GinkgoT(), homeDir)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
 	})
 
@@ -113,7 +114,7 @@ var _ = Describe("Init profiles from lifecycle templates", func() {
 
 	BeforeEach(func() {
 		homeDir = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", homeDir)
+		testhelper.SetProfileEnv(GinkgoT(), homeDir)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
 	})
 

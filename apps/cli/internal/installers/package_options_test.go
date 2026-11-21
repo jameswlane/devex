@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,13 +28,13 @@ func (executor snapProcessExecutor) ExecutePluginWithContext(ctx context.Context
 
 var _ = Describe("Typed package installation", func() {
 	It("carries legacy and structured definitions through the real Snap plugin to native argv", func() {
-		if runtime.GOOS == "darwin" {
-			// The plugin subprocess keeps the SDK's native macOS adapter, so its
-			// install would open a real administrator dialog instead of reaching the
-			// recorder's fake sudo (#428). Linux CI covers this spec.
-			Skip("the Snap plugin subprocess would open a real macOS admin dialog")
+		if runtime.GOOS != "linux" {
+			// The Snap plugin elevates through the host's native privilege
+			// adapter (macOS admin dialog or Windows UAC), not the recorder's
+			// fake sudo (#428). Linux CI covers this spec.
+			Skip("the Snap plugin subprocess requires Linux sudo elevation")
 		}
-		path := filepath.Join(GinkgoT().TempDir(), "snap-plugin")
+		path := testhelper.Executable(GinkgoT().TempDir(), "snap-plugin")
 		build := exec.CommandContext(context.Background(), "go", "build", "-o", path, ".")
 		build.Dir = "../../../../packages/package-manager-snap"
 		// The suite isolates HOME; make its temporary module cache removable.

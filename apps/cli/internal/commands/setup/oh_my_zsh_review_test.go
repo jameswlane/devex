@@ -8,7 +8,9 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,6 +22,7 @@ var _ = Describe("Oh My Zsh review regressions", func() {
 
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_DATA_DIR", "")
 		GinkgoT().Setenv("XDG_DATA_HOME", "")
 	})
@@ -66,7 +69,7 @@ var _ = Describe("Oh My Zsh review regressions", func() {
 
 		Expect(calls).To(HaveLen(4))
 		Expect(readOhMyZshTestFile(zshrc)).To(Equal(original))
-		Expect(filepath.Join(home, ".local", "share", "devex", "defaults", "zsh")).NotTo(BeADirectory())
+		Expect(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh")).NotTo(BeADirectory())
 		Expect(model.installation.getChanges()).To(ContainElement(ContainSubstring("existing rc line will load it")))
 	})
 
@@ -126,7 +129,7 @@ var _ = Describe("Oh My Zsh review regressions", func() {
 			Expect(model.applyOhMyZsh(context.Background())).To(MatchError(ContainSubstring("conflicting ZSH assignment")))
 			Expect(readOhMyZshTestFile(zshrc)).To(Equal(original))
 			Expect(filepath.Join(home, ".oh-my-zsh")).NotTo(BeADirectory())
-			Expect(filepath.Join(home, ".local", "share", "devex", "defaults", "zsh")).NotTo(BeADirectory())
+			Expect(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh")).NotTo(BeADirectory())
 		},
 		Entry("missing alternate installation", `export ZSH="$HOME/alternate-oh-my-zsh"`, false),
 		Entry("existing alternate installation", `ZSH="${HOME}/alternate-oh-my-zsh"`, true),
@@ -227,7 +230,7 @@ var _ = Describe("Oh My Zsh review regressions", func() {
 			case "unquoted-absolute":
 				assignment = "export ZSH=" + framework
 			case "double-absolute":
-				assignment = `export ZSH="` + framework + `"`
+				assignment = `export ZSH="` + filepath.ToSlash(framework) + `"`
 			case "dot-alias":
 				assignment = `export ZSH="$HOME/./.oh-my-zsh/."`
 			}

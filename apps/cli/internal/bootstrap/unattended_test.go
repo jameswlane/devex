@@ -5,9 +5,9 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,7 +22,7 @@ var _ = Describe("Unattended plugin bootstrap", func() {
 			GinkgoT().Setenv(key, "")
 		}
 		GinkgoT().Setenv("TERM", "xterm")
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 	})
 	DescribeTable("forwards interaction policy to every execution entry point", func(mode, entry string) {
 		switch mode {
@@ -32,15 +32,7 @@ var _ = Describe("Unattended plugin bootstrap", func() {
 			GinkgoT().Setenv("CI", "true")
 		}
 		dir := GinkgoT().TempDir()
-		script := `#!/bin/sh
-if [ "${1-}" = --plugin-info ]; then
- echo '{"name":"example","version":"1.0.0"}'
- exit 0
-fi
-printf '%s\n' "${DEVEX_UNATTENDED:-0}"
-if read -r line; then printf '%s\n' "$line"; fi
-`
-		Expect(os.WriteFile(filepath.Join(dir, "devex-plugin-example"), []byte(script), 0700)).To(Succeed())
+		writeFakePlugin(dir, fakePluginConfig{Name: "example", Mode: "unattended"})
 		bootstrap := &PluginBootstrap{manager: sdk.NewExecutableManager(dir)}
 		ctx := context.Background()
 		if entry == "io" {

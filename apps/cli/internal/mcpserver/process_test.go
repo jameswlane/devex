@@ -20,6 +20,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/datastore"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/mcpserver"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -34,15 +35,15 @@ func toolText(result *mcp.CallToolResult) string {
 	return text
 }
 
-var _ = Describe("devex mcp serve process", Label("process"), func() {
+var _ = Describe("devex mcp serve process", Ordered, Label("process"), func() {
 	var binary string
 
-	BeforeEach(func(ctx SpecContext) {
+	BeforeAll(func(ctx SpecContext) {
 		goBinary, err := exec.LookPath("go")
 		if err != nil {
 			Skip("the go toolchain is required to build the devex binary")
 		}
-		binary = filepath.Join(GinkgoT().TempDir(), "devex")
+		binary = testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBinary, "build", "-o", binary, "../../cmd")
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
@@ -54,11 +55,13 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		home := GinkgoT().TempDir()
 		var stderr processLogBuffer
 		command := exec.CommandContext(ctx, binary, append(globalFlags, "mcp", "serve")...)
-		command.Env = []string{
-			"HOME=" + home,
-			"PATH=" + path,
+		command.Env = append(testhelper.ProfileEnv(home),
+			"PATH="+path,
 			// An unreachable registry proves the server never contacts it.
 			"DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9",
+		)
+		if systemRoot := os.Getenv("SYSTEMROOT"); systemRoot != "" {
+			command.Env = append(command.Env, "SYSTEMROOT="+systemRoot)
 		}
 		command.Stderr = &stderr
 
@@ -113,10 +116,16 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 	}, SpecTimeout(2*time.Minute))
 
 	It("serves the mutating tools over the reserved stdout with --allow-mutations", func(ctx SpecContext) {
+		if runtime.GOOS == "windows" {
+			Skip("--allow-mutations is supported on Linux and macOS only")
+		}
 		home := GinkgoT().TempDir()
 		var stderr processLogBuffer
 		command := exec.CommandContext(ctx, binary, "mcp", "serve", "--allow-mutations")
-		command.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true"}
+		command.Env = append(testhelper.ProfileEnv(home), "PATH="+os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true")
+		if systemRoot := os.Getenv("SYSTEMROOT"); systemRoot != "" {
+			command.Env = append(command.Env, "SYSTEMROOT="+systemRoot)
+		}
 		command.Stderr = &stderr
 
 		client := mcp.NewClient(&mcp.Implementation{Name: "process-test", Version: "0"}, nil)
@@ -165,7 +174,10 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 	// serveMutations starts "devex mcp serve --allow-mutations" under home.
 	serveMutations := func(ctx SpecContext, home string, stderr *processLogBuffer, args ...string) *mcp.ClientSession {
 		command := exec.CommandContext(ctx, binary, append([]string{"mcp", "serve", "--allow-mutations"}, args...)...)
-		command.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true"}
+		command.Env = append(testhelper.ProfileEnv(home), "PATH="+os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true")
+		if systemRoot := os.Getenv("SYSTEMROOT"); systemRoot != "" {
+			command.Env = append(command.Env, "SYSTEMROOT="+systemRoot)
+		}
 		command.Stderr = stderr
 		client := mcp.NewClient(&mcp.Implementation{Name: "process-test", Version: "0"}, nil)
 		session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
@@ -185,6 +197,9 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 	}
 
 	It("redacts installer and child-process output on stderr during a confirmed uninstall", func(ctx SpecContext) {
+		if runtime.GOOS == "windows" {
+			Skip("curlpipe uninstall command requires POSIX sh")
+		}
 		home := GinkgoT().TempDir()
 		trackCurlpipe(ctx, home, `echo "stdout https://user:SECRET_CANARY@example.invalid/x?token=SECRET_CANARY"; `+
 			`echo "stderr password=SECRET_CANARY" >&2; touch "$HOME/uninstalled"`)
@@ -210,6 +225,9 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 	}, SpecTimeout(2*time.Minute))
 
 	It("gives child processes the null device as stdin so they cannot consume MCP requests", func(ctx SpecContext) {
+		if runtime.GOOS == "windows" {
+			Skip("curlpipe uninstall command requires POSIX sh")
+		}
 		home := GinkgoT().TempDir()
 		// The uninstall command signals that it started, then reads one line
 		// from stdin. Inheriting the MCP request stream, it would either block

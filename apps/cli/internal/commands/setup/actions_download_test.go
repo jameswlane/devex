@@ -16,6 +16,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
@@ -39,7 +40,7 @@ var _ = Describe("Dynamic action plugin installation", func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		for _, kind := range []string{"CONFIG", "DATA", "CACHE", "STATE"} {
 			GinkgoT().Setenv("DEVEX_"+kind+"_DIR", filepath.Join(home, strings.ToLower(kind)))
 		}

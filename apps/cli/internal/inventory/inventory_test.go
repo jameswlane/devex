@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -404,6 +405,9 @@ var _ = Describe("NativeQuery", func() {
 	}
 
 	BeforeEach(func() {
+		if runtime.GOOS == "windows" {
+			Skip("NativeQuery shell-stub specs test Unix package managers")
+		}
 		var err error
 		sleep, err = exec.LookPath("sleep")
 		Expect(err).NotTo(HaveOccurred())

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -15,7 +16,7 @@ func TestTemplateExec(t *testing.T) {
 }
 
 var _ = BeforeEach(func() {
-	GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+	testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 	GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 	GinkgoT().Setenv("DEVEX_STATE_DIR", "")
 	GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", filepath.Join(GinkgoT().TempDir(), "team"))

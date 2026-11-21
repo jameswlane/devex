@@ -15,6 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/mcpserver"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	. "github.com/onsi/ginkgo/v2"
@@ -32,7 +33,7 @@ var _ = Describe("MCP execution snapshots", func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_CONFIG_DIR", filepath.Join(home, "config"))
 		GinkgoT().Setenv("DEVEX_DATA_DIR", filepath.Join(home, "data"))
 		viper.Set(state.DBPathConfigKey, filepath.Join(home, "state.db"))
@@ -151,6 +152,9 @@ var _ = Describe("MCP execution snapshots", func() {
 	})
 
 	It("returns a failed structured uninstall with approved recovery paths", func() {
+		if runtime.GOOS == "windows" {
+			Skip("curlpipe inline uninstall and POSIX 0500 directory permissions require Unix")
+		}
 		home := os.Getenv("HOME")
 		dataPath := filepath.Join(home, "cleanup", "data")
 		Expect(os.MkdirAll(filepath.Dir(dataPath), 0700)).To(Succeed())
@@ -213,6 +217,9 @@ var _ = Describe("MCP execution snapshots", func() {
 			return nil
 		}
 		shouldFail := transition != "unchanged" && transition != "already missing"
+		if !shouldFail && runtime.GOOS == "windows" {
+			Skip("POSIX post-install shell hook requires bash")
+		}
 		if consumer == "MCP" {
 			plan := prepare()
 			r := call("install_apps", mcpserver.ExecuteInput{PlanID: plan.PlanID, Digest: plan.Digest})

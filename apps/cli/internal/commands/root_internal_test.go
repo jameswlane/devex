@@ -11,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
@@ -29,7 +30,7 @@ var _ = Describe("Bare root command", func() {
 		for _, key := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE", "TERM", "DEVEX_CONFIG"} {
 			GinkgoT().Setenv(key, "")
 		}
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		repo = mocks.NewMockRepository()
 		output.Reset()
 		calls = 0
@@ -127,7 +128,7 @@ var _ = Describe("Runtime logging configuration", func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		DeferCleanup(log.InitTestLogger)
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		for _, key := range []string{"DEVEX_LOG_LEVEL", "DEVEX_VERBOSE", "DEVEX_DEBUG", "DEBUG", "DEVEX_QUIET", "DEVEX_CONFIG"} {
 			GinkgoT().Setenv(key, "")
 		}
@@ -210,7 +211,7 @@ var _ = Describe("Root platform support help", func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		var output, diagnostics bytes.Buffer
 		cmd := newRootCmd("test", mocks.NewMockRepository(), config.CrossPlatformSettings{}, rootOptions{
 			runSetup: func(*cobra.Command, []string) error {

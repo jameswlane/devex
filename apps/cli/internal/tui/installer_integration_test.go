@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -199,6 +200,9 @@ func (m *MockCommandExecutor) ExecuteCommand(ctx context.Context, command string
 	}
 
 	// Return a fast, silent command that respects context cancellation
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "cmd", "/c", "exit", "0"), nil
+	}
 	// true exits immediately with success (/bin/true on Linux, /usr/bin/true on macOS)
 	cmd := exec.CommandContext(ctx, "true")
 	return cmd, nil

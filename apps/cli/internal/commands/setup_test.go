@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -395,11 +397,7 @@ var _ = Describe("Setup Command", func() {
 
 		BeforeEach(func() {
 			homeDir = tempDir
-			os.Setenv("HOME", homeDir)
-		})
-
-		AfterEach(func() {
-			os.Unsetenv("HOME")
+			testhelper.SetProfileEnv(GinkgoT(), homeDir)
 		})
 
 		Context("file copying operations", func() {
@@ -451,6 +449,9 @@ var _ = Describe("Setup Command", func() {
 			})
 
 			It("handles permission errors appropriately", func() {
+				if runtime.GOOS == "windows" {
+					Skip("POSIX 0555 directory mode does not prevent owner writes on Windows")
+				}
 				// Create a read-only directory to test permission handling
 				readOnlyDir := filepath.Join(tempDir, "readonly")
 				err := os.MkdirAll(readOnlyDir, 0555)
@@ -496,7 +497,7 @@ var _ = Describe("Setup Command", func() {
 		BeforeEach(func() {
 			homeDir = tempDir
 			devexDir = filepath.Join(homeDir, ".local", "share", "devex")
-			os.Setenv("HOME", homeDir)
+			testhelper.SetProfileEnv(GinkgoT(), homeDir)
 
 			// Create mock directory structure
 			assetsDir := filepath.Join(devexDir, "assets")
@@ -515,10 +516,6 @@ var _ = Describe("Setup Command", func() {
 				err := os.MkdirAll(filepath.Join(assetsDir, dir), 0755)
 				Expect(err).ToNot(HaveOccurred())
 			}
-		})
-
-		AfterEach(func() {
-			os.Unsetenv("HOME")
 		})
 
 		It("creates proper directory structure", func() {

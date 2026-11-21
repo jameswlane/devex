@@ -8,8 +8,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/jameswlane/devex/apps/cli/internal/cache"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("CacheManager", func() {
@@ -23,6 +26,7 @@ var _ = Describe("CacheManager", func() {
 		var err error
 		tempDir, err = os.MkdirTemp("", "devex-cache-test-*")
 		Expect(err).NotTo(HaveOccurred())
+		testhelper.SetProfileEnv(GinkgoT(), tempDir)
 
 		settings = config.CrossPlatformSettings{
 			HomeDir: tempDir,
@@ -42,7 +46,7 @@ var _ = Describe("CacheManager", func() {
 	Describe("NewCacheManager", func() {
 		Context("when creating a new cache manager", func() {
 			It("should create all required directories", func() {
-				cacheDir := filepath.Join(tempDir, ".cache", "devex")
+				cacheDir := devexpaths.ForHome(tempDir).Cache
 				Expect(cacheDir).To(BeADirectory())
 				Expect(filepath.Join(cacheDir, "downloads")).To(BeADirectory())
 				Expect(filepath.Join(cacheDir, "metadata")).To(BeADirectory())
@@ -51,7 +55,7 @@ var _ = Describe("CacheManager", func() {
 			})
 
 			It("should create an index file", func() {
-				indexFile := filepath.Join(tempDir, ".cache", "devex", "index.json")
+				indexFile := filepath.Join(devexpaths.ForHome(tempDir).Cache, "index.json")
 				Expect(indexFile).To(BeAnExistingFile())
 			})
 		})

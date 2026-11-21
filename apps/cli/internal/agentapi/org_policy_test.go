@@ -10,6 +10,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -33,7 +34,7 @@ var _ = Describe("Organization policy installation plans", func() {
 		home = GinkgoT().TempDir()
 		teamDir = filepath.Join(home, "team")
 		policyPath = filepath.Join(teamDir, "policy.yaml")
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
 		original := security.SystemOrgPolicyPath
 		security.SystemOrgPolicyPath = filepath.Join(home, "system-policy.yaml")

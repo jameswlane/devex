@@ -13,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -36,7 +37,7 @@ var _ = Describe("ValidateConfig", func() {
 
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		settings = config.CrossPlatformSettings{HomeDir: home}
 	})
 

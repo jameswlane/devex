@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -72,7 +73,9 @@ var _ = Describe("Shipped default configuration tree and manifest", func() {
 			manifestPath := filepath.Join(configDir, config.ShippedManifestFile)
 			info, err := os.Stat(manifestPath)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0600)))
+			if runtime.GOOS != "windows" {
+				Expect(info.Mode().Perm()).To(Equal(os.FileMode(0600)))
+			}
 
 			manifest := readManifest(configDir)
 			Expect(manifest.Files).To(HaveKeyWithValue(relPath, shippedHash))
