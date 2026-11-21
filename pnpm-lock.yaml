@@ -380,6 +380,8 @@ importers:
 
   packages/package-manager-snap: {}
 
+  packages/package-manager-winget: {}
+
   packages/package-manager-xbps: {}
 
   packages/package-manager-yay: {}

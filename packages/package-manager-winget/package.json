@@ -1,0 +1,47 @@
+{
+	"name": "@devex/package-manager-winget",
+	"private": true,
+	"version": "0.1.0",
+	"description": "Windows Package Manager (winget) plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "node ../../scripts/turbo/go-task.mjs go build -o devex-plugin-package-manager-winget .",
+		"dev": "node ../../scripts/turbo/go-task.mjs go build -race -o devex-plugin-package-manager-winget .",
+		"test": "node ../../scripts/turbo/go-task.mjs go test ./...",
+		"lint": "node ../../scripts/turbo/go-task.mjs golangci-lint run --allow-parallel-runners",
+		"download": "node ../../scripts/turbo/go-task.mjs go mod download",
+		"mod": "node ../../scripts/turbo/go-task.mjs go mod tidy",
+		"vulncheck": "node ../../scripts/turbo/go-task.mjs vulncheck"
+	},
+	"keywords": [
+		"winget",
+		"windows",
+		"package-manager"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-winget"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"windows"
+			],
+			"dependencies": [
+				"winget"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}
