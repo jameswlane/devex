@@ -32,6 +32,7 @@
 				"MAX_PAGE_SIZE",
 				"NEXT_PHASE",
 				"NEXT_PUBLIC_*",
+				"!NEXT_PUBLIC_VERCEL_URL",
 				"NODE_ENV",
 				"NONCE_WINDOW",
 				"PLUGIN_VERSION",
@@ -56,9 +57,9 @@
 				"TRANSFORMATION_CACHE_TTL",
 				"UPSTASH_REDIS_REST_TOKEN",
 				"UPSTASH_REDIS_REST_URL",
-				"VERCEL",
-				"VERCEL_URL"
+				"VERCEL"
 			],
+			"passThroughEnv": ["KV_REST_API_READ_ONLY_TOKEN", "POSTGRES_URL"],
 			"dependsOn": ["^build", "db:generate"]
 		},
 		"test": {
@@ -92,6 +93,7 @@
 				"MAX_PAGE_SIZE",
 				"NEXT_PHASE",
 				"NEXT_PUBLIC_*",
+				"!NEXT_PUBLIC_VERCEL_URL",
 				"NODE_ENV",
 				"NONCE_WINDOW",
 				"PLUGIN_VERSION",
@@ -116,8 +118,7 @@
 				"TRANSFORMATION_CACHE_TTL",
 				"UPSTASH_REDIS_REST_TOKEN",
 				"UPSTASH_REDIS_REST_URL",
-				"VERCEL",
-				"VERCEL_URL"
+				"VERCEL"
 			],
 			"dependsOn": ["db:generate"]
 		},
@@ -138,6 +139,7 @@
 				"DEFAULT_RATE_LIMIT_MAX",
 				"DEFAULT_RATE_LIMIT_WINDOW",
 				"DIRECT_DATABASE_URL",
+				"ENABLE_DB_HEALTH_POLLING",
 				"ENABLE_WARMUP",
 				"GITHUB_BASE_URL",
 				"GITHUB_OWNER",
@@ -152,6 +154,7 @@
 				"MAX_PAGE_SIZE",
 				"NEXT_PHASE",
 				"NEXT_PUBLIC_*",
+				"!NEXT_PUBLIC_VERCEL_URL",
 				"NODE_ENV",
 				"NONCE_WINDOW",
 				"PLUGIN_VERSION",
@@ -176,8 +179,7 @@
 				"TRANSFORMATION_CACHE_TTL",
 				"UPSTASH_REDIS_REST_TOKEN",
 				"UPSTASH_REDIS_REST_URL",
-				"VERCEL",
-				"VERCEL_URL"
+				"VERCEL"
 			],
 			"dependsOn": ["db:generate"]
 		},
@@ -198,6 +200,7 @@
 				"DEFAULT_RATE_LIMIT_MAX",
 				"DEFAULT_RATE_LIMIT_WINDOW",
 				"DIRECT_DATABASE_URL",
+				"ENABLE_DB_HEALTH_POLLING",
 				"ENABLE_WARMUP",
 				"GITHUB_BASE_URL",
 				"GITHUB_OWNER",
@@ -212,6 +215,7 @@
 				"MAX_PAGE_SIZE",
 				"NEXT_PHASE",
 				"NEXT_PUBLIC_*",
+				"!NEXT_PUBLIC_VERCEL_URL",
 				"NODE_ENV",
 				"NONCE_WINDOW",
 				"PLUGIN_VERSION",
@@ -236,8 +240,7 @@
 				"TRANSFORMATION_CACHE_TTL",
 				"UPSTASH_REDIS_REST_TOKEN",
 				"UPSTASH_REDIS_REST_URL",
-				"VERCEL",
-				"VERCEL_URL"
+				"VERCEL"
 			]
 		},
 		"typecheck": {
@@ -250,8 +253,9 @@
 				"DATABASE_URL",
 				"DIRECT_DATABASE_URL",
 				"PRISMA_DATABASE_URL",
-				"POSTGRES_URL"
+				"!NEXT_PUBLIC_VERCEL_URL"
 			],
+			"passThroughEnv": ["POSTGRES_URL"],
 			"outputs": ["generated/**"]
 		},
 		"db:push": {

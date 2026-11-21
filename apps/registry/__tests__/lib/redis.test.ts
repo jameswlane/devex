@@ -351,5 +351,27 @@ describe("Redis Store System", () => {
 			const result = await store.get(specialKey);
 			expect(result).toBe("special-value");
 		});
+
+		it("handles concurrent incrWithExpire calls and preserves expiry across writes", async () => {
+			vi.useFakeTimers();
+			try {
+				const counts = await Promise.all([
+					store.incrWithExpire("bucket", 10),
+					store.incrWithExpire("bucket", 10),
+					store.incrWithExpire("bucket", 10),
+				]);
+				expect(counts.sort((a: number, b: number) => a - b)).toEqual([1, 2, 3]);
+				expect(await store.get("bucket")).toBe("3");
+
+				await vi.advanceTimersByTimeAsync(6_000);
+				expect(await store.incrWithExpire("bucket", 10)).toBe(4);
+
+				await vi.advanceTimersByTimeAsync(4_001);
+				expect(await store.get("bucket")).toBeNull();
+				expect(await store.incrWithExpire("bucket", 10)).toBe(1);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
 	});
 });

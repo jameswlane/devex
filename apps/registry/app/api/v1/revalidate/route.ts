@@ -41,6 +41,11 @@ async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
 					waitForCompletion: true,
 				});
 				break;
+			case "registry-cdn":
+				await invalidateRegistryCache("all", undefined, {
+					waitForCompletion: true,
+				});
+				break;
 			case "tag":
 				if (!tags || !Array.isArray(tags)) {
 					return NextResponse.json(
@@ -98,7 +103,7 @@ async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
 				return NextResponse.json(
 					{
 						error:
-							"Invalid 'type' parameter. Use: tag, path, stats, entity, all, or plugin-cdn",
+							"Invalid 'type' parameter. Use: tag, path, stats, entity, all, plugin-cdn, or registry-cdn",
 					},
 					{ status: 400 },
 				);

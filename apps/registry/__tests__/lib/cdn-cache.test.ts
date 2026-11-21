@@ -4,6 +4,7 @@ import {
 	invalidateCdnTags,
 	pluginCacheTags,
 	requestPluginCdnPurge,
+	requestRegistryCdnPurge,
 } from "@/lib/cdn-cache";
 
 vi.mock("@vercel/functions", () => ({
@@ -78,6 +79,23 @@ describe("CDN cache tags", () => {
 			redirect: "error",
 			headers: { Authorization: "Bearer test-key" },
 			body: JSON.stringify({ type: "plugin-cdn" }),
+			signal: expect.any(AbortSignal),
+		});
+	});
+	it("requests a full registry CDN purge after database sync", async () => {
+		process.env.REVALIDATE_API_KEY = "test-key";
+		process.env.REGISTRY_URL = "https://registry.devex.sh";
+		fetchMock.mockResolvedValue(new Response("{}"));
+		await requestRegistryCdnPurge();
+		const lastCall = fetchMock.mock.calls.at(-1);
+		expect(lastCall).toBeDefined();
+		const [url, options] = lastCall ?? [];
+		expect(String(url)).toBe("https://registry.devex.sh/api/v1/revalidate");
+		expect(options).toMatchObject({
+			method: "POST",
+			redirect: "error",
+			headers: { Authorization: "Bearer test-key" },
+			body: JSON.stringify({ type: "registry-cdn" }),
 			signal: expect.any(AbortSignal),
 		});
 	});

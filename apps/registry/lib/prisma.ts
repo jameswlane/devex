@@ -154,10 +154,22 @@ class ConnectionPoolManager {
 	}
 
 	private startHealthMonitoring(): void {
+		// Background polling is opt-in outside serverless/test/build environments
+		// to avoid waking Fluid Compute instances with periodic SELECT 1 queries.
+		if (
+			process.env.ENABLE_DB_HEALTH_POLLING !== "true" ||
+			process.env.VERCEL === "1" ||
+			process.env.NODE_ENV === "test" ||
+			process.env.NEXT_PHASE === "phase-production-build"
+		) {
+			return;
+		}
+
 		// Check connection health every 30 seconds
 		this.healthCheckInterval = setInterval(async () => {
 			await this.performHealthCheck();
 		}, 30000);
+		this.healthCheckInterval.unref?.();
 	}
 
 	private async performHealthCheck(): Promise<void> {
@@ -205,11 +217,9 @@ const globalForPrisma = globalThis as unknown as {
 // Create the client instance
 const prismaInstance = globalForPrisma.prisma ?? createPrismaClient();
 
-// Ensure the prisma instance is re-used during hot-reload
+// Reuse the Prisma instance across hot reloads and warm serverless invocations
 // to prevent creating multiple database connections
-if (process.env.NODE_ENV !== "production") {
-	globalForPrisma.prisma = prismaInstance;
-}
+globalForPrisma.prisma = prismaInstance;
 
 // Export the accelerated client with proper typing
 export const prisma = prismaInstance;

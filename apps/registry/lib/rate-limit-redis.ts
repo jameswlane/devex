@@ -26,13 +26,11 @@ export class RedisRateLimitStore {
 		const windowKey = `ratelimit:${key}:${Math.floor(now / windowMs)}`;
 
 		try {
-			// Use Redis pipeline for atomic operations
-			const count = await this.redis.incr(windowKey);
-
-			// Set expiration only on first increment
-			if (count === 1) {
-				await this.redis.expire(windowKey, Math.ceil(windowMs / 1000));
-			}
+			// Atomically increment and set TTL on first write in one Redis command
+			const count = await this.redis.incrWithExpire(
+				windowKey,
+				Math.ceil(windowMs / 1000),
+			);
 
 			return {
 				count,
@@ -163,6 +161,29 @@ function defaultKeyGenerator(req: NextRequest): string {
 	return `${ip}:${pathname}`;
 }
 
+function isSharedCacheable(headers: Headers): boolean {
+	const cdnHeaders = [
+		headers.get("Vercel-CDN-Cache-Control"),
+		headers.get("CDN-Cache-Control"),
+	];
+	if (
+		cdnHeaders.some(
+			(value) =>
+				value !== null &&
+				/\b(public|(?:s-)?max-age=[1-9]\d*)\b/i.test(value) &&
+				!/\b(no-store|private)\b/i.test(value),
+		)
+	) {
+		return true;
+	}
+	const cacheControl = headers.get("Cache-Control");
+	return (
+		cacheControl !== null &&
+		/\b(public|s-maxage=[1-9]\d*)\b/i.test(cacheControl) &&
+		!/\b(no-store|private)\b/i.test(cacheControl)
+	);
+}
+
 // Redis-based rate limiting middleware
 export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
 	const finalConfig: RateLimitConfig = {
@@ -189,16 +210,18 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
 		}
 
 		try {
-			// Check current rate limit status
-			const current = await redisRateLimitStore.get(key, finalConfig.windowMs);
-			const remaining = current
-				? Math.max(0, finalConfig.maxRequests - current.count)
-				: finalConfig.maxRequests;
-			const resetTime = current?.resetTime || Date.now() + finalConfig.windowMs;
+			// Atomically increment once instead of doing a separate get() before incr()
+			const result = await redisRateLimitStore.increment(
+				key,
+				finalConfig.windowMs,
+			);
 
 			// Check if rate limit exceeded
-			if (current && current.count >= finalConfig.maxRequests) {
-				const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
+			if (result.count > finalConfig.maxRequests) {
+				const retryAfter = Math.max(
+					1,
+					Math.ceil((result.resetTime - Date.now()) / 1000),
+				);
 
 				return NextRes.json(
 					{
@@ -206,14 +229,14 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
 						retryAfter,
 						limit: finalConfig.maxRequests,
 						remaining: 0,
-						reset: new Date(resetTime).toISOString(),
+						reset: new Date(result.resetTime).toISOString(),
 					},
 					{
 						status: 429,
 						headers: {
 							"X-RateLimit-Limit": finalConfig.maxRequests.toString(),
 							"X-RateLimit-Remaining": "0",
-							"X-RateLimit-Reset": new Date(resetTime).toISOString(),
+							"X-RateLimit-Reset": new Date(result.resetTime).toISOString(),
 							"Retry-After": retryAfter.toString(),
 							"X-RateLimit-Policy": `${finalConfig.maxRequests};w=${finalConfig.windowMs / 1000}`,
 						},
@@ -221,30 +244,26 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
 				);
 			}
 
-			// Increment counter
-			const result = await redisRateLimitStore.increment(
-				key,
-				finalConfig.windowMs,
-			);
-
 			// Execute the handler
 			const response = await handler();
 
-			// Add rate limit headers to response
+			// Add per-client rate limit headers only when the response is not shared-cacheable
 			const headers = new Headers(response.headers);
-			headers.set("X-RateLimit-Limit", finalConfig.maxRequests.toString());
-			headers.set(
-				"X-RateLimit-Remaining",
-				Math.max(0, finalConfig.maxRequests - result.count).toString(),
-			);
-			headers.set(
-				"X-RateLimit-Reset",
-				new Date(result.resetTime).toISOString(),
-			);
-			headers.set(
-				"X-RateLimit-Policy",
-				`${finalConfig.maxRequests};w=${finalConfig.windowMs / 1000}`,
-			);
+			if (!isSharedCacheable(headers)) {
+				headers.set("X-RateLimit-Limit", finalConfig.maxRequests.toString());
+				headers.set(
+					"X-RateLimit-Remaining",
+					Math.max(0, finalConfig.maxRequests - result.count).toString(),
+				);
+				headers.set(
+					"X-RateLimit-Reset",
+					new Date(result.resetTime).toISOString(),
+				);
+				headers.set(
+					"X-RateLimit-Policy",
+					`${finalConfig.maxRequests};w=${finalConfig.windowMs / 1000}`,
+				);
+			}
 
 			// Check if we should skip counting this request
 			const status = response.status;

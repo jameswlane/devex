@@ -188,7 +188,10 @@ describe("/api/v1/registry", () => {
 
 			expect(response.status).toBe(200);
 			expect(response.headers.get("Cache-Control")).toBe(
-				"public, max-age=60, s-maxage=240, must-revalidate",
+				"public, max-age=60, must-revalidate",
+			);
+			expect(response.headers.get("Vercel-CDN-Cache-Control")).toBe(
+				"public, s-maxage=3600, stale-while-revalidate=86400",
 			);
 			expect(response.headers.get("Vercel-Cache-Tag")).toBe("plugins,registry");
 			expect(data.base_url).toBe("https://registry.devex.sh/api/v1/plugins");
