@@ -75,16 +75,15 @@ var dnfContracts = []operationContract{
 	},
 	{
 		command:    "update",
-		currentArg: []string{"makecache"},
-		nativeArgv: []string{"makecache"},
+		currentArg: []string{"makecache", "--assumeyes"},
+		nativeArgv: []string{"makecache", "--assumeyes"},
 		elevated:   true,
 	},
 	{
-		command: "search",
-		// Search currently treats all CLI words as one native phrase/regex.
+		command:    "search",
 		args:       []string{"web", "server"},
-		currentArg: []string{"search", "web server"},
-		nativeArgv: []string{"search", "web server"},
+		currentArg: []string{"search", "web", "server"},
+		nativeArgv: []string{"search", "web", "server"},
 	},
 	{
 		command:    "list",

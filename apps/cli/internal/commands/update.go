@@ -212,7 +212,7 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 // maintenanceNativeCommands documents the audited plugin contracts.
 func maintenanceNativeCommands(op packageMaintenanceOperation) []string {
 	commands := map[string][]string{
-		"apt:update": {"apt-get update"}, "dnf:update": {"dnf makecache"},
+		"apt:update": {"apt-get update"}, "dnf:update": {"dnf makecache --assumeyes"},
 		"zypper:update": {"zypper --non-interactive refresh"}, "xbps:update": {"xbps-install --sync"},
 		"eopkg:update": {"eopkg update-repo"}, "emerge:update": {"emerge --ask=n --sync"}, "apk:update": {"apk update"},
 		"apt:upgrade-packages": {"apt-get update", "apt-get install --only-upgrade -y"},
