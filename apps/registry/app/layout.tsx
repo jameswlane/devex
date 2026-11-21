@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import "./globals.css";
 
@@ -56,7 +57,10 @@ export default function RootLayout({
 				<meta name="robots" content="noindex, nofollow" />
 				<meta name="googlebot" content="noindex, nofollow" />
 			</head>
-			<body className="antialiased">{children}</body>
+			<body className="antialiased">
+				{children}
+				<Analytics />
+			</body>
 		</html>
 	);
 }
