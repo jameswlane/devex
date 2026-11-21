@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
@@ -115,5 +116,69 @@ var _ = Describe("Bash shell integration", func() {
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		Expect(string(output)).To(Equal("yes"))
+	})
+})
+
+var _ = Describe("HandleEnsureInstalled shell activation", func() {
+	var (
+		plugin   *main.MisePlugin
+		home     string
+		shellDir string
+	)
+
+	writeShellStub := func(name string) string {
+		path := filepath.Join(shellDir, name)
+		Expect(os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755)).To(Succeed())
+		return path
+	}
+
+	BeforeEach(func() {
+		plugin = &main.MisePlugin{PackageManagerPlugin: sdk.NewPackageManagerPlugin(sdk.PluginInfo{Name: "package-manager-mise", Version: "test"}, "mise")}
+		plugin.InitLogger(sdk.NewDefaultLogger(true))
+
+		home = GinkgoT().TempDir()
+		binDir := GinkgoT().TempDir()
+		shellDir = GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(binDir, "mise"), []byte("#!/bin/sh\nexit 0\n"), 0o755)).To(Succeed())
+
+		GinkgoT().Setenv("HOME", home)
+		GinkgoT().Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	})
+
+	It("configures fish shell activation when mise is already installed", func() {
+		GinkgoT().Setenv("SHELL", writeShellStub("fish"))
+
+		Expect(plugin.HandleEnsureInstalled(context.Background(), nil)).To(Succeed())
+
+		configPath := filepath.Join(home, ".config", "fish", "config.fish")
+		content, err := os.ReadFile(configPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(content)).To(ContainSubstring("mise activate fish"))
+	})
+
+	It("does not duplicate bash activation when called twice", func() {
+		GinkgoT().Setenv("SHELL", writeShellStub("bash"))
+
+		Expect(plugin.HandleEnsureInstalled(context.Background(), nil)).To(Succeed())
+		Expect(plugin.HandleEnsureInstalled(context.Background(), nil)).To(Succeed())
+
+		bashrcPath := filepath.Join(home, ".bashrc")
+		content, err := os.ReadFile(bashrcPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.Count(string(content), "mise activate bash")).To(Equal(1))
+	})
+
+	It("leaves zsh config unchanged when activation is already present", func() {
+		GinkgoT().Setenv("SHELL", writeShellStub("zsh"))
+
+		zshrcPath := filepath.Join(home, ".zshrc")
+		existing := "# existing config\neval \"$(mise activate zsh)\"\n"
+		Expect(os.WriteFile(zshrcPath, []byte(existing), 0o644)).To(Succeed())
+
+		Expect(plugin.HandleEnsureInstalled(context.Background(), nil)).To(Succeed())
+
+		content, err := os.ReadFile(zshrcPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(content)).To(Equal(existing))
 	})
 })
