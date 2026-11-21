@@ -344,6 +344,10 @@ func (vm *VersionManager) calculateNextVersion(current *VersionInfo) (string, er
 		return CurrentVersion, nil
 	}
 
+	if current.Version == CurrentVersion {
+		return "0.0.1", nil
+	}
+
 	v, err := semver.NewVersion(current.Version)
 	if err != nil {
 		return "", fmt.Errorf("invalid current version: %w", err)
@@ -390,6 +394,10 @@ func (vm *VersionManager) calculateConfigHash() (string, error) {
 }
 
 func (vm *VersionManager) saveCurrentVersion(info *VersionInfo) error {
+	if err := os.MkdirAll(filepath.Dir(vm.versionFile), 0750); err != nil {
+		return fmt.Errorf("failed to create version directory: %w", err)
+	}
+
 	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		return err

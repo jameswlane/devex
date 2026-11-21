@@ -359,7 +359,17 @@ func (bm *BackupManager) ensureBackupsDir() error {
 }
 
 func (bm *BackupManager) generateBackupID() string {
-	return fmt.Sprintf("backup-%s", time.Now().Format(BackupTimeFormat))
+	base := fmt.Sprintf("backup-%s", time.Now().Format(BackupTimeFormat))
+	candidate := base
+	// Only an existing entry is a collision; any other Lstat error ends the
+	// search so the following MkdirAll can report it.
+	for i := 1; ; i++ {
+		if _, err := os.Lstat(filepath.Join(bm.backupsDir, candidate)); err != nil {
+			break
+		}
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
+	return candidate
 }
 
 func (bm *BackupManager) collectFiles(dir string, include, exclude []string) ([]string, error) {

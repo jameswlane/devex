@@ -52,6 +52,16 @@ var _ = Describe("Backup manager", func() {
 		Expect(preRestoreBackups()).To(HaveLen(1))
 	})
 
+	It("assigns distinct IDs to backups created within the same second", func() {
+		second, err := manager.CreateBackup(backup.BackupOptions{Type: "version", Compress: true})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(second.ID).NotTo(Equal(id))
+
+		backups, err := manager.ListBackups("", 0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(backups).To(HaveLen(2))
+	})
+
 	Context("on a machine with no configuration yet", func() {
 		BeforeEach(func() {
 			Expect(os.RemoveAll(filepath.Dir(configDir))).To(Succeed())
