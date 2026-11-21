@@ -1,3 +1,5 @@
+//go:build unix
+
 package utils_test
 
 import (
