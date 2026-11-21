@@ -56,14 +56,14 @@ lifecycle:
           metadata:
             tool: node
   maintain:
-    # Re-running `mise use` moves Node.js to the newest release that matches
+    # Running `mise upgrade` moves Node.js to the newest release that matches
     # the version prefix recorded at install time.
     - id: node-update
       order: 10
       if: has_resource("node")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.node.external_id }}"
   status:
