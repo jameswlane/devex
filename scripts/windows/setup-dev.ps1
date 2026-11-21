@@ -128,9 +128,9 @@ function Get-MiseMissingTools {
     try {
         $ErrorActionPreference = 'Continue'
         if ($RepoRoot) {
-            $raw = & mise -C $RepoRoot ls --current --missing --no-header 2>&1
+            $raw = & mise -C $RepoRoot ls --current --no-global --missing --no-header 2>$null
         } else {
-            $raw = & mise ls --current --missing --no-header 2>&1
+            $raw = & mise ls --current --no-global --missing --no-header 2>$null
         }
         $exitCode = $LASTEXITCODE
     } finally {
@@ -144,21 +144,19 @@ function Get-MiseMissingTools {
     return [pscustomobject]@{
         ExitCode = $exitCode
         Missing  = $missing
-        Output   = ($lines -join ' ')
     }
 }
 
 function Invoke-MiseTrustAndInstall {
     param([string]$RepoRoot)
-    if ($RepoRoot) {
-        & mise -C $RepoRoot trust | Out-Host
-        if ($LASTEXITCODE -ne 0) { return $LASTEXITCODE }
-        & mise -C $RepoRoot install | Out-Host
-        return $LASTEXITCODE
-    }
-    & mise trust | Out-Host
+    $location = @()
+    if ($RepoRoot) { $location = @('-C', $RepoRoot) }
+    & mise @location trust | Out-Host
     if ($LASTEXITCODE -ne 0) { return $LASTEXITCODE }
-    & mise install | Out-Host
+    # Install only the project's missing tools, not tools from the global config.
+    $tools = @((Get-MiseMissingTools -RepoRoot $RepoRoot).Missing)
+    if ($tools.Count -eq 0) { return 0 }
+    & mise @location install @tools | Out-Host
     return $LASTEXITCODE
 }
 
@@ -226,7 +224,8 @@ function Get-SetupChecks {
         -Detail 'installed' `
         -Fix 'winget install --id Git.Git -e --source winget' `
         -FixKind 'Winget' `
-        -FixTarget 'Git.Git'))
+        -FixTarget 'Git.Git' `
+        -NeedsNewShell $true))
 
     $hasPwsh = Test-CommandExists -Name 'pwsh'
     [void]$checks.Add((New-CheckResult `
@@ -353,7 +352,7 @@ function Get-SetupChecks {
             -Name 'mise toolchain' `
             -Status 'MISSING' `
             -Required $true `
-            -Fix 'Install mise first, open a new shell, then run: mise trust && mise install' `
+            -Fix 'Install mise first, open a new shell, then run: mise trust; mise install' `
             -FixKind 'None'))
     } else {
         $miseCheck = Get-MiseMissingTools -RepoRoot $repoRoot
@@ -362,7 +361,7 @@ function Get-SetupChecks {
                 -Name 'mise toolchain' `
                 -Status 'MISSING' `
                 -Required $true `
-                -Fix 'mise trust && mise install (mise check failed; config may need trust)' `
+                -Fix 'mise trust; mise install (mise check failed; config may need trust)' `
                 -FixKind 'Mise' `
                 -RepoRoot $repoRoot))
         } elseif ($miseCheck.Missing.Count -gt 0) {
@@ -371,7 +370,7 @@ function Get-SetupChecks {
                 -Name 'mise toolchain' `
                 -Status 'MISSING' `
                 -Required $true `
-                -Fix "mise trust && mise install (missing: $missingList)" `
+                -Fix "mise trust; mise install (missing: $missingList)" `
                 -FixKind 'Mise' `
                 -RepoRoot $repoRoot))
         } else {
@@ -415,7 +414,7 @@ function Invoke-SetupFix {
                     if ($code -ne 0) {
                         Write-SetupMessage "Failed to install $($check.Name) via winget (exit $code)."
                     } elseif ($check.NeedsNewShell) {
-                        Write-SetupMessage "Installed $($check.Name). Open a new shell so PATH picks it up, then run: mise trust && mise install"
+                        Write-SetupMessage "Installed $($check.Name). Open a new shell so PATH picks it up, then run this script with -Fix again."
                     }
                 }
             }
@@ -441,7 +440,7 @@ function Invoke-SetupFix {
             }
             'Mise' {
                 $target = if ($check.RepoRoot) { $check.RepoRoot } else { (Get-Location).Path }
-                if ($PSCmdlet.ShouldProcess($target, 'mise trust && mise install')) {
+                if ($PSCmdlet.ShouldProcess($target, 'mise trust; mise install')) {
                     $code = Invoke-MiseTrustAndInstall -RepoRoot $check.RepoRoot
                     if ($code -ne 0) {
                         Write-SetupMessage "mise trust/install failed (exit $code)."

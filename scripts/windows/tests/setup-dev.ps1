@@ -340,6 +340,24 @@ try {
     $result = Invoke-WingetInstall -Id 'Microsoft.PowerShell'
     Assert ($result -is [int] -and $result -eq 7) "Invoke-WingetInstall must return the failing exit code, got: $($result -join ' | ')"
 
+    # 13. mise checks only project tools and installs only the missing ones after trust
+    $script:miseCalls = New-Object System.Collections.ArrayList
+    function mise { [void]$script:miseCalls.Add(($args -join ' ')); $global:LASTEXITCODE = 0 }
+    $script:state.MiseMissing = @('go', 'pipx:yamllint')
+    Assert ((Invoke-MiseTrustAndInstall -RepoRoot $tempDir) -eq 0) 'mise trust/install should succeed'
+    $miseSummary = $script:miseCalls -join ' | '
+    Assert ($miseSummary -ceq "-C $tempDir trust | -C $tempDir install go pipx:yamllint") "Unexpected mise calls: $miseSummary"
+    $realMiseCheck = ($ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-MiseMissingTools'
+    }, $false) | Select-Object -First 1).Extent.Text
+    Invoke-Expression $realMiseCheck
+    $script:miseCalls.Clear()
+    function mise { [void]$script:miseCalls.Add(($args -join ' ')); Write-Output 'node  24.1.0 (missing)  C:\proj\.mise.toml  24'; $global:LASTEXITCODE = 0 }
+    $check = Get-MiseMissingTools -RepoRoot $tempDir
+    Assert ($script:miseCalls[0] -ceq "-C $tempDir ls --current --no-global --missing --no-header") "Unexpected mise ls call: $($script:miseCalls[0])"
+    Assert ((@($check.Missing) -join ',') -ceq 'node') "Unexpected missing tools: $($check.Missing -join ',')"
+
     Write-Host 'Windows dev setup tests passed.'
 } finally {
     Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue

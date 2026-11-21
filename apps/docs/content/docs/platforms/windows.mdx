@@ -21,7 +21,7 @@ Windows 11. Set up these prerequisites on a fresh machine before running DevEx:
 - **Windows Terminal.** Recommended (`wt`) for UTF-8 output and modern TUI
   rendering.
 - **Developer Mode.** Required so non-admin processes can create symlinks.
-  Enable it in Windows Settings under **System > For developers**.
+  Search Windows Settings for **Developer Mode** and turn it on.
 - **Win32 long paths.** Required for deep paths in Go modules and Node
   packages. Set `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled`
   to `1` from an elevated shell.
@@ -51,7 +51,8 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\setup-dev.ps1 -Fix
 
 Developer Mode and Win32 long paths write to `HKLM:` and need an elevated
 shell. Re-run the `-Fix` command from an Administrator terminal to apply them.
-After installing `mise`, open a new shell so `PATH` picks it up.
+After installing Git or `mise`, open a new shell so `PATH` picks it up, then
+run the `-Fix` command again.
 
 ### Line endings and toolchain
 
@@ -61,12 +62,14 @@ for Go, YAML, and shell scripts, and CRLF only for `.ps1`, `.psm1`, `.bat`, and
 `.cmd`. This prevents Git for Windows (`core.autocrlf=true`) from breaking
 `gofmt`, `yamlfmt`, and Bash scripts.
 
-Install the repository toolchain with `mise`, then build and lint the CLI from
-`apps/cli`:
+Install the repository toolchain with `mise`. The repository's `.mise.toml`
+doesn't pin [Task](https://taskfile.dev), so install it as well, then open a new
+shell. Build and lint the CLI from `apps/cli`:
 
 ```powershell
 mise trust
 mise install
+mise use -g task
 cd apps/cli
 task build
 task lint
