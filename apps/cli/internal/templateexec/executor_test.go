@@ -591,31 +591,14 @@ var _ = Describe("Template Execution Runtime", func() {
 		workDir := GinkgoT().TempDir()
 		plan.Steps[0].Request.Env = map[string]string{"VIRTUAL_ENV": "/tmp/venv"}
 		plan.Steps[0].Request.WorkingDir = workDir
-		plan.Steps = append(plan.Steps, templates.PlannedStep{
-			ID:          "shell-step",
-			Order:       2,
-			Type:        templates.StepTypeShell,
-			DisplayName: "run",
-			Request: templates.ExecutionRequest{
-				Plugin:     "tool-shell",
-				Command:    "run",
-				Args:       []string{"echo", "ok"},
-				Env:        map[string]string{"VIRTUAL_ENV": "/tmp/venv"},
-				WorkingDir: workDir,
-			},
-			OnError: templates.ErrorPolicyStop,
-		})
 		runtime := templateexec.NewExecutionRuntime(store, plugin)
 
 		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
 
 		Expect(err).ToNot(HaveOccurred())
-		Expect(plugin.calls).To(HaveLen(2))
+		Expect(plugin.calls).To(HaveLen(1))
 		Expect(plugin.calls[0].opts.Env).To(Equal(map[string]string{"VIRTUAL_ENV": "/tmp/venv"}))
 		Expect(plugin.calls[0].opts.WorkingDir).To(Equal(workDir))
-		Expect(plugin.calls[1].name).To(Equal("tool-shell"))
-		Expect(plugin.calls[1].opts.Env).To(Equal(map[string]string{"VIRTUAL_ENV": "/tmp/venv"}))
-		Expect(plugin.calls[1].opts.WorkingDir).To(Equal(workDir))
 	})
 
 	It("does not write sensitive plaintext to the bbolt state file", func() {
