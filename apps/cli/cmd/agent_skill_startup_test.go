@@ -26,7 +26,7 @@ var _ = Describe("Agent skill startup", func() {
 		goBin, buildEnv := isolatedGoRunEnv(home)
 		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(boundedCtx, goBin, "build", "-o", binary, "main.go")
-		build.Env = buildEnv
+		build.Env = goBuildEnv(buildEnv)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 

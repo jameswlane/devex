@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -130,13 +131,20 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	return filepath.Join(values[0], "bin", "go"), env
 }
 
+// goBuildEnv gives `go build` the parent's per-user directories. Go keeps
+// telemetry counters under APPDATA on Windows, and the uploader it starts in the
+// background would otherwise keep changing them inside the spec's isolated home.
+func goBuildEnv(env []string) []string {
+	return append(slices.Clone(env), "APPDATA="+os.Getenv("APPDATA"), "LOCALAPPDATA="+os.Getenv("LOCALAPPDATA"))
+}
+
 var _ = Describe("CLI startup regression coverage", func() {
 	It("keeps inspection commands usable with a linked legacy config and previews tracked applications", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
 		goBin, env := isolatedGoRunEnv(home)
 		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
-		build.Env = env
+		build.Env = goBuildEnv(env)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		// Set a legacy link that migration refuses before touching any source.
@@ -195,7 +203,7 @@ var _ = Describe("Runtime registry catalog", func() {
 		env = append(env, "DEVEX_PLUGIN_REGISTRY_URL="+server.URL, "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"))
 		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
-		build.Env = env
+		build.Env = goBuildEnv(env)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		list := exec.CommandContext(ctx, binary, "list", "available", "--search", "registry-only", "--category", "Dependency", "--format", "json", "--skip-plugin-download")
@@ -265,7 +273,7 @@ var _ = Describe("Runtime registry catalog", func() {
 		env = append(env, "DEVEX_PLUGIN_REGISTRY_URL="+server.URL, "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"))
 		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
-		build.Env = env
+		build.Env = goBuildEnv(env)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		for _, args := range [][]string{

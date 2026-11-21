@@ -19,10 +19,15 @@ var _ = Describe("Agent API startup", func() {
 		goBin, env := isolatedGoRunEnv(home)
 		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
-		build.Env = env
+		build.Env = goBuildEnv(env)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		before := startupSnapshot(home)
+		// Keep the Windows profile directories outside the snapshotted home:
+		// subprocesses DevEx starts there, such as PowerShell, write their own
+		// caches under the profile.
+		profile := GinkgoT().TempDir()
+		env = append(env, "USERPROFILE="+profile, "APPDATA="+filepath.Join(profile, "AppData", "Roaming"), "LOCALAPPDATA="+filepath.Join(profile, "AppData", "Local"))
 		env = append(env, "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"), "DEVEX_STATE_DIR="+filepath.Join(home, "state"), "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_DISABLE_UPDATE_CHECK=true")
 		for _, args := range [][]string{{"platform", "--format", "json"}, {"inventory", "--format", "json"}, {"config", "effective", "--format", "json"}, {"config", "show", "--format", "json"}, {"list", "available", "--format", "json"}, {"status", "--app", "missing", "--format", "json"}} {
 			cmd := exec.CommandContext(ctx, binary, args...)
