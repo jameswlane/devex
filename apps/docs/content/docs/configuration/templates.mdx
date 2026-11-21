@@ -248,7 +248,7 @@ shell:
   working_dir: /tmp
 ```
 
-DevEx looks up `command` on `PATH` and passes each `args` item as one argument. No shell expands variables, globs, pipes, or redirects, so `$HOME` or `*` reach the program unchanged. `command` must be a base executable name such as `git`, not a path, and cannot use template interpolation. Pass dynamic values in `args`. Arguments cannot be shell operators or command substitutions. `env` adds variables to DevEx's own environment, and `working_dir` sets the directory the command runs in. The step fails when the executable exits non-zero, and DevEx prints its output to stderr.
+DevEx looks up `command` on `PATH` and passes each `args` item as one argument. No shell expands variables, globs, pipes, or redirects, so `$HOME` or `*` reach the program unchanged. `command` must be a base executable name such as `git`, not a path, and cannot use template interpolation. Pass dynamic values in `args`. Arguments cannot be shell operators or command substitutions. `env` adds variables to DevEx's own environment, and `working_dir` sets the directory the command runs in. The step fails when the executable exits non-zero, and, like plugin steps, it shares DevEx's stdin and writes its output to stderr.
 
 ## Sensitive Inputs
 

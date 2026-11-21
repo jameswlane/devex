@@ -453,6 +453,20 @@ var _ = Describe("Template Execution Runtime", func() {
 		Expect(store.operations["databases-install-1-001-postgres"].Status).To(Equal(state.OperationStatusFailed))
 	})
 
+	It("returns from a canceled shell step while a background child is still running", func() {
+		plan.Steps[0].Type = templates.StepTypeShell
+		plan.Steps[0].Request = templates.ExecutionRequest{Command: "sh", Args: []string{"-c", "sleep 5 & sleep 5"}}
+		runtime := templateexec.NewExecutionRuntime(store, plugin)
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		started := time.Now()
+		_, err := runtime.Execute(ctx, plan, templateexec.ExecuteOptions{})
+
+		Expect(err).To(HaveOccurred())
+		Expect(time.Since(started)).To(BeNumerically("<", 3*time.Second))
+	})
+
 	It("rejects shell steps that name a plugin or carry an unsafe executable", func() {
 		plan.Steps[0].Type = templates.StepTypeShell
 		plan.Steps[0].Request = templates.ExecutionRequest{Plugin: "tool-shell", Command: "echo"}

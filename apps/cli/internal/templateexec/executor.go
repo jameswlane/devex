@@ -462,12 +462,11 @@ func executeAppHooks(ctx context.Context, hooks []types.InstallCommand) error {
 }
 
 // ShellStepExecutor runs a shell step's executable directly with its argument
-// list. No shell interprets the arguments.
-type ShellStepExecutor struct {
-	Run func(ctx context.Context, request templates.ExecutionRequest) (string, error)
-}
+// list. No shell interprets the arguments. Like plugin steps, the command
+// shares DevEx's stdin and writes its output to stderr.
+type ShellStepExecutor struct{}
 
-func (e ShellStepExecutor) ExecuteStep(ctx context.Context, step templates.PlannedStep) (map[string]any, error) {
+func (ShellStepExecutor) ExecuteStep(ctx context.Context, step templates.PlannedStep) (map[string]any, error) {
 	request := step.Request
 	if request.Plugin != "" {
 		return nil, fmt.Errorf("shell step %q cannot name a plugin; use type 'plugin' for plugin-dispatched steps", step.ID)
@@ -475,24 +474,6 @@ func (e ShellStepExecutor) ExecuteStep(ctx context.Context, step templates.Plann
 	if err := templates.ValidateShellRequest(request.Command, request.Args); err != nil {
 		return nil, fmt.Errorf("shell step %q: %w", step.ID, err)
 	}
-	run := e.Run
-	if run == nil {
-		run = runShellStepCommand
-	}
-	output, err := run(ctx, request)
-	if output != "" {
-		fmt.Fprint(os.Stderr, output)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("%s failed: %w", request.Command, err)
-	}
-	return map[string]any{
-		"command": request.Command,
-		"args":    append([]string(nil), request.Args...),
-	}, nil
-}
-
-func runShellStepCommand(ctx context.Context, request templates.ExecutionRequest) (string, error) {
 	cmd := exec.CommandContext(ctx, request.Command, request.Args...)
 	cmd.Dir = request.WorkingDir
 	if len(request.Env) > 0 {
@@ -501,8 +482,16 @@ func runShellStepCommand(ctx context.Context, request templates.ExecutionRequest
 			cmd.Env = append(cmd.Env, key+"="+value)
 		}
 	}
-	output, err := cmd.CombinedOutput()
-	return string(output), err
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("%s failed: %w", request.Command, err)
+	}
+	return map[string]any{
+		"command": request.Command,
+		"args":    append([]string(nil), request.Args...),
+	}, nil
 }
 
 type FileStepExecutor struct{}

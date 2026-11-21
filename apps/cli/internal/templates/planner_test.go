@@ -491,11 +491,11 @@ var _ = Describe("Template Runtime Planner", func() {
 			Manager: manager,
 			PluginAvailable: func(_ context.Context, name string) bool {
 				checked[name] = true
-				return name != "package-manager-docker"
+				return name != "tool-shell"
 			},
 		}
 
-		_, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+		plan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
 			Action: templates.LifecycleInstall,
 			InputOptions: templates.InputResolverOptions{
 				Answers:        []string{"databases=postgres"},
@@ -504,10 +504,12 @@ var _ = Describe("Template Runtime Planner", func() {
 			ValidatePlugins: true,
 		})
 
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("plugin 'package-manager-docker' is not available"))
+		Expect(err).NotTo(HaveOccurred())
 		Expect(checked).To(HaveKey("package-manager-docker"))
 		Expect(checked).NotTo(HaveKey("tool-shell"))
+		Expect(plan.Steps).To(HaveLen(3))
+		Expect(plan.Steps[2].Type).To(Equal(templates.StepTypeShell))
+		Expect(plan.Steps[2].Request.Plugin).To(BeEmpty())
 	})
 
 	It("plans built-in database lifecycle requests with non-interactive answers", func() {
