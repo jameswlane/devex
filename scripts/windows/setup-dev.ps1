@@ -154,7 +154,9 @@ function Invoke-MiseTrustAndInstall {
     & mise @location trust | Out-Host
     if ($LASTEXITCODE -ne 0) { return $LASTEXITCODE }
     # Install only the project's missing tools, not tools from the global config.
-    $tools = @((Get-MiseMissingTools -RepoRoot $RepoRoot).Missing)
+    $query = Get-MiseMissingTools -RepoRoot $RepoRoot
+    if ($query.ExitCode -ne 0) { return $query.ExitCode }
+    $tools = @($query.Missing)
     if ($tools.Count -eq 0) { return 0 }
     & mise @location install @tools | Out-Host
     return $LASTEXITCODE

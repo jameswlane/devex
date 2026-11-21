@@ -347,6 +347,12 @@ try {
     Assert ((Invoke-MiseTrustAndInstall -RepoRoot $tempDir) -eq 0) 'mise trust/install should succeed'
     $miseSummary = $script:miseCalls -join ' | '
     Assert ($miseSummary -ceq "-C $tempDir trust | -C $tempDir install go pipx:yamllint") "Unexpected mise calls: $miseSummary"
+    $script:miseCalls.Clear()
+    $script:state.MiseExitCode = 37
+    $result = Invoke-MiseTrustAndInstall -RepoRoot $tempDir
+    Assert ($result -eq 37) "A failed post-trust mise query must return its exit code, got: $result"
+    Assert ($script:miseCalls.Count -eq 1) 'mise install must not run when the post-trust query fails'
+    $script:state.MiseExitCode = 0
     $realMiseCheck = ($ast.FindAll({
         param($node)
         $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-MiseMissingTools'
