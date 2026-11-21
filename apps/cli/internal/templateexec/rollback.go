@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -313,7 +314,11 @@ func (e PluginStepExecutor) Compensate(ctx context.Context, c Compensation) erro
 	if e.PluginExecutor == nil {
 		return fmt.Errorf("plugin executor is required")
 	}
-	if err := e.PluginExecutor.ExecutePlugin(ctx, c.Request.Plugin, append([]string{c.Request.Command}, c.Request.Args...)); err != nil {
+	opts := PluginExecOptions{
+		Env:        maps.Clone(c.Request.Env),
+		WorkingDir: c.Request.WorkingDir,
+	}
+	if err := e.PluginExecutor.ExecutePlugin(ctx, c.Request.Plugin, append([]string{c.Request.Command}, c.Request.Args...), opts); err != nil {
 		return err
 	}
 	if e.Repository != nil && c.AppName != "" {

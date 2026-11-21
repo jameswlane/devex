@@ -27,7 +27,7 @@ func (r *appHookRecorder) Run(ctx context.Context, plan sdk.ExecutionPlan, _ sdk
 	return r.err
 }
 
-func (r *appHookRecorder) ExecutePlugin(_ context.Context, _ string, _ []string) error {
+func (r *appHookRecorder) ExecutePlugin(_ context.Context, _ string, _ []string, _ templateexec.PluginExecOptions) error {
 	r.events = append(r.events, "install")
 	return nil
 }

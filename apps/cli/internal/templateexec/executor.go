@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,8 +27,13 @@ type StepExecutor interface {
 	ExecuteStep(ctx context.Context, step templates.PlannedStep) (map[string]any, error)
 }
 
+type PluginExecOptions struct {
+	Env        map[string]string
+	WorkingDir string
+}
+
 type PluginExecutor interface {
-	ExecutePlugin(ctx context.Context, pluginName string, args []string) error
+	ExecutePlugin(ctx context.Context, pluginName string, args []string, opts PluginExecOptions) error
 }
 
 type ExecutionRuntime struct {
@@ -420,7 +426,11 @@ func (e PluginStepExecutor) ExecuteStep(ctx context.Context, step templates.Plan
 			return nil, fmt.Errorf("%s pre-install hook: %w", step.App.Name, err)
 		}
 	}
-	if err := e.PluginExecutor.ExecutePlugin(ctx, step.Request.Plugin, args); err != nil {
+	opts := PluginExecOptions{
+		Env:        maps.Clone(step.Request.Env),
+		WorkingDir: step.Request.WorkingDir,
+	}
+	if err := e.PluginExecutor.ExecutePlugin(ctx, step.Request.Plugin, args, opts); err != nil {
 		return nil, err
 	}
 	if step.App != nil && step.Request.Command == "install" {

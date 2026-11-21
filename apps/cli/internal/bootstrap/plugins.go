@@ -413,6 +413,12 @@ func (b *PluginBootstrap) checkOrgPolicy(pluginName string) error {
 // ExecutePluginWithIO executes a plugin like ExecutePluginWithContext, with
 // caller-owned streams.
 func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams sdk.OperationIO) error {
+	return b.ExecutePluginWithOptions(ctx, pluginName, args, sdk.PluginRunOptions{IO: streams})
+}
+
+// ExecutePluginWithOptions executes a plugin with caller-owned streams,
+// environment overrides, and working directory.
+func (b *PluginBootstrap) ExecutePluginWithOptions(ctx context.Context, pluginName string, args []string, opts sdk.PluginRunOptions) error {
 	if !interaction.IsInteractiveMode() {
 		ctx = sdk.WithUnattended(ctx)
 	}
@@ -435,16 +441,16 @@ func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName st
 
 	manager, eligible := installretry.Eligible(pluginName, args)
 	if !eligible {
-		return b.manager.ExecutePluginWithIO(ctx, pluginName, args, streams)
+		return b.manager.ExecutePluginWithOptions(ctx, pluginName, args, opts)
 	}
 	policy, err := installretry.Configured()
 	if err != nil {
 		return err
 	}
-	return policy.Run(ctx, manager, streams.Stderr, func(stderr io.Writer) error {
-		attemptStreams := streams
-		attemptStreams.Stderr = stderr
-		return b.manager.ExecutePluginWithIO(ctx, pluginName, args, attemptStreams)
+	return policy.Run(ctx, manager, opts.IO.Stderr, func(stderr io.Writer) error {
+		attemptOpts := opts
+		attemptOpts.IO.Stderr = stderr
+		return b.manager.ExecutePluginWithOptions(ctx, pluginName, args, attemptOpts)
 	})
 }
 

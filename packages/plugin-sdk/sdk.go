@@ -1519,8 +1519,22 @@ func (em *ExecutableManager) ExecutePluginWithContext(ctx context.Context, plugi
 	return em.ExecutePluginWithIO(ctx, pluginName, args, OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
 }
 
+// PluginRunOptions configures caller-owned streams, environment overrides, and
+// working directory for executing an installed plugin.
+type PluginRunOptions struct {
+	IO  OperationIO
+	Env []string // KEY=VALUE assignments layered on top of the inherited environment
+	Dir string
+}
+
 // ExecutePluginWithIO executes an installed plugin with caller-owned streams.
 func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams OperationIO) error {
+	return em.ExecutePluginWithOptions(ctx, pluginName, args, PluginRunOptions{IO: streams})
+}
+
+// ExecutePluginWithOptions executes an installed plugin with caller-owned
+// streams, environment overrides, and working directory.
+func (em *ExecutableManager) ExecutePluginWithOptions(ctx context.Context, pluginName string, args []string, opts PluginRunOptions) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -1532,12 +1546,18 @@ func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName
 			return err
 		}
 	}
+	for _, entry := range opts.Env {
+		if !validEnvironmentAssignment(entry) {
+			return fmt.Errorf("plugin environment requires NAME=value assignments")
+		}
+	}
 	plugins := em.ListPluginsWithContext(ctx)
 	pluginInfo, exists := plugins[pluginName]
 	if !exists {
 		return fmt.Errorf("plugin %s is not installed", pluginName)
 	}
 
+	streams := opts.IO
 	var diagnostic diagnosticTail
 	if streams.Stderr == nil {
 		streams.Stderr = io.Discard
@@ -1550,9 +1570,13 @@ func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName
 	}
 	var err error
 	if privilege := PluginOperationPrivilege(pluginInfo.PluginInfo, args); privilege != nil {
-		dir, dirErr := os.Getwd()
-		if dirErr != nil {
-			return dirErr
+		dir := opts.Dir
+		if dir == "" {
+			var dirErr error
+			dir, dirErr = os.Getwd()
+			if dirErr != nil {
+				return dirErr
+			}
 		}
 		request := ExecutionRequest{Privilege: *privilege, Name: pluginInfo.Path, Args: args, Dir: dir}
 		// User plugins may need tools installed outside sudo secure_path. This
@@ -1560,10 +1584,23 @@ func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName
 		if privilege.Scope == ScopeUser {
 			request.Env = []string{"PATH=" + os.Getenv("PATH")}
 		}
+		request.Env = append(request.Env, opts.Env...)
 		err = RunOperation(ctx, request, streams)
 	} else {
+		dir := opts.Dir
+		if dir != "" && !filepath.IsAbs(dir) {
+			cwd, dirErr := os.Getwd()
+			if dirErr != nil {
+				return fmt.Errorf("resolve plugin working directory %q: %w", dir, dirErr)
+			}
+			dir = filepath.Join(cwd, dir)
+		}
 		cmd := NewCommandContext(ctx, pluginInfo.Path, args...)
-		configureOperationCommand(cmd, ExecutionRequest{Unattended: unattendedContext(ctx)})
+		configureOperationCommand(cmd, ExecutionRequest{
+			Unattended: unattendedContext(ctx),
+			Env:        opts.Env,
+			Dir:        dir,
+		})
 		err = runPreparedCommand(cmd, streams)
 	}
 	if ctx.Err() != nil {

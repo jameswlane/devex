@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +22,7 @@ type pluginCall struct {
 	ctx  context.Context
 	name string
 	args []string
+	opts templateexec.PluginExecOptions
 }
 
 type testCtxKey struct{}
@@ -31,8 +33,16 @@ type recordingPluginExecutor struct {
 	delay time.Duration
 }
 
-func (e *recordingPluginExecutor) ExecutePlugin(ctx context.Context, pluginName string, args []string) error {
-	e.calls = append(e.calls, pluginCall{ctx: ctx, name: pluginName, args: append([]string(nil), args...)})
+func (e *recordingPluginExecutor) ExecutePlugin(ctx context.Context, pluginName string, args []string, opts templateexec.PluginExecOptions) error {
+	e.calls = append(e.calls, pluginCall{
+		ctx:  ctx,
+		name: pluginName,
+		args: append([]string(nil), args...),
+		opts: templateexec.PluginExecOptions{
+			Env:        maps.Clone(opts.Env),
+			WorkingDir: opts.WorkingDir,
+		},
+	})
 	if e.delay > 0 {
 		timer := time.NewTimer(e.delay)
 		defer timer.Stop()
@@ -505,15 +515,48 @@ var _ = Describe("Template Execution Runtime", func() {
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(plugin.calls[0].args).To(Equal([]string{"install", "postgres:16", "--password=super-secret"}))
+		Expect(plugin.calls[0].opts.Env).To(Equal(map[string]string{"POSTGRES_PASSWORD": "super-secret"}))
 		run := store.runs[plan.ID]
 		Expect(run.Plan.Steps[0].Request.Args).To(ContainElement("--password=[REDACTED]"))
 		Expect(run.Plan.Steps[0].Request.Env["POSTGRES_PASSWORD"]).To(Equal("[REDACTED]"))
 		op := store.operations["databases-install-1-001-postgres"]
 		Expect(op.Request.Args).To(ContainElement("--password=[REDACTED]"))
 		Expect(op.Outputs["args"]).To(ContainElement("--password=[REDACTED]"))
+		Expect(op.Outputs).ToNot(HaveKey("env"))
 		resource := store.resources["databases-install-1-postgres-devex-postgres"]
 		Expect(resource.Inputs["dsn"]).To(Equal("postgres://postgres:[REDACTED]@localhost/postgres"))
 		Expect(resource.Metadata["password"]).To(Equal("[REDACTED]"))
+	})
+
+	It("passes plugin step env and working_dir to the plugin executor", func() {
+		workDir := GinkgoT().TempDir()
+		plan.Steps[0].Request.Env = map[string]string{"VIRTUAL_ENV": "/tmp/venv"}
+		plan.Steps[0].Request.WorkingDir = workDir
+		plan.Steps = append(plan.Steps, templates.PlannedStep{
+			ID:          "shell-step",
+			Order:       2,
+			Type:        templates.StepTypeShell,
+			DisplayName: "run",
+			Request: templates.ExecutionRequest{
+				Plugin:     "tool-shell",
+				Command:    "run",
+				Args:       []string{"echo", "ok"},
+				Env:        map[string]string{"VIRTUAL_ENV": "/tmp/venv"},
+				WorkingDir: workDir,
+			},
+			OnError: templates.ErrorPolicyStop,
+		})
+		runtime := templateexec.NewExecutionRuntime(store, plugin)
+
+		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(plugin.calls).To(HaveLen(2))
+		Expect(plugin.calls[0].opts.Env).To(Equal(map[string]string{"VIRTUAL_ENV": "/tmp/venv"}))
+		Expect(plugin.calls[0].opts.WorkingDir).To(Equal(workDir))
+		Expect(plugin.calls[1].name).To(Equal("tool-shell"))
+		Expect(plugin.calls[1].opts.Env).To(Equal(map[string]string{"VIRTUAL_ENV": "/tmp/venv"}))
+		Expect(plugin.calls[1].opts.WorkingDir).To(Equal(workDir))
 	})
 
 	It("does not write sensitive plaintext to the bbolt state file", func() {
