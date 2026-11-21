@@ -1,0 +1,28 @@
+name: Firefox Developer Edition
+description: Firefox browser built specifically for web developers
+category: Web Browsers
+default: false
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: firefox-devedition
+  installed_binary: firefox-devedition
+  uninstall_command: firefox-devedition
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  pre_install:
+    - scope: system
+      shell: |
+        set -eu
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y ca-certificates curl
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://packages.mozilla.org/apt/repo-signing-key.gpg -o /etc/apt/keyrings/packages.mozilla.org.asc
+        chmod a+r /etc/apt/keyrings/packages.mozilla.org.asc
+        printf 'deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main\n' \
+          > /etc/apt/sources.list.d/mozilla.list
+        apt-get update

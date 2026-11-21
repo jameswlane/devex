@@ -1,0 +1,33 @@
+name: Google Chrome
+description: Fast, secure web browser built by Google
+category: Web Browsers
+default: false
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: google-chrome-stable
+  installed_binary: google-chrome
+  uninstall_command: google-chrome-stable
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  pre_install:
+    - scope: system
+      shell: |
+        set -eu
+        arch="$(dpkg --print-architecture)"
+        if [ "$arch" != "amd64" ]; then
+          echo "Google Chrome APT packages are only available for amd64 (detected: $arch)." >&2
+          exit 1
+        fi
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y ca-certificates curl gpg
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --batch --yes --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+        chmod a+r /etc/apt/keyrings/google-chrome.gpg
+        printf 'deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main\n' \
+          > /etc/apt/sources.list.d/google-chrome.list
+        apt-get update

@@ -1,0 +1,35 @@
+name: Visual Studio Code
+description: Source-code editor developed by Microsoft
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: code
+  installed_binary: code
+  uninstall_command: code
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  pre_install:
+    - scope: system
+      shell: |
+        set -eu
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y ca-certificates curl gpg
+        install -m 0755 -d /usr/share/keyrings
+        curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --batch --yes --dearmor -o /usr/share/keyrings/microsoft.gpg
+        chmod a+r /usr/share/keyrings/microsoft.gpg
+        cat > /etc/apt/sources.list.d/vscode.sources <<'EOF'
+        Types: deb
+        URIs: https://packages.microsoft.com/repos/code
+        Suites: stable
+        Components: main
+        Architectures: amd64,arm64,armhf
+        Signed-By: /usr/share/keyrings/microsoft.gpg
+        EOF
+        echo "code code/add-microsoft-repo boolean true" | debconf-set-selections
+        apt-get update
