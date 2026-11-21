@@ -1,0 +1,8 @@
+# Normalize line endings: LF everywhere (Go, shell scripts, YAML), CRLF only for
+# Windows-native scripts. Without this, Git for Windows (core.autocrlf=true)
+# checks files out as CRLF, which breaks gofmt and bash scripts.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

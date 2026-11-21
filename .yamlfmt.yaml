@@ -1,3 +1,4 @@
+match_type: doublestar
 exclude:
   - "node_modules"
   - "**/node_modules"
@@ -6,3 +7,4 @@ exclude:
   - "**/.pnpm/**"
 formatter:
   continue_on_error: true
+  line_ending: lf
