@@ -130,6 +130,14 @@ func main() {
 	}
 	defer func() { _ = db.Close() }()
 
+	// Refresh unmodified shipped catalog files when the CLI has been upgraded.
+	defaultConfigDir := (&config.CrossPlatformSettings{HomeDir: homeDir}).GetConfigDir()
+	if updated, refreshErr := config.RefreshShippedConfig(defaultConfigDir); refreshErr != nil {
+		log.Warn("Failed to refresh shipped configuration", "dir", defaultConfigDir, "error", refreshErr)
+	} else if len(updated) > 0 {
+		log.Info("Refreshed shipped configuration files", "dir", defaultConfigDir, "count", len(updated))
+	}
+
 	// Load cross-platform configuration
 	crossPlatformSettings, err := config.LoadCrossPlatformSettings(homeDir)
 	if err != nil {
