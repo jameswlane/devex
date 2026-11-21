@@ -888,11 +888,23 @@ test("per-deployment VERCEL_URL does not bust Next.js build cache hashes", () =>
 		const first = task(root, "build", app, {
 			VERCEL: "1",
 			VERCEL_URL: "devex-preview-aaa.vercel.app",
+			NEXT_PUBLIC_VERCEL_URL: "devex-preview-aaa.vercel.app",
 		}).hash;
 		const second = task(root, "build", app, {
 			VERCEL: "1",
 			VERCEL_URL: "devex-preview-bbb.vercel.app",
+			NEXT_PUBLIC_VERCEL_URL: "devex-preview-bbb.vercel.app",
 		}).hash;
 		assert.equal(second, first, app);
 	}
+	assert.equal(
+		task(root, "build", "registry", {
+			POSTGRES_URL: "postgres://a",
+			KV_REST_API_READ_ONLY_TOKEN: "tok-a",
+		}).hash,
+		task(root, "build", "registry", {
+			POSTGRES_URL: "postgres://b",
+			KV_REST_API_READ_ONLY_TOKEN: "tok-b",
+		}).hash,
+	);
 });

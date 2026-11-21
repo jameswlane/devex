@@ -191,6 +191,39 @@ describe("rate-limit", () => {
 			expect(limited.headers.get("X-RateLimit-Reset")).toBeDefined();
 		});
 
+		it("treats positive max-age in Vercel-CDN-Cache-Control as shared-cacheable, but not max-age=0", async () => {
+			const rateLimiter = rateLimit({ windowMs: 60000, maxRequests: 5 });
+			const req = createMockRequest("198.51.100.12", "/api/v1/registry");
+
+			redis.incrWithExpire.mockResolvedValueOnce(1);
+			const cached = await rateLimiter(req, async () =>
+				NextResponse.json(
+					{ ok: true },
+					{
+						headers: {
+							"Cache-Control": "max-age=0",
+							"Vercel-CDN-Cache-Control": "max-age=3600",
+						},
+					},
+				),
+			);
+			expect(cached.headers.get("X-RateLimit-Remaining")).toBeNull();
+
+			redis.incrWithExpire.mockResolvedValueOnce(2);
+			const uncached = await rateLimiter(req, async () =>
+				NextResponse.json(
+					{ ok: true },
+					{
+						headers: {
+							"Cache-Control": "max-age=0",
+							"Vercel-CDN-Cache-Control": "max-age=0",
+						},
+					},
+				),
+			);
+			expect(uncached.headers.get("X-RateLimit-Remaining")).toBe("3");
+		});
+
 		it("should use correct configuration from RATE_LIMIT_CONFIGS", () => {
 			expect(RATE_LIMIT_CONFIGS.registry.maxRequests).toBe(100);
 			expect(RATE_LIMIT_CONFIGS.registry.windowMs).toBe(60000);

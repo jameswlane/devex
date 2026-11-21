@@ -162,16 +162,25 @@ function defaultKeyGenerator(req: NextRequest): string {
 }
 
 function isSharedCacheable(headers: Headers): boolean {
-	const values = [
-		headers.get("Cache-Control"),
-		headers.get("CDN-Cache-Control"),
+	const cdnHeaders = [
 		headers.get("Vercel-CDN-Cache-Control"),
+		headers.get("CDN-Cache-Control"),
 	];
-	return values.some(
-		(value) =>
-			value !== null &&
-			/\b(public|s-maxage=\d+)\b/i.test(value) &&
-			!/\b(no-store|private)\b/i.test(value),
+	if (
+		cdnHeaders.some(
+			(value) =>
+				value !== null &&
+				/\b(public|(?:s-)?max-age=[1-9]\d*)\b/i.test(value) &&
+				!/\b(no-store|private)\b/i.test(value),
+		)
+	) {
+		return true;
+	}
+	const cacheControl = headers.get("Cache-Control");
+	return (
+		cacheControl !== null &&
+		/\b(public|s-maxage=[1-9]\d*)\b/i.test(cacheControl) &&
+		!/\b(no-store|private)\b/i.test(cacheControl)
 	);
 }
 

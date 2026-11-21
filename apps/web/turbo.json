@@ -10,6 +10,7 @@
 				"$TURBO_DEFAULT$",
 				"$TURBO_ROOT$/apps/cli/config/applications/**/*.yaml"
 			],
+			"env": ["!NEXT_PUBLIC_VERCEL_URL"],
 			"outputs": ["app/generated/**"]
 		}
 	}

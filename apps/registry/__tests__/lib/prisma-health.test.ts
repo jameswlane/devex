@@ -44,15 +44,31 @@ describe("checkDatabaseHealth", () => {
 		});
 	});
 
-	it("does not start background health polling by default", async () => {
+	it("does not start background health polling unless explicitly opted in", async () => {
+		const originalEnv = process.env;
 		vi.useFakeTimers();
+		let freshPoolManager: { stop: () => void } | undefined;
 		try {
+			process.env = { ...originalEnv, NODE_ENV: "development" };
+			delete process.env.VERCEL;
+			delete process.env.NEXT_PHASE;
+			delete process.env.ENABLE_DB_HEALTH_POLLING;
+
 			vi.resetModules();
-			const { poolManager: freshPoolManager } = await import("@/lib/prisma");
+			({ poolManager: freshPoolManager } = await import("@/lib/prisma"));
 			await vi.advanceTimersByTimeAsync(60_000);
 			expect(queryRaw).not.toHaveBeenCalled();
 			freshPoolManager.stop();
+
+			process.env.ENABLE_DB_HEALTH_POLLING = "true";
+			vi.resetModules();
+			({ poolManager: freshPoolManager } = await import("@/lib/prisma"));
+			queryRaw.mockResolvedValue([{ "?column?": 1 }]);
+			await vi.advanceTimersByTimeAsync(30_000);
+			expect(queryRaw).toHaveBeenCalledTimes(1);
 		} finally {
+			freshPoolManager?.stop();
+			process.env = originalEnv;
 			vi.useRealTimers();
 		}
 	});
