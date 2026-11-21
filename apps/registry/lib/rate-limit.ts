@@ -50,12 +50,9 @@ class RedisRateLimitStore implements RateLimitStore {
 			const currentMinute = Math.floor(now / 60000);
 			const minuteKey = `${redisKey}:${currentMinute}`;
 
-			// Increment current minute bucket
-			const count = await redis.incr(minuteKey);
-
-			// Set expiration for cleanup (2 minutes to cover window)
+			// Atomically increment current minute bucket and set TTL on first write
 			const ttlSeconds = 120;
-			await redis.expire(minuteKey, ttlSeconds);
+			const count = await redis.incrWithExpire(minuteKey, ttlSeconds);
 
 			// For more accurate sliding window, we'd need to sum multiple buckets
 			// but this is a reasonable approximation for Upstash limitations
@@ -83,13 +80,8 @@ class RedisRateLimitStore implements RateLimitStore {
 		const ttlSeconds = Math.ceil(windowMs / 1000);
 
 		try {
-			// Use Redis INCR for atomic increment
-			const count = await redis.incr(redisKey);
-
-			// Set expiration only for new keys (count === 1)
-			if (count === 1) {
-				await redis.expire(redisKey, ttlSeconds);
-			}
+			// Atomically increment and set TTL on first write
+			const count = await redis.incrWithExpire(redisKey, ttlSeconds);
 
 			return { count, resetTime };
 		} catch (error) {
@@ -307,6 +299,21 @@ function defaultKeyGenerator(req: NextRequest): string {
 	return `${ip}:${pathname}`;
 }
 
+// Responses marked for shared/CDN caching should not include per-client quota headers
+function isSharedCacheable(headers: Headers): boolean {
+	const values = [
+		headers.get("Cache-Control"),
+		headers.get("CDN-Cache-Control"),
+		headers.get("Vercel-CDN-Cache-Control"),
+	];
+	return values.some(
+		(value) =>
+			value !== null &&
+			/\b(public|s-maxage=\d+)\b/i.test(value) &&
+			!/\b(no-store|private)\b/i.test(value),
+	);
+}
+
 // Rate limiting middleware
 export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 	const finalConfig: RateLimitConfig = {
@@ -354,11 +361,16 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 		// Execute the handler
 		const response = await handler();
 
-		// Add rate limit headers to response
+		// Add per-client rate limit headers only when the response is not shared-cacheable
 		const headers = new Headers(response.headers);
-		headers.set("X-RateLimit-Limit", finalConfig.maxRequests.toString());
-		headers.set("X-RateLimit-Remaining", remaining.toString());
-		headers.set("X-RateLimit-Reset", new Date(result.resetTime).toISOString());
+		if (!isSharedCacheable(headers)) {
+			headers.set("X-RateLimit-Limit", finalConfig.maxRequests.toString());
+			headers.set("X-RateLimit-Remaining", remaining.toString());
+			headers.set(
+				"X-RateLimit-Reset",
+				new Date(result.resetTime).toISOString(),
+			);
+		}
 
 		// Enhanced Redis-based request tracking for sophisticated skip handling
 		const status = response.status;

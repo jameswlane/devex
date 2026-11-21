@@ -2,6 +2,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../../generated/prisma/client";
 import {
+	runDatabaseSync,
 	syncApplications,
 	syncConfigs,
 	syncStacks,
@@ -76,5 +77,25 @@ describe("sync-database", () => {
 		} as unknown as PrismaClient;
 
 		await expect(updateRegistryStats(db)).rejects.toThrow("P6004");
+	});
+
+	it("still purges caches after a partial write when a later step fails", async () => {
+		const order: string[] = [];
+		const step1 = vi.fn(async () => {
+			order.push("step1");
+		});
+		const step2 = vi.fn(async () => {
+			order.push("step2");
+			throw new Error("configs failed");
+		});
+		const purge = vi.fn(async () => {
+			order.push("purge");
+		});
+
+		const failures = await runDatabaseSync([step1, step2], purge);
+
+		expect(failures).toEqual(["configs failed"]);
+		expect(purge).toHaveBeenCalledTimes(1);
+		expect(order).toEqual(["step1", "step2", "purge"]);
 	});
 });

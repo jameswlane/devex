@@ -1,36 +1,8 @@
 import Link from "next/link";
 import { StatsErrorBoundary } from "@/components/error-boundary";
 import StatsDashboard from "@/components/stats-dashboard";
-import { logger } from "@/lib/logger";
-import { initializeApplication } from "@/lib/startup";
 
-// Force dynamic rendering since we have client-side data fetching
-export const dynamic = "force-dynamic";
-
-export default async function RegistryHomepage() {
-	// Initialize application startup with proper error handling
-	try {
-		const startupResult = await initializeApplication({
-			enableWarmup: process.env.NODE_ENV === "production",
-			timeoutMs: 5000, // Shorter timeout for page loads
-			retries: 1, // Single retry for page loads
-		});
-
-		if (!startupResult.success) {
-			logger.warn("Application startup completed with warnings", {
-				database: startupResult.database,
-				redis: startupResult.redis,
-			});
-		}
-	} catch (error) {
-		logger.error(
-			"Application startup failed",
-			{ error: error instanceof Error ? error.message : String(error) },
-			error instanceof Error ? error : undefined,
-		);
-		// Continue anyway - page should still render with cached/fallback data
-	}
-
+export default function RegistryHomepage() {
 	return (
 		<div className="min-h-screen bg-gray-50">
 			{/* Header */}

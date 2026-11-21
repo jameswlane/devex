@@ -43,4 +43,17 @@ describe("checkDatabaseHealth", () => {
 			error: "connection refused",
 		});
 	});
+
+	it("does not start background health polling by default", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.resetModules();
+			const { poolManager: freshPoolManager } = await import("@/lib/prisma");
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(queryRaw).not.toHaveBeenCalled();
+			freshPoolManager.stop();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });

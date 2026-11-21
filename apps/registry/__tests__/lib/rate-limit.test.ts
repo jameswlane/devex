@@ -12,6 +12,7 @@ vi.mock("@/lib/redis", () => ({
 		get: vi.fn<() => Promise<null>>().mockResolvedValue(null),
 		set: vi.fn<() => Promise<string>>().mockResolvedValue("OK"),
 		incr: vi.fn(),
+		incrWithExpire: vi.fn(),
 		expire: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 		del: vi.fn<() => Promise<number>>().mockResolvedValue(1),
 		exists: vi.fn<() => Promise<number>>().mockResolvedValue(0),
@@ -51,9 +52,9 @@ describe("rate-limit", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		// Reset redis mock to default behavior
-		redis.incr.mockImplementation((key: string) => {
+		redis.incrWithExpire.mockImplementation((key: string) => {
 			// Default behavior: first call returns 1, subsequent calls increment
-			const callCount = (redis.incr as Mock).mock.calls.filter(
+			const callCount = (redis.incrWithExpire as Mock).mock.calls.filter(
 				(call) => call[0] === key,
 			).length;
 			return Promise.resolve(callCount);
@@ -77,9 +78,11 @@ describe("rate-limit", () => {
 			const req = createMockRequest();
 			const handler = createMockHandler();
 
-			// Mock redis.incr to return increasing counts
+			// Mock redis.incrWithExpire to return increasing counts
 			let callCount = 0;
-			redis.incr.mockImplementation(() => Promise.resolve(++callCount));
+			redis.incrWithExpire.mockImplementation(() =>
+				Promise.resolve(++callCount),
+			);
 
 			// First two requests should pass
 			const response1 = await rateLimiter(req, handler);
@@ -100,17 +103,17 @@ describe("rate-limit", () => {
 			const handler = createMockHandler();
 
 			// First request should pass (count = 1)
-			redis.incr.mockResolvedValueOnce(1);
+			redis.incrWithExpire.mockResolvedValueOnce(1);
 			const firstResponse = await rateLimiter(req, handler);
 			expect(firstResponse.status).toBe(200);
 
 			// Second request should be blocked (count = 2)
-			redis.incr.mockResolvedValueOnce(2);
+			redis.incrWithExpire.mockResolvedValueOnce(2);
 			const blockedResponse = await rateLimiter(req, handler);
 			expect(blockedResponse.status).toBe(429);
 
 			// After window expires, Redis would return count = 1 for new window
-			redis.incr.mockResolvedValueOnce(1);
+			redis.incrWithExpire.mockResolvedValueOnce(1);
 			const allowedResponse = await rateLimiter(req, handler);
 			expect(allowedResponse.status).toBe(200);
 			expect(handler).toHaveBeenCalledTimes(2);
@@ -136,13 +139,56 @@ describe("rate-limit", () => {
 			const req = createMockRequest();
 			const handler = createMockHandler();
 
-			redis.incr.mockResolvedValueOnce(1);
+			redis.incrWithExpire.mockResolvedValueOnce(1);
 
 			const response = await rateLimiter(req, handler);
 
 			expect(response.headers.get("X-RateLimit-Limit")).toBe("5");
 			expect(response.headers.get("X-RateLimit-Remaining")).toBe("4");
 			expect(response.headers.get("X-RateLimit-Reset")).toBeDefined();
+		});
+
+		it("sends one atomic Redis command per request for new and existing buckets", async () => {
+			const rateLimiter = rateLimit({ windowMs: 60000, maxRequests: 5 });
+			const req = createMockRequest("198.51.100.5", "/api/v1/registry");
+			const handler = createMockHandler();
+
+			await rateLimiter(req, handler);
+			await rateLimiter(req, handler);
+
+			expect(redis.incrWithExpire).toHaveBeenCalledTimes(2);
+			expect(redis.incr).not.toHaveBeenCalled();
+			expect(redis.expire).not.toHaveBeenCalled();
+		});
+
+		it("omits per-client quota headers on publicly cacheable responses but keeps them on 429", async () => {
+			const rateLimiter = rateLimit({ windowMs: 60000, maxRequests: 1 });
+			const req = createMockRequest("198.51.100.9", "/api/v1/registry");
+			const cacheableHandler = vi.fn(async () =>
+				NextResponse.json(
+					{ ok: true },
+					{
+						headers: {
+							"Cache-Control": "public, max-age=60, must-revalidate",
+							"Vercel-CDN-Cache-Control":
+								"public, s-maxage=3600, stale-while-revalidate=86400",
+						},
+					},
+				),
+			);
+
+			redis.incrWithExpire.mockResolvedValueOnce(1);
+			const ok = await rateLimiter(req, cacheableHandler);
+			expect(ok.status).toBe(200);
+			expect(ok.headers.get("X-RateLimit-Remaining")).toBeNull();
+			expect(ok.headers.get("X-RateLimit-Reset")).toBeNull();
+			expect(ok.headers.get("X-RateLimit-Limit")).toBeNull();
+
+			redis.incrWithExpire.mockResolvedValueOnce(2);
+			const limited = await rateLimiter(req, cacheableHandler);
+			expect(limited.status).toBe(429);
+			expect(limited.headers.get("X-RateLimit-Remaining")).toBe("0");
+			expect(limited.headers.get("X-RateLimit-Reset")).toBeDefined();
 		});
 
 		it("should use correct configuration from RATE_LIMIT_CONFIGS", () => {

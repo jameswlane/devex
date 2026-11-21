@@ -881,3 +881,18 @@ test("persistent GOENV edits change hashes and the execution guard rejects stale
 	assert.notEqual(guard.status, 0);
 	assert.match(guard.stderr, /Use pnpm turbo:run/);
 });
+
+test("per-deployment VERCEL_URL does not bust Next.js build cache hashes", () => {
+	const root = fixture();
+	for (const app of ["registry", "web", "docs"]) {
+		const first = task(root, "build", app, {
+			VERCEL: "1",
+			VERCEL_URL: "devex-preview-aaa.vercel.app",
+		}).hash;
+		const second = task(root, "build", app, {
+			VERCEL: "1",
+			VERCEL_URL: "devex-preview-bbb.vercel.app",
+		}).hash;
+		assert.equal(second, first, app);
+	}
+});

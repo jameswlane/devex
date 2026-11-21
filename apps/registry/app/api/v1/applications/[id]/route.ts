@@ -45,7 +45,21 @@ async function handleGetApplication(
 		platforms: platformDocuments(application.platforms),
 	};
 
-	return NextResponse.json(response);
+	const cacheTags = [
+		...(application.id ? [`application:${application.id}`] : []),
+		"applications",
+		"registry",
+	];
+
+	return NextResponse.json(response, {
+		headers: {
+			"Cache-Control": "public, max-age=60, must-revalidate",
+			"Vercel-CDN-Cache-Control":
+				"public, s-maxage=1200, stale-while-revalidate=1800",
+			"Vercel-Cache-Tag": cacheTags.join(","),
+			Vary: "Accept-Encoding",
+		},
+	});
 }
 
 // PUT /api/v1/applications/[id] - Update an application by name

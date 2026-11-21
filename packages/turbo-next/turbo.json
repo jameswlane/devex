@@ -10,7 +10,7 @@
 				".env.production",
 				".env.production.local"
 			],
-			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"env": ["NODE_ENV", "CI", "VERCEL", "NEXT_PUBLIC_*"],
 			"outputs": [".next/**", "!.next/cache/**"]
 		},
 		"test": {
@@ -22,7 +22,7 @@
 				".env.test",
 				".env.test.local"
 			],
-			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"env": ["NODE_ENV", "CI", "VERCEL", "NEXT_PUBLIC_*"],
 			"outputs": []
 		},
 		"dev": {
@@ -33,11 +33,11 @@
 				".env.development",
 				".env.development.local"
 			],
-			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"env": ["NODE_ENV", "CI", "VERCEL", "NEXT_PUBLIC_*"],
 			"passThroughEnv": ["PORT", "HOSTNAME"]
 		},
 		"start": {
-			"env": ["NODE_ENV", "CI", "VERCEL", "VERCEL_URL", "NEXT_PUBLIC_*"],
+			"env": ["NODE_ENV", "CI", "VERCEL", "NEXT_PUBLIC_*"],
 			"passThroughEnv": ["PORT", "HOSTNAME"]
 		}
 	}

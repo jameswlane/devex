@@ -8,6 +8,7 @@ import {
 	type ApplicationYaml,
 	applicationPlatformData,
 } from "../lib/application-platforms";
+import { requestRegistryCdnPurge } from "../lib/cdn-cache";
 import { prismaConnectionOptions } from "../lib/prisma-connection";
 import { recordRegistryStatsSnapshot } from "../lib/registry-stats";
 
@@ -350,6 +351,31 @@ async function updateRegistryStats(prisma: PrismaClient = defaultPrisma) {
 	}
 }
 
+async function runDatabaseSync(
+	steps: Array<() => Promise<void>> = [
+		syncApplications,
+		syncConfigs,
+		syncStacks,
+		updateRegistryStats,
+	],
+	purge: () => Promise<void> = requestRegistryCdnPurge,
+): Promise<string[]> {
+	// Run each step in turn; a failed step does not stop the others.
+	const failures: string[] = [];
+	for (const step of steps) {
+		try {
+			await step();
+		} catch (error) {
+			failures.push(error instanceof Error ? error.message : String(error));
+		}
+		console.log("");
+	}
+
+	// Purge even on partial failure so any committed upserts are not masked by stale CDN entries.
+	await purge();
+	return failures;
+}
+
 async function main() {
 	console.log("🚀 Starting database sync...\n");
 
@@ -361,21 +387,7 @@ async function main() {
 		process.exit(1);
 	}
 
-	// Run each step in turn; a failed step does not stop the others.
-	const failures: string[] = [];
-	for (const step of [
-		syncApplications,
-		syncConfigs,
-		syncStacks,
-		updateRegistryStats,
-	]) {
-		try {
-			await step();
-		} catch (error) {
-			failures.push(error instanceof Error ? error.message : String(error));
-		}
-		console.log("");
-	}
+	const failures = await runDatabaseSync();
 	await defaultPrisma.$disconnect();
 
 	if (failures.length > 0) {
@@ -394,4 +406,10 @@ if (require.main === module) {
 	});
 }
 
-export { syncApplications, syncConfigs, syncStacks, updateRegistryStats };
+export {
+	runDatabaseSync,
+	syncApplications,
+	syncConfigs,
+	syncStacks,
+	updateRegistryStats,
+};
