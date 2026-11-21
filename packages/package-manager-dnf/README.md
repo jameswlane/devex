@@ -29,7 +29,7 @@ DNF package manager plugin for DevEx. Provides comprehensive package management 
   (reported with DNF's stderr), returns an error before any removal starts;
   native DNF failures are returned unchanged. Specifications starting with `-`
   are rejected.
-- **Update**: Refresh repository metadata with `dnf makecache`
+- **Update**: Refresh repository metadata with `dnf makecache --assumeyes`
 - **Upgrade**: Upgrade installed packages with `dnf upgrade --assumeyes`
 - **Search**: Advanced package search with filters
 - **List**: Show installed packages without elevation
@@ -132,7 +132,7 @@ the plugin does not disable signature checks.
 
 Direct command arguments support `--non-interactive`. The CLI also forwards
 unattended mode through `DEVEX_UNATTENDED`, and `CI=true` is supported by the
-SDK. Install, remove, and upgrade always use `--assumeyes`, and COPR enable
+SDK. Install, remove, update, and upgrade always use `--assumeyes`, and COPR enable
 always uses `-y`.
 
 Fedora container end-to-end install/remove coverage is deferred to #121.

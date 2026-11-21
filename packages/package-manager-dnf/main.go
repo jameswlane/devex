@@ -180,13 +180,13 @@ func installedQueryMatches(ctx context.Context, selector ...string) (bool, error
 	return strings.TrimSpace(output) != "", nil
 }
 
-// handleUpdate refreshes repository metadata with `dnf makecache`.
+// handleUpdate refreshes repository metadata with `dnf makecache --assumeyes`.
 func (p *DnfPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "dnf", "makecache")
+	return sdk.ExecCommandWithContext(ctx, true, "dnf", "makecache", "--assumeyes")
 }
 
-// handleSearch searches repositories for the joined search term.
+// handleSearch searches repositories with each argument passed as a separate keyword.
 func (p *DnfPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
@@ -195,7 +195,7 @@ func (p *DnfPlugin) handleSearch(ctx context.Context, args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommandWithContext(ctx, false, "dnf", "search", searchTerm)
+	return sdk.ExecCommandWithContext(ctx, false, "dnf", append([]string{"search"}, args...)...)
 }
 
 // handleList prints installed packages in DNF's human-readable format.
