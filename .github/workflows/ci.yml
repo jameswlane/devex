@@ -204,8 +204,7 @@ jobs:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Test CLI
-        # The real Snap plugin spec opens an admin password dialog on macOS (#428).
-        run: go run github.com/onsi/ginkgo/v2/ginkgo run -r --skip-package=test/e2e --skip "real Snap plugin" --timeout=10m --poll-progress-after=60s .
+        run: go run github.com/onsi/ginkgo/v2/ginkgo run -r --skip-package=test/e2e --timeout=10m --poll-progress-after=60s .
   test-sdk:
     name: Test Plugin SDK
     runs-on: ubuntu-latest
