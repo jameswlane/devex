@@ -211,14 +211,14 @@ lifecycle:
           metadata:
             tool: awscli
   maintain:
-    # Re-running `mise use` moves each tool to the newest release that
+    # Running `mise upgrade` moves each tool to the newest release that
     # matches the version prefix recorded at install time.
     - id: kubectl-update
       order: 10
       if: has_resource("kubectl")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.kubectl.external_id }}"
     - id: helm-update
@@ -226,7 +226,7 @@ lifecycle:
       if: has_resource("helm")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.helm.external_id }}"
     - id: kind-update
@@ -234,7 +234,7 @@ lifecycle:
       if: has_resource("kind")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.kind.external_id }}"
     - id: terraform-update
@@ -242,7 +242,7 @@ lifecycle:
       if: has_resource("terraform")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.terraform.external_id }}"
     - id: opentofu-update
@@ -250,7 +250,7 @@ lifecycle:
       if: has_resource("opentofu")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.opentofu.external_id }}"
     - id: awscli-update
@@ -258,7 +258,7 @@ lifecycle:
       if: has_resource("awscli")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.awscli.external_id }}"
   status:

@@ -98,8 +98,10 @@ var _ = Describe("Tool Manager", func() {
 			Skip("Integration test - requires mise to be installed")
 		})
 
-		It("should update specific tools when provided", func() {
-			Skip("Integration test - requires mise to be installed")
+		It("should return error for invalid tool specification", func() {
+			err := plugin.HandleUpdate(context.Background(), []string{"node;echo hacked"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid tool specification"))
 		})
 	})
 

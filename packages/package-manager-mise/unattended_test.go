@@ -29,6 +29,17 @@ var _ = Describe("Unattended mise execution", func() {
 		}))
 	})
 
+	It("upgrades specific tools within their version prefix without updating plugins", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		plugin := main.NewMisePlugin()
+		Expect(plugin.HandleUpdate(context.Background(), []string{"node@24", "java@21"})).To(Succeed())
+		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+			{Args: []string{"upgrade", "node@24", "java@21"}},
+		}))
+	})
+
 	It("downloads several tools, then activates them in one mise use", func() {
 		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
 		sdktest.CloseStdin(GinkgoT())

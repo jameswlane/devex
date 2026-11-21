@@ -199,7 +199,7 @@ lifecycle:
       if: has_resource("node")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.node.external_id }}"
     - id: java-update
@@ -207,7 +207,7 @@ lifecycle:
       if: has_resource("java")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.java.external_id }}"
     - id: flutter-update
@@ -215,7 +215,7 @@ lifecycle:
       if: has_resource("flutter")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.flutter.external_id }}"
     - id: android-studio-macos-upgrade

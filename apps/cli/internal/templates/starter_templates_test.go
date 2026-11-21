@@ -122,6 +122,9 @@ var _ = Describe("Shipped lifecycle templates", func() {
 				plan, err := planStarter(id, action, goos, starterAnswers[id], known, allPluginsAvailable)
 				Expect(err).NotTo(HaveOccurred(), string(action))
 				for _, step := range plan.Steps {
+					if action == templates.LifecycleMaintain && step.Request.Plugin == "package-manager-mise" {
+						Expect(step.Request.Command).To(Equal("update"), "maintain step %s must upgrade mise tools instead of re-running install", step.ID)
+					}
 					for _, arg := range step.Request.Args {
 						Expect(arg).NotTo(ContainSubstring("<nil>"), "%s step %s has an unresolved value", action, step.ID)
 						Expect(arg).NotTo(ContainSubstring("{{"), "%s step %s has an uninterpolated value", action, step.ID)

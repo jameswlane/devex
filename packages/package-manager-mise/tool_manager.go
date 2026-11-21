@@ -126,8 +126,26 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 	return nil
 }
 
-// HandleUpdate updates Mise plugins and tool versions
+// HandleUpdate updates Mise plugins and tool versions. When tool specs are
+// provided (e.g. node@24), it upgrades only those tools to the newest release
+// matching each spec while keeping the recorded version prefix.
 func (m *MisePlugin) HandleUpdate(ctx context.Context, args []string) error {
+	if len(args) > 0 {
+		for _, tool := range args {
+			if err := m.ValidateToolSpec(tool); err != nil {
+				return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
+			}
+		}
+
+		m.logger.Printf("Updating tools with Mise: %s\n", strings.Join(args, ", "))
+		if err := sdk.ExecCommandWithContext(ctx, false, "mise", append([]string{"upgrade"}, args...)...); err != nil {
+			return fmt.Errorf("failed to update tools %s: %w", strings.Join(args, ", "), err)
+		}
+
+		m.logger.Success("Updated tools: %s", strings.Join(args, ", "))
+		return nil
+	}
+
 	m.logger.Println("Updating Mise plugins and tools...")
 
 	// Update plugins
