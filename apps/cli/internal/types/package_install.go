@@ -92,6 +92,9 @@ func ResolvePackageInstall(method, command string, packages, options []string) (
 			if method == "zypper" && value != "package" && value != "pattern" {
 				return request, fmt.Errorf("zypper option --type must be package or pattern, not %q", value)
 			}
+			if method == "winget" && value != "user" && value != "machine" {
+				return request, fmt.Errorf("winget option --scope must be user or machine, not %q", value)
+			}
 			request.Options = append(request.Options, name+"="+value)
 		} else {
 			if inline {
@@ -138,6 +141,11 @@ func packageOption(method, name string) (takesValue, supported bool) {
 	case "zypper":
 		// --type selects packages or SUSE software patterns.
 		if name == "--type" {
+			return true, true
+		}
+	case "winget":
+		// --scope selects a user or machine installer; machine needs elevation.
+		if name == "--scope" {
 			return true, true
 		}
 	}
@@ -224,7 +232,7 @@ func (config OSConfig) ShellPackageArguments() (string, error) {
 
 func isPackageManager(name string) bool {
 	switch name {
-	case "sudo", "apt", "apt-get", "snap", "dnf", "yum", "brew", "flatpak", "mas", "pip", "pacman", "zypper":
+	case "sudo", "apt", "apt-get", "snap", "dnf", "yum", "brew", "flatpak", "mas", "pip", "pacman", "winget", "zypper":
 		return true
 	}
 	return false

@@ -31,6 +31,7 @@ var pluginInstallMethods = map[string][]string{
 	"pip":      {"linux", "macos", "windows"},
 	"rpm":      {"linux"},
 	"snap":     {"linux"},
+	"winget":   {"windows"},
 	"xbps":     {"linux"},
 	"yay":      {"linux"},
 	"zypper":   {"linux"},
@@ -42,7 +43,7 @@ var plannedInstallMethods = map[string]bool{
 	"asdf": true, "cargo": true, "chocolatey": true, "dmg": true, "exe": true,
 	"go": true, "macports": true, "makepkg": true, "mas": true, "msi": true,
 	"npm": true, "pkg": true, "pkg_add": true, "ports": true, "scoop": true,
-	"script": true, "winget": true, "yum": true,
+	"script": true, "yum": true,
 }
 
 // InstallMethodSupport classifies an install method.

@@ -37,6 +37,19 @@ all_platforms:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(output)).To(Equal("--channel=" + literal + "\nnvim\n"))
 	})
+	It("passes a winget install scope as a plugin option", func() {
+		request, err := types.ResolvePackageInstall("winget", "winget install --scope machine Docker.DockerDesktop", nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(request.Options).To(Equal([]string{"--scope=machine"}))
+		Expect(request.Packages).To(Equal([]string{"Docker.DockerDesktop"}))
+		request, err = types.ResolvePackageInstall("winget", "", []string{"Git.Git"}, []string{"--scope=user"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(request.Options).To(Equal([]string{"--scope=user"}))
+		_, err = types.ResolvePackageInstall("winget", "Git.Git --scope global", nil, nil)
+		Expect(err).To(MatchError(ContainSubstring("winget option --scope must be user or machine")))
+		_, err = types.ResolvePackageInstall("winget", "Git.Git --force", nil, nil)
+		Expect(err).To(MatchError(ContainSubstring("unsupported winget package option")))
+	})
 	It("keeps the zypper pattern selection for install, removal and queries", func() {
 		config := types.AppConfig{InstallMethod: "zypper", Packages: []string{"devel_basis"}, Options: []string{"-t", "pattern"}}
 		Expect(config.PackageQueryCommand()).To(Equal("zypper install '--type=pattern' 'devel_basis'"))

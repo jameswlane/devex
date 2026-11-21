@@ -122,14 +122,14 @@ exit 1
 		Expect(out.String()).To(ContainSubstring("Plugin invocation: devex-plugin-package-manager-" + manager + " " + `"` + verb + `" "git"` + "\n"))
 		Expect(initialized).To(BeZero())
 		Expect(recorder.calls).To(BeEmpty())
-	}, Entry("APT", "apt", "upgrade-packages"), Entry("DNF", "dnf", "upgrade"), Entry("Zypper", "zypper", "upgrade"), Entry("XBPS", "xbps", "upgrade"), Entry("Eopkg", "eopkg", "upgrade"), Entry("Snap", "snap", "upgrade"), Entry("Nixpkgs", "nixpkgs", "upgrade"), Entry("Mac App Store", "mas", "upgrade"))
+	}, Entry("APT", "apt", "upgrade-packages"), Entry("DNF", "dnf", "upgrade"), Entry("Zypper", "zypper", "upgrade"), Entry("XBPS", "xbps", "upgrade"), Entry("Eopkg", "eopkg", "upgrade"), Entry("Snap", "snap", "upgrade"), Entry("Nixpkgs", "nixpkgs", "upgrade"), Entry("Mac App Store", "mas", "upgrade"), Entry("winget", "winget", "upgrade"))
 	DescribeTable("prints the exact metadata-refresh argv without packages", func(manager string) {
 		settings.Terminal.Utilities = []types.CrossPlatformApp{app("Selected", manager, "git")}
 		Expect(run("update", "Selected", "--dry-run")).To(Succeed())
 		Expect(out.String()).To(ContainSubstring("Plugin invocation: devex-plugin-package-manager-" + manager + ` "update"` + "\n"))
 		Expect(initialized).To(BeZero())
 		Expect(recorder.calls).To(BeEmpty())
-	}, Entry("APT", "apt"), Entry("DNF", "dnf"), Entry("Zypper", "zypper"), Entry("XBPS", "xbps"), Entry("Eopkg", "eopkg"), Entry("Emerge", "emerge"), Entry("APK", "apk"))
+	}, Entry("APT", "apt"), Entry("DNF", "dnf"), Entry("Zypper", "zypper"), Entry("XBPS", "xbps"), Entry("Eopkg", "eopkg"), Entry("Emerge", "emerge"), Entry("APK", "apk"), Entry("winget", "winget"))
 	It("rejects a Mac App Store refresh because the App Store has no local index", func() {
 		settings.Terminal.Utilities = []types.CrossPlatformApp{app("Xcode", "mas", "497799835")}
 		Expect(run("update", "Xcode", "--dry-run")).To(MatchError(ContainSubstring(`manager "mas" does not support safe update`)))
@@ -139,6 +139,14 @@ exit 1
 		settings.Terminal.Utilities = []types.CrossPlatformApp{app("Xcode", "mas", "497799835")}
 		Expect(run("upgrade", "Xcode", "--dry-run")).To(Succeed())
 		Expect(out.String()).To(ContainSubstring(`Native invocation: mas upgrade "497799835"`))
+	})
+	It("prints the native winget refresh and upgrade separately", func() {
+		settings.Terminal.Utilities = []types.CrossPlatformApp{app("Git", "winget", "Git.Git")}
+		Expect(run("update", "Git", "--dry-run")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Native invocation: winget source update\n"))
+		out.Reset()
+		Expect(run("upgrade", "Git", "--dry-run")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring(`Native invocation: winget upgrade "Git.Git"`))
 	})
 	It("reports unsupported managers without broadening package scope", func() {
 		settings.Terminal.Utilities = append(settings.Terminal.Utilities, app("World", "emerge", "world"))

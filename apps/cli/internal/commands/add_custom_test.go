@@ -163,7 +163,7 @@ var _ = Describe("Add custom applications", func() {
 			unchanged()
 		},
 		Entry("typo", "linux", "aptt", "unknown install method", "apt"),
-		Entry("planned but without a plugin", "windows", "winget", "planned but has no plugin", "mise"),
+		Entry("planned but without a plugin", "windows", "chocolatey", "planned but has no plugin", "mise"),
 		Entry("plugin for another platform", "macos", "pacman", "not available on this platform", "brew"),
 		Entry("download methods need verification", "linux", "curlpipe", "checksum verification", "apt"),
 	)
@@ -351,6 +351,8 @@ var _ = Describe("Add custom applications", func() {
 		Expect(config.SupportedInstallMethods("macos")).NotTo(ContainElement("apt"))
 		Expect(config.SupportedInstallMethods("linux")).To(ContainElement("apt"))
 		Expect(config.SupportedInstallMethods("")).To(ContainElements("apt", "brew"))
-		Expect(config.InstallMethodSupportsPlatform("winget", "windows")).To(BeFalse())
+		Expect(config.InstallMethodSupportsPlatform("winget", "windows")).To(BeTrue())
+		Expect(config.InstallMethodSupportsPlatform("winget", "linux")).To(BeFalse())
+		Expect(config.InstallMethodSupportsPlatform("chocolatey", "windows")).To(BeFalse())
 	})
 })

@@ -150,7 +150,7 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 		c := app.GetOSConfig()
 		supported := false
 		switch c.InstallMethod {
-		case "apt", "dnf", "zypper", "xbps", "eopkg":
+		case "apt", "dnf", "zypper", "xbps", "eopkg", "winget":
 			supported = true
 		case "apk", "emerge":
 			supported = action == "update"
@@ -219,6 +219,7 @@ func maintenanceNativeCommands(op packageMaintenanceOperation) []string {
 		"dnf:upgrade":          {"dnf upgrade --assumeyes"}, "zypper:upgrade": {"zypper --non-interactive update"},
 		"xbps:upgrade": {"xbps-install --yes --update"}, "eopkg:upgrade": {"eopkg upgrade --yes-all"},
 		"snap:upgrade": {"snap refresh"}, "nixpkgs:upgrade": {"nix-env --upgrade"}, "mas:upgrade": {"mas upgrade"},
+		"winget:update": {"winget source update"}, "winget:upgrade": {"winget upgrade"},
 	}
 	result := append([]string(nil), commands[op.manager+":"+op.args[0]]...)
 	if op.manager == "apt" && interaction.IsInteractiveMode() {
