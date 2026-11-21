@@ -17,6 +17,7 @@
 		"generate": "node scripts/generate-tools.mjs"
 	},
 	"dependencies": {
+		"@vercel/speed-insights": "^2.1.0",
 		"glob": "^14.0.6",
 		"js-yaml": "^5.5.0",
 		"next": "16.4.6",
