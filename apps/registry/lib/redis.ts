@@ -127,6 +127,7 @@ export interface RedisStore {
 	get(key: string): Promise<string | null>;
 	set(key: string, value: string, ttlSeconds?: number): Promise<void>;
 	incr(key: string): Promise<number>;
+	incrWithExpire(key: string, ttlSeconds: number): Promise<number>;
 	expire(key: string, seconds: number): Promise<void>;
 	del(key: string): Promise<void>;
 	exists(key: string): Promise<boolean>;
@@ -139,6 +140,8 @@ export interface RedisStore {
 }
 
 const SCAN_COUNT = 500;
+const INCR_WITH_EXPIRE_SCRIPT =
+	"local count = redis.call('INCR', KEYS[1]); if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; return count";
 
 // Walk a cursor-based SCAN to completion. Redis returns cursor "0" when done.
 async function scanAll(
@@ -198,6 +201,15 @@ class UpstashRedisStore implements RedisStore {
 		return await this.client.incr(key);
 	}
 
+	async incrWithExpire(key: string, ttlSeconds: number): Promise<number> {
+		const count = await this.client.eval<number[], number>(
+			INCR_WITH_EXPIRE_SCRIPT,
+			[key],
+			[ttlSeconds],
+		);
+		return Number(count);
+	}
+
 	async expire(key: string, seconds: number): Promise<void> {
 		await this.client.expire(key, seconds);
 	}
@@ -220,16 +232,18 @@ class UpstashRedisStore implements RedisStore {
 		ttlSeconds?: number,
 	): Promise<void> {
 		const entries = Object.entries(keyValues);
+		if (entries.length === 0) return;
+
+		const pipeline = this.client.pipeline();
 		for (const [key, value] of entries) {
-			await this.client.set(key, value);
+			if (ttlSeconds) {
+				pipeline.setex(key, ttlSeconds, value);
+			} else {
+				pipeline.set(key, value);
+			}
 		}
 
-		if (ttlSeconds) {
-			const promises = Object.keys(keyValues).map((key) =>
-				this.client.expire(key, ttlSeconds),
-			);
-			await Promise.all(promises);
-		}
+		await pipeline.exec();
 	}
 
 	async ping(): Promise<string> {
@@ -271,6 +285,16 @@ class IORedisStore implements RedisStore {
 
 	async incr(key: string): Promise<number> {
 		return this.client.incr(key);
+	}
+
+	async incrWithExpire(key: string, ttlSeconds: number): Promise<number> {
+		const count = await this.client.eval(
+			INCR_WITH_EXPIRE_SCRIPT,
+			1,
+			key,
+			ttlSeconds,
+		);
+		return Number(count);
 	}
 
 	async expire(key: string, seconds: number): Promise<void> {
@@ -344,6 +368,17 @@ class InMemoryStore implements RedisStore {
 		const current = await this.get(key);
 		const value = current ? parseInt(current, 10) + 1 : 1;
 		await this.set(key, value.toString());
+		return value;
+	}
+
+	async incrWithExpire(key: string, ttlSeconds: number): Promise<number> {
+		const now = Date.now();
+		const existing = this.store.get(key);
+		const active =
+			existing !== undefined && (!existing.expiry || existing.expiry >= now);
+		const value = active ? parseInt(existing.value, 10) + 1 : 1;
+		const expiry = active ? existing.expiry : now + ttlSeconds * 1000;
+		this.store.set(key, { value: value.toString(), expiry });
 		return value;
 	}
 

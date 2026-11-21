@@ -29,6 +29,7 @@ const { prisma } = (await import("@/lib/prisma")) as unknown as {
 describe("GET /api/v1/applications/[id]", () => {
 	it("serves all_platforms under all, like the list response (#479)", async () => {
 		prisma.application.findUnique.mockResolvedValue({
+			id: "app_mysql",
 			name: "MySQL",
 			platforms: {
 				all: { install_method: "docker", install_command: "mysql:8.4" },
@@ -40,6 +41,16 @@ describe("GET /api/v1/applications/[id]", () => {
 		});
 		const data = await response.json();
 
+		expect(response.headers.get("Cache-Control")).toBe(
+			"public, max-age=60, must-revalidate",
+		);
+		expect(response.headers.get("Vercel-CDN-Cache-Control")).toBe(
+			"public, s-maxage=1200, stale-while-revalidate=1800",
+		);
+		expect(response.headers.get("Vercel-Cache-Tag")).toBe(
+			"application:app_mysql,applications,registry",
+		);
+		expect(response.headers.get("Vary")).toBe("Accept-Encoding");
 		expect(data.platforms).toEqual({
 			all: {
 				install_method: "docker",
@@ -50,5 +61,22 @@ describe("GET /api/v1/applications/[id]", () => {
 			macos: null,
 			windows: null,
 		});
+	});
+
+	it("builds an ASCII cache tag from application.id for non-ASCII or comma names", async () => {
+		prisma.application.findUnique.mockResolvedValue({
+			id: "clx123abc",
+			name: "東京,app",
+			platforms: {},
+		});
+
+		const response = await GET({} as NextRequest, {
+			params: Promise.resolve({ id: "東京,app" }),
+		});
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Vercel-Cache-Tag")).toBe(
+			"application:clx123abc,applications,registry",
+		);
 	});
 });

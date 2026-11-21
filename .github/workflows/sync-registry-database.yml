@@ -93,6 +93,8 @@ jobs:
         env:
           PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REVALIDATE_API_KEY: ${{ secrets.REVALIDATE_API_KEY }}
+          REGISTRY_URL: https://registry.devex.sh
         run: |
           # Run existing sync script for applications/configs
           chmod +x scripts/sync-database.ts

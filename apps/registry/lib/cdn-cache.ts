@@ -20,7 +20,9 @@ export async function invalidateCdnTags(tags: string[]): Promise<void> {
 }
 
 /** Ask the registry Function to purge after a sync outside Vercel. */
-export async function requestPluginCdnPurge(): Promise<void> {
+async function requestCdnPurge(
+	type: "plugin-cdn" | "registry-cdn",
+): Promise<void> {
 	const key = process.env.REVALIDATE_API_KEY;
 	const registryUrl = process.env.REGISTRY_URL;
 	if (!key || !registryUrl) {
@@ -41,7 +43,7 @@ export async function requestPluginCdnPurge(): Promise<void> {
 				Authorization: `Bearer ${key}`,
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify({ type: "plugin-cdn" }),
+			body: JSON.stringify({ type }),
 			signal: AbortSignal.timeout(5000),
 			redirect: "error",
 		});
@@ -52,4 +54,12 @@ export async function requestPluginCdnPurge(): Promise<void> {
 			"CDN purge request failed; cache TTL remains the freshness fallback",
 		);
 	}
+}
+
+export async function requestPluginCdnPurge(): Promise<void> {
+	return requestCdnPurge("plugin-cdn");
+}
+
+export async function requestRegistryCdnPurge(): Promise<void> {
+	return requestCdnPurge("registry-cdn");
 }
