@@ -1,0 +1,38 @@
+name: Windows Dev Setup
+on:
+  pull_request:
+    paths:
+      - 'scripts/windows/**'
+      - '.github/workflows/windows-dev-setup.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/windows/**'
+      - '.github/workflows/windows-dev-setup.yml'
+permissions:
+  contents: read
+jobs:
+  setup-dev-script:
+    name: Windows / ${{ matrix.shell }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, powershell]
+    env:
+      TEST_SHELL: ${{ matrix.shell }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run setup-dev unit tests
+        shell: pwsh
+        run: |
+          & $env:TEST_SHELL -NoProfile -File scripts/windows/tests/setup-dev.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run setup-dev prerequisite check (informational)
+        shell: pwsh
+        run: |
+          & $env:TEST_SHELL -NoProfile -File scripts/windows/setup-dev.ps1
+          Write-Host "Prerequisite check exited with code $LASTEXITCODE (informational on GitHub runners)."
+          exit 0

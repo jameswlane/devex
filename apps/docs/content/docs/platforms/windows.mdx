@@ -9,6 +9,77 @@ Native Windows package management is **planned**. No winget, Chocolatey or
 Scoop plugin exists in this repository. Windows entries in application
 configuration describe intended methods, not working DevEx installers.
 
+## Prepare Windows
+
+DevEx targets Windows 10 1809+ and Windows 11. Set up these prerequisites on a
+fresh machine before running DevEx:
+
+- **winget (App Installer).** Install or update **App Installer** from the
+  Microsoft Store.
+- **PowerShell.** Windows PowerShell 5.1 works for the installer script.
+  PowerShell 7 (`pwsh`) is recommended for daily use.
+- **Windows Terminal.** Recommended (`wt`) for UTF-8 output and modern TUI
+  rendering.
+- **Developer Mode.** Required so non-admin processes can create symlinks.
+  Enable it in Windows Settings under **System > For developers**.
+- **Win32 long paths.** Required for deep paths in Go modules and Node
+  packages. Set `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled`
+  to `1` from an elevated shell.
+
+Automating these steps inside DevEx is tracked in open issues:
+
+- [winget plugin #111](https://github.com/jameswlane/devex/issues/111)
+- [PowerShell configuration #135](https://github.com/jameswlane/devex/issues/135)
+- [Windows Terminal profiles #136](https://github.com/jameswlane/devex/issues/136)
+- [Git for Windows bootstrap #139](https://github.com/jameswlane/devex/issues/139)
+
+## Develop DevEx on Windows
+
+Run the prerequisite checker from the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup-dev.ps1
+```
+
+The default mode is read-only. Run it again with `-Fix` to install missing
+tools and apply repo-local git settings:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup-dev.ps1 -Fix
+```
+
+Developer Mode and Win32 long paths write to `HKLM:` and need an elevated
+shell. Re-run the `-Fix` command from an Administrator terminal to apply them.
+After installing `mise`, open a new shell so `PATH` picks it up.
+
+### Line endings and toolchain
+
+The root `.gitattributes` file (added in
+[#622](https://github.com/jameswlane/devex/pull/622)) forces LF line endings
+for Go, YAML, and shell scripts, and CRLF only for `.ps1`, `.psm1`, `.bat`, and
+`.cmd`. This prevents Git for Windows (`core.autocrlf=true`) from breaking
+`gofmt`, `yamlfmt`, and Bash scripts.
+
+Install the repository toolchain with `mise`, then build and lint the CLI from
+`apps/cli`:
+
+```powershell
+mise trust
+mise install
+cd apps/cli
+task build
+task lint
+```
+
+### Known limitations
+
+- Many Ginkgo test suites still fail on Windows because they invoke POSIX tools
+  such as `sh` and `true` (tracked in
+  [#622](https://github.com/jameswlane/devex/pull/622)).
+- [Issue #621](https://github.com/jameswlane/devex/issues/621): a setup wizard
+  lifecycle spec writes a stray untracked file into the checkout because of an
+  unquoted Windows path.
+
 ## Planned managers
 
 - [winget plugin #111](https://github.com/jameswlane/devex/issues/111)
