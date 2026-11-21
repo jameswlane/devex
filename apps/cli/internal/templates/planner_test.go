@@ -466,7 +466,7 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(err.Error()).To(ContainSubstring("service name"))
 	})
 
-	It("validates generated plugins for app, plugin, and shell steps", func() {
+	It("validates generated plugins for app and plugin steps but not shell steps", func() {
 		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
 			{
 				ID: "app",
@@ -495,7 +495,7 @@ var _ = Describe("Template Runtime Planner", func() {
 			},
 		}
 
-		_, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+		plan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
 			Action: templates.LifecycleInstall,
 			InputOptions: templates.InputResolverOptions{
 				Answers:        []string{"databases=postgres"},
@@ -504,10 +504,12 @@ var _ = Describe("Template Runtime Planner", func() {
 			ValidatePlugins: true,
 		})
 
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("plugin 'tool-shell' is not available"))
+		Expect(err).NotTo(HaveOccurred())
 		Expect(checked).To(HaveKey("package-manager-docker"))
-		Expect(checked).To(HaveKey("tool-shell"))
+		Expect(checked).NotTo(HaveKey("tool-shell"))
+		Expect(plan.Steps).To(HaveLen(3))
+		Expect(plan.Steps[2].Type).To(Equal(templates.StepTypeShell))
+		Expect(plan.Steps[2].Request.Plugin).To(BeEmpty())
 	})
 
 	It("plans built-in database lifecycle requests with non-interactive answers", func() {

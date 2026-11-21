@@ -231,6 +231,25 @@ At runtime, the plugin receives the command first, followed by each item in `arg
 
 For Docker-style templates, use explicit flags such as `--name`, `--port`, `--env`, `--volume`, `--restart`, and `--detach`. Put the container command after a `--` argument, for example `- --` followed by `- mlflow` and `- server`. Arguments after `--` are passed to the container and are not checked as Docker flags.
 
+## Shell Steps
+
+A `shell` step runs one executable directly, without a shell:
+
+```yaml
+shell:
+  command: git
+  args:
+    - config
+    - --global
+    - init.defaultBranch
+    - main
+  env:
+    GIT_CONFIG_NOSYSTEM: "1"
+  working_dir: /tmp
+```
+
+DevEx looks up `command` on `PATH` and passes each `args` item as one argument. No shell expands variables, globs, pipes, or redirects, so `$HOME` or `*` reach the program unchanged. `command` must be a base executable name such as `git`, not a path, and cannot use template interpolation. Pass dynamic values in `args`. Arguments cannot be shell operators or command substitutions. `env` adds variables to DevEx's own environment, and `working_dir` sets the directory the command runs in. The step fails when the executable exits non-zero, and, like plugin steps, it shares DevEx's stdin and writes its output to stderr.
+
 ## Sensitive Inputs
 
 Set `sensitive: true` for passwords, tokens, API keys, private keys, and secret-like values.

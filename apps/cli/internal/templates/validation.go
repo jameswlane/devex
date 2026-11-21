@@ -143,6 +143,11 @@ func validatePortNumber(value string) error {
 	return nil
 }
 
+// ValidateShellRequest checks a shell step's executable and argument list.
+func ValidateShellRequest(command string, args []string) error {
+	return validateShellRequest(command, args)
+}
+
 func validateShellRequest(command string, args []string) error {
 	if err := validateShellCommandBase(command); err != nil {
 		return err
@@ -266,8 +271,8 @@ func validatePlannedAppRequest(request ExecutionRequest) error {
 }
 
 func validatePlannedShellRequest(request ExecutionRequest) error {
-	if request.Plugin != "tool-shell" {
-		return fmt.Errorf("shell steps must dispatch through tool-shell")
+	if request.Plugin != "" {
+		return fmt.Errorf("shell steps run their executable directly and cannot name a plugin")
 	}
 	if err := validatePathValue("shell working_dir", request.WorkingDir, false); err != nil {
 		return err
