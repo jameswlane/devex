@@ -20,6 +20,10 @@ func (m *MisePlugin) HandleEnsureInstalled(ctx context.Context, args []string) e
 	// Check if mise is already in PATH
 	if err := sdk.ExecCommandWithContext(ctx, false, "which", "mise"); err == nil {
 		m.logger.Success("Mise is already installed")
+		if err := m.configureShellIntegration(); err != nil {
+			m.logger.Warning("Failed to configure shell integration: %v", err)
+			m.logger.Println("You may need to manually add Mise to your shell configuration")
+		}
 		return nil
 	}
 
