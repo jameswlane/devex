@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -16,7 +17,7 @@ var _ = Describe("Agent API startup", func() {
 	It("keeps read JSON valid without creating configuration or state", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
 		goBin, env := isolatedGoRunEnv(home)
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
 		build.Env = env
 		output, err := build.CombinedOutput()

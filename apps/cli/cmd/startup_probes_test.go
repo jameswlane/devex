@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -16,7 +17,7 @@ var _ = Describe("Presentation startup subprocesses", func() {
 		if runtime.GOOS == "windows" {
 			Skip("POSIX executable recorder")
 		}
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(GinkgoT().Context(), "go", "build", "-o", binary, ".")
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), "%s", output)
@@ -41,7 +42,7 @@ var _ = Describe("Presentation startup subprocesses", func() {
 		for _, args := range [][]string{{"--help"}, {"install", "--help"}, {"--version"}, {"help", "install"}, {"completion", "bash"}, {"completion", "zsh"}, {"completion", "fish"}, {"completion", "powershell"}, {"__complete", "install", ""}, {"__completeNoDesc", "install", ""}} {
 			home := GinkgoT().TempDir()
 			cmd := exec.CommandContext(GinkgoT().Context(), binary, args...)
-			cmd.Env = append(os.Environ(), "HOME="+home, "PATH="+recorder, "DEVEX_PROBE_RECORD="+record, "XDG_CONFIG_HOME="+home, "XDG_DATA_HOME="+home, "XDG_STATE_HOME="+home, "CI=true")
+			cmd.Env = append(append(os.Environ(), testhelper.ProfileEnv(home)...), "PATH="+recorder, "DEVEX_PROBE_RECORD="+record, "XDG_CONFIG_HOME="+home, "XDG_DATA_HOME="+home, "XDG_STATE_HOME="+home, "CI=true")
 			output, err := cmd.CombinedOutput()
 			Expect(err).NotTo(HaveOccurred(), "%v: %s", args, output)
 			calls, err := os.ReadFile(record)
@@ -49,7 +50,7 @@ var _ = Describe("Presentation startup subprocesses", func() {
 			Expect(unexpectedProbes(string(calls))).To(BeEmpty(), "%v launched subprocesses", args)
 			// The same presentation route must also work without dependencies.
 			cmd = exec.CommandContext(GinkgoT().Context(), binary, args...)
-			cmd.Env = append(os.Environ(), "HOME="+home, "PATH=", "CI=true")
+			cmd.Env = append(append(os.Environ(), testhelper.ProfileEnv(home)...), "PATH=", "CI=true")
 			output, err = cmd.CombinedOutput()
 			Expect(err).NotTo(HaveOccurred(), "%v without tools: %s", args, output)
 		}

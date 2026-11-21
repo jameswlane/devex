@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	_ "modernc.org/sqlite"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -103,12 +104,15 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	Expect(values).To(HaveLen(4))
 
 	overrides := map[string]string{
-		"HOME":                       home,
 		"DEVEX_OFFLINE":              "true",
 		"DEVEX_DISABLE_UPDATE_CHECK": "true",
 		"GOPATH":                     values[1],
 		"GOCACHE":                    values[2],
 		"GOMODCACHE":                 values[3],
+	}
+	for _, kv := range testhelper.ProfileEnv(home) {
+		key, value, _ := strings.Cut(kv, "=")
+		overrides[key] = value
 	}
 	excluded := map[string]bool{"DEBUG": true, "DEVEX_DEBUG": true, "DEVEX_VERBOSE": true}
 
@@ -130,7 +134,7 @@ var _ = Describe("CLI startup regression coverage", func() {
 	It("keeps inspection commands usable with a linked legacy config and previews tracked applications", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
 		goBin, env := isolatedGoRunEnv(home)
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
 		build.Env = env
 		output, err := build.CombinedOutput()
@@ -189,7 +193,7 @@ var _ = Describe("Runtime registry catalog", func() {
 			}
 		}
 		env = append(env, "DEVEX_PLUGIN_REGISTRY_URL="+server.URL, "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"))
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
 		build.Env = env
 		output, err := build.CombinedOutput()
@@ -259,7 +263,7 @@ var _ = Describe("Runtime registry catalog", func() {
 			}
 		}
 		env = append(env, "DEVEX_PLUGIN_REGISTRY_URL="+server.URL, "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"))
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
 		build.Env = env
 		output, err := build.CombinedOutput()

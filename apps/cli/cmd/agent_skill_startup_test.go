@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentskills"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -23,7 +24,7 @@ var _ = Describe("Agent skill startup", func() {
 		defer cancel()
 		home := GinkgoT().TempDir()
 		goBin, buildEnv := isolatedGoRunEnv(home)
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(boundedCtx, goBin, "build", "-o", binary, "main.go")
 		build.Env = buildEnv
 		output, err := build.CombinedOutput()
