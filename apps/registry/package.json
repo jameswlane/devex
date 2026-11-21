@@ -27,6 +27,7 @@
 		"@tailwindcss/postcss": "^4.3.5",
 		"@upstash/redis": "^1.41.0",
 		"@vercel/functions": "3.11.3",
+		"@vercel/speed-insights": "^2.1.0",
 		"bcrypt": "^6.0.0",
 		"dotenv": "^18.0.10",
 		"ioredis": "^6.0.0",
