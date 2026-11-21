@@ -329,7 +329,6 @@ func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, e
 		result.Type = StepTypeShell
 		result.DisplayName = step.Shell.Command
 		result.Request = ExecutionRequest{
-			Plugin:     "tool-shell",
 			Command:    interpolateString(step.Shell.Command, evalCtx),
 			Args:       interpolateStringSlice(step.Shell.Args, evalCtx),
 			Env:        interpolateStringMap(step.Shell.Env, evalCtx),
@@ -533,7 +532,7 @@ func parseErrorPolicy(value string) ErrorPolicy {
 
 func stepTypeRequiresPlugin(stepType StepType) bool {
 	switch stepType {
-	case StepTypePlugin, StepTypeShell:
+	case StepTypePlugin:
 		return true
 	default:
 		return false

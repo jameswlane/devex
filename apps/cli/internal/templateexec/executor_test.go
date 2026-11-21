@@ -413,14 +413,59 @@ var _ = Describe("Template Execution Runtime", func() {
 		Expect(store.operations["databases-install-1-001-postgres"].Status).To(Equal(state.OperationStatusFailed))
 	})
 
-	It("returns a step-type-specific error when non-plugin step requests omit a dispatch plugin", func() {
+	It("runs shell steps as a direct executable with their argument list, env, and working dir", func() {
+		binDir := GinkgoT().TempDir()
+		workDir := GinkgoT().TempDir()
+		record := filepath.Join(GinkgoT().TempDir(), "argv")
+		script := "#!/bin/sh\n{ pwd; echo \"$GREETING\"; for a in \"$@\"; do echo \"[$a]\"; done; } > " + record + "\n"
+		Expect(os.WriteFile(filepath.Join(binDir, "argv-recorder"), []byte(script), 0o755)).To(Succeed())
+		GinkgoT().Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
 		plan.Steps[0].Type = templates.StepTypeShell
-		plan.Steps[0].Request.Plugin = ""
+		plan.Steps[0].Request = templates.ExecutionRequest{
+			Command:    "argv-recorder",
+			Args:       []string{"hello world", "$HOME", "*"},
+			Env:        map[string]string{"GREETING": "hi"},
+			WorkingDir: workDir,
+		}
 		runtime := templateexec.NewExecutionRuntime(store, plugin)
 
 		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
 
-		Expect(err).To(MatchError("shell step requires a plugin; use type 'plugin' for plugin-dispatched steps"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(plugin.calls).To(BeEmpty())
+		recorded, err := os.ReadFile(record)
+		Expect(err).NotTo(HaveOccurred())
+		resolvedWorkDir, err := filepath.EvalSymlinks(workDir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(recorded)).To(Equal(resolvedWorkDir + "\nhi\n[hello world]\n[$HOME]\n[*]\n"))
+		Expect(store.operations["databases-install-1-001-postgres"].Status).To(Equal(state.OperationStatusSucceeded))
+	})
+
+	It("fails a shell step when its executable exits non-zero", func() {
+		plan.Steps[0].Type = templates.StepTypeShell
+		plan.Steps[0].Request = templates.ExecutionRequest{Command: "false"}
+		runtime := templateexec.NewExecutionRuntime(store, plugin)
+
+		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
+
+		Expect(err).To(MatchError(ContainSubstring("false failed: exit status 1")))
+		Expect(store.operations["databases-install-1-001-postgres"].Status).To(Equal(state.OperationStatusFailed))
+	})
+
+	It("rejects shell steps that name a plugin or carry an unsafe executable", func() {
+		plan.Steps[0].Type = templates.StepTypeShell
+		plan.Steps[0].Request = templates.ExecutionRequest{Plugin: "tool-shell", Command: "echo"}
+		runtime := templateexec.NewExecutionRuntime(store, plugin)
+
+		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
+		Expect(err).To(MatchError(ContainSubstring("cannot name a plugin")))
+
+		store = newMemoryStateStore()
+		plan.Steps[0].Request = templates.ExecutionRequest{Command: "/bin/sh", Args: []string{"-c", "true"}}
+		runtime = templateexec.NewExecutionRuntime(store, plugin)
+		_, err = runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
+		Expect(err).To(MatchError(ContainSubstring("base executable name")))
 		Expect(plugin.calls).To(BeEmpty())
 	})
 

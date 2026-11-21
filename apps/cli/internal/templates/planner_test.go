@@ -466,7 +466,7 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(err.Error()).To(ContainSubstring("service name"))
 	})
 
-	It("validates generated plugins for app, plugin, and shell steps", func() {
+	It("validates generated plugins for app and plugin steps but not shell steps", func() {
 		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
 			{
 				ID: "app",
@@ -491,7 +491,7 @@ var _ = Describe("Template Runtime Planner", func() {
 			Manager: manager,
 			PluginAvailable: func(_ context.Context, name string) bool {
 				checked[name] = true
-				return name != "tool-shell"
+				return name != "package-manager-docker"
 			},
 		}
 
@@ -505,9 +505,9 @@ var _ = Describe("Template Runtime Planner", func() {
 		})
 
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("plugin 'tool-shell' is not available"))
+		Expect(err.Error()).To(ContainSubstring("plugin 'package-manager-docker' is not available"))
 		Expect(checked).To(HaveKey("package-manager-docker"))
-		Expect(checked).To(HaveKey("tool-shell"))
+		Expect(checked).NotTo(HaveKey("tool-shell"))
 	})
 
 	It("plans built-in database lifecycle requests with non-interactive answers", func() {
