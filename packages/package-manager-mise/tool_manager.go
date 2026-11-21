@@ -9,6 +9,21 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
+// useGlobalConfig reports whether tool mutations should target the global mise
+// config (--global) rather than the local project config.
+func (m *MisePlugin) useGlobalConfig() bool {
+	miseLocal := os.Getenv("MISE_LOCAL")
+	if miseLocal == "" {
+		return true
+	}
+	// Validate environment variable value to prevent manipulation
+	if miseLocal != "1" && miseLocal != "true" && miseLocal != "0" && miseLocal != "false" {
+		m.logger.Warning("Invalid MISE_LOCAL value, using default --global")
+		return true
+	}
+	return miseLocal != "1" && miseLocal != "true"
+}
+
 // HandleInstall installs development tools using Mise
 func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
@@ -27,15 +42,9 @@ func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 	// `mise install` only downloads a version and has no --global flag; `mise
 	// use` installs the tool and records it in the global config (or, with
 	// MISE_LOCAL, the local one) so it is active on PATH.
-	useArgs := []string{"use", "--global"}
-	miseLocal := os.Getenv("MISE_LOCAL")
-	if miseLocal != "" {
-		// Validate environment variable value to prevent manipulation
-		if miseLocal != "1" && miseLocal != "true" && miseLocal != "0" && miseLocal != "false" {
-			m.logger.Warning("Invalid MISE_LOCAL value, using default --global")
-		} else if miseLocal == "1" || miseLocal == "true" {
-			useArgs = []string{"use"}
-		}
+	useArgs := []string{"use"}
+	if m.useGlobalConfig() {
+		useArgs = append(useArgs, "--global")
 	}
 
 	// Use parallel installer for multiple tools
@@ -95,12 +104,18 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 		}
 	}
 
-	// `mise unuse` drops each tool from the config file that requested it
-	// (the one HandleInstall wrote) and prunes the install when nothing else
-	// needs it. `mise uninstall` would delete the files but leave the config
-	// entry, so `mise current` and is-installed would still report the tool.
-	// One call edits the config once, so tools never race on the file.
-	if err := sdk.ExecCommandWithContext(ctx, false, "mise", append([]string{"unuse"}, args...)...); err != nil {
+	// `mise unuse --global` (equivalent to `mise unuse -g`) edits the global
+	// config (~/.config/mise/config.toml) that HandleInstall wrote, leaving a
+	// project's own mise.toml pin alone (or, with MISE_LOCAL, edits the local
+	// config), and prunes the install when nothing else needs it. `mise
+	// uninstall` would delete the files but leave the config entry, so `mise
+	// current` and is-installed would still report the tool. One call edits
+	// the config once, so tools never race on the file.
+	unuseArgs := []string{"unuse"}
+	if m.useGlobalConfig() {
+		unuseArgs = append(unuseArgs, "--global")
+	}
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", append(unuseArgs, args...)...); err != nil {
 		m.logger.Warning("Failed to remove tools %s: %v", strings.Join(args, ", "), err)
 		return err
 	}
