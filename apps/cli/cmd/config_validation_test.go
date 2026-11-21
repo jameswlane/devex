@@ -6,13 +6,14 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Validation startup", func() {
 	It("returns typed strict diagnostics without creating application state", func() {
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(GinkgoT().Context(), "go", "build", "-o", binary, ".")
 		Expect(build.Run()).To(Succeed())
 		home := GinkgoT().TempDir()
@@ -21,7 +22,7 @@ var _ = Describe("Validation startup", func() {
 		path := filepath.Join(configDir, "bad.yaml")
 		Expect(os.WriteFile(path, []byte("name: broken\nlinux:\n  install_method: aptt\n  install_command: broken\n"), 0600)).To(Succeed())
 		cmd := exec.CommandContext(GinkgoT().Context(), binary, "config", "validate", "--strict", "--format", "json")
-		cmd.Env = append(os.Environ(), "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_DATA_HOME="+filepath.Join(home, ".local/share"), "XDG_STATE_HOME="+filepath.Join(home, ".local/state"), "DEVEX_TEAM_CONFIG_DIR=")
+		cmd.Env = append(append(os.Environ(), testhelper.ProfileEnv(home)...), "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_DATA_HOME="+filepath.Join(home, ".local/share"), "XDG_STATE_HOME="+filepath.Join(home, ".local/state"), "DEVEX_TEAM_CONFIG_DIR=")
 		output, err := cmd.Output()
 		Expect(err).To(HaveOccurred())
 		var report struct {

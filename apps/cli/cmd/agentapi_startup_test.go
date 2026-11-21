@@ -7,7 +7,9 @@ import (
 	"io/fs"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -16,12 +18,17 @@ var _ = Describe("Agent API startup", func() {
 	It("keeps read JSON valid without creating configuration or state", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
 		goBin, env := isolatedGoRunEnv(home)
-		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
-		build.Env = env
+		build.Env = goBuildEnv(env)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		before := startupSnapshot(home)
+		// Keep the Windows profile directories outside the snapshotted home:
+		// subprocesses DevEx starts there, such as PowerShell, write their own
+		// caches under the profile.
+		profile := GinkgoT().TempDir()
+		env = append(env, "USERPROFILE="+profile, "APPDATA="+filepath.Join(profile, "AppData", "Roaming"), "LOCALAPPDATA="+filepath.Join(profile, "AppData", "Local"))
 		env = append(env, "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"), "DEVEX_STATE_DIR="+filepath.Join(home, "state"), "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_DISABLE_UPDATE_CHECK=true")
 		for _, args := range [][]string{{"platform", "--format", "json"}, {"inventory", "--format", "json"}, {"config", "effective", "--format", "json"}, {"config", "show", "--format", "json"}, {"list", "available", "--format", "json"}, {"status", "--app", "missing", "--format", "json"}} {
 			cmd := exec.CommandContext(ctx, binary, args...)
@@ -42,8 +49,31 @@ var _ = Describe("Agent API startup", func() {
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		Expect(string(output)).To(ContainSubstring("Would install"))
 		Expect(startupSnapshot(home)).To(Equal(before))
+		Expect(profileWrites(profile)).To(BeEmpty())
 	})
 })
+
+// profileWrites lists what was created under a temporary Windows profile,
+// leaving out what PowerShell (started for platform detection) creates there:
+// its cache under AppData\Local\Microsoft and the empty AppData\Local and
+// AppData\Roaming directories.
+func profileWrites(profile string) []string {
+	cache := filepath.Join(profile, "AppData", "Local", "Microsoft")
+	ancestors := map[string]bool{
+		profile:                           true,
+		filepath.Join(profile, "AppData"): true,
+		filepath.Join(profile, "AppData", "Local"):   true,
+		filepath.Join(profile, "AppData", "Roaming"): true,
+	}
+	var writes []string
+	for path := range startupSnapshot(profile) {
+		if ancestors[path] || path == cache || strings.HasPrefix(path, cache+string(filepath.Separator)) {
+			continue
+		}
+		writes = append(writes, path)
+	}
+	return writes
+}
 
 func startupSnapshot(root string) map[string]string {
 	entries := map[string]string{}

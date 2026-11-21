@@ -11,6 +11,14 @@ import (
 )
 
 var _ = Describe("Database startup", func() {
+	BeforeEach(func() {
+		// On Windows the state directory comes from %LOCALAPPDATA%/%APPDATA%
+		// before the home directory, so clear them to keep each spec's
+		// datastore under its temporary home instead of the real profile.
+		GinkgoT().Setenv("LOCALAPPDATA", "")
+		GinkgoT().Setenv("APPDATA", "")
+	})
+
 	It("migrates before returning a repository and preserves apps on repeat startup", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
 		// A temporary explicit home keeps this test away from the user's datastore.
