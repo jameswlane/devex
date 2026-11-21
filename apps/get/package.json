@@ -10,5 +10,8 @@
 	},
 	"devDependencies": {
 		"serve": "^14.2.8"
+	},
+	"dependencies": {
+		"@vercel/speed-insights": "^2.1.0"
 	}
 }
