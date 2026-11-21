@@ -588,9 +588,25 @@ func loadDirectoryTemplateApplications(fsys fs.FS, name string) ([]types.AppConf
 // ensureMiseStepID names the step that installs mise for legacy templates.
 const ensureMiseStepID = "ensure-mise"
 
+func unusedEnsureMiseStepID(apps []types.AppConfig) string {
+	used := make(map[string]struct{}, len(apps))
+	for _, app := range apps {
+		used[slugifyTemplateID(app.Name)] = struct{}{}
+	}
+	if _, exists := used[ensureMiseStepID]; !exists {
+		return ensureMiseStepID
+	}
+	for n := 2; ; n++ {
+		candidate := fmt.Sprintf("%s-%d", ensureMiseStepID, n)
+		if _, exists := used[candidate]; !exists {
+			return candidate
+		}
+	}
+}
+
 func legacyAppsToSteps(apps []types.AppConfig) []TemplateStepSpec {
 	steps := make([]TemplateStepSpec, 0, len(apps)+1)
-	miseEnsured := false
+	var miseStepID string
 	for i, app := range apps {
 		appCopy := app
 		if app.InstallMethod == "" && app.InstallCommand == "" {
@@ -604,16 +620,16 @@ func legacyAppsToSteps(apps []types.AppConfig) []TemplateStepSpec {
 		if app.InstallMethod == "mise" {
 			// The mise plugin's install command needs mise on the machine, and
 			// legacy templates have no way to declare a plugin step themselves.
-			if !miseEnsured {
+			if miseStepID == "" {
+				miseStepID = unusedEnsureMiseStepID(apps)
 				steps = append(steps, TemplateStepSpec{
-					ID:          ensureMiseStepID,
+					ID:          miseStepID,
 					Order:       (i+1)*10 - 5,
 					Description: "Install mise, which installs the tools that follow",
 					Plugin:      &TemplatePluginAction{Name: "package-manager-mise", Command: "ensure-installed"},
 				})
-				miseEnsured = true
 			}
-			dependsOn = []string{ensureMiseStepID}
+			dependsOn = []string{miseStepID}
 		}
 		steps = append(steps, TemplateStepSpec{
 			ID:        slugifyTemplateID(app.Name),
