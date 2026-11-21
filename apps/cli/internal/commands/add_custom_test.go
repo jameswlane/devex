@@ -322,7 +322,7 @@ var _ = Describe("Add custom applications", func() {
 		})
 
 		It("re-asks after an unsupported method and lists the choices", func() {
-			stdin = "d\n\nlinux\nwinget\napt\nmytool\n\n\ny\n"
+			stdin = "d\n\nlinux\nchocolatey\napt\nmytool\n\n\ny\n"
 			Expect(execute("mytool", "--custom")).To(Succeed())
 			Expect(diagnostics.String()).To(And(ContainSubstring("planned but has no plugin"), ContainSubstring("supported methods")))
 		})
