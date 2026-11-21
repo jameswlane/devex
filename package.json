@@ -55,15 +55,15 @@
 	"devDependencies": {
 		"@auto-it/conventional-commits": "^11.3.6",
 		"@auto-it/core": "^11.3.6",
-		"@biomejs/biome": "2.6.6",
+		"@biomejs/biome": "2.6.8",
 		"@commitlint/config-conventional": "^21.2.4",
 		"@commitlint/format": "^21.2.3",
 		"@octokit/rest": "^22.0.1",
 		"auto": "^11.3.6",
 		"commitlint": "^21.2.4",
-		"glob": "^14.0.4",
+		"glob": "^14.0.6",
 		"js-yaml": "^5.5.0",
-		"turbo": "2.11.11"
+		"turbo": "2.11.13"
 	},
 	"pnpm": {
 		"overrides": {
