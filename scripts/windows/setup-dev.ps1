@@ -67,7 +67,8 @@ function Set-RegistryDword {
 
 function Invoke-WingetInstall {
     param([string]$Id)
-    & winget install --id $Id -e --source winget
+    # Send tool output to the host so only the exit code is returned.
+    & winget install --id $Id -e --source winget | Out-Host
     return $LASTEXITCODE
 }
 
@@ -112,7 +113,7 @@ function Set-GitConfigLocal {
         [string]$Key,
         [string]$Value
     )
-    & git -C $RepoRoot config --local $Key $Value
+    & git -C $RepoRoot config --local $Key $Value | Out-Host
     return $LASTEXITCODE
 }
 
@@ -150,14 +151,14 @@ function Get-MiseMissingTools {
 function Invoke-MiseTrustAndInstall {
     param([string]$RepoRoot)
     if ($RepoRoot) {
-        & mise -C $RepoRoot trust
+        & mise -C $RepoRoot trust | Out-Host
         if ($LASTEXITCODE -ne 0) { return $LASTEXITCODE }
-        & mise -C $RepoRoot install
+        & mise -C $RepoRoot install | Out-Host
         return $LASTEXITCODE
     }
-    & mise trust
+    & mise trust | Out-Host
     if ($LASTEXITCODE -ne 0) { return $LASTEXITCODE }
-    & mise install
+    & mise install | Out-Host
     return $LASTEXITCODE
 }
 

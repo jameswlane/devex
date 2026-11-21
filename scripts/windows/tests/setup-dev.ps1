@@ -318,6 +318,28 @@ try {
     Assert (Test-RepoFile -Path $testFile) 'Real Test-RepoFile returns true for existing file'
     Assert (-not (Test-RepoFile -Path (Join-Path $tempDir 'missing-file'))) 'Real Test-RepoFile returns false for missing file'
 
+    # 12. Real fix helpers return only the exit code, even when the tool prints to stdout
+    foreach ($helper in 'Invoke-WingetInstall', 'Set-GitConfigLocal', 'Invoke-MiseTrustAndInstall') {
+        $definition = ($ast.FindAll({
+            param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $helper
+        }, $false) | Select-Object -First 1).Extent.Text
+        Invoke-Expression $definition
+    }
+    function winget { Write-Output 'Found PowerShell [Microsoft.PowerShell]'; $global:LASTEXITCODE = 0 }
+    function git { Write-Output 'git output'; $global:LASTEXITCODE = 0 }
+    function mise { Write-Output 'mise output'; $global:LASTEXITCODE = 0 }
+    foreach ($result in @(
+        (Invoke-WingetInstall -Id 'Microsoft.PowerShell'),
+        (Set-GitConfigLocal -RepoRoot $tempDir -Key 'core.longpaths' -Value 'true'),
+        (Invoke-MiseTrustAndInstall -RepoRoot $tempDir)
+    )) {
+        Assert ($result -is [int] -and $result -eq 0) "Fix helper must return only exit code 0, got: $($result -join ' | ')"
+    }
+    function winget { Write-Output 'Installer failed'; $global:LASTEXITCODE = 7 }
+    $result = Invoke-WingetInstall -Id 'Microsoft.PowerShell'
+    Assert ($result -is [int] -and $result -eq 7) "Invoke-WingetInstall must return the failing exit code, got: $($result -join ' | ')"
+
     Write-Host 'Windows dev setup tests passed.'
 } finally {
     Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
