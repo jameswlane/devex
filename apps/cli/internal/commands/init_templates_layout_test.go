@@ -24,7 +24,7 @@ var _ = Describe("Template initialization layout", func() {
 					InstallMethod: "apt", InstallCommand: "template-tool",
 				}},
 			}
-			Expect(generateConfigFromTemplate(template, configDir, platform.DetectionResult{})).To(Succeed())
+			Expect(generateConfigFromTemplate(template, configDir, platform.DetectionResult{}, false)).To(Succeed())
 			Expect(filepath.Join(configDir, "applications.yaml")).NotTo(BeAnExistingFile())
 			Expect(filepath.Join(configDir, "applications/development/template-tool.yaml")).To(BeAnExistingFile())
 			apps, err := (config.FileApplicationLoader{}).LoadApplications([]string{configDir})

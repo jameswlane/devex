@@ -2,12 +2,29 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
+
+// useGlobalConfig reports whether tool mutations should target the global mise
+// config (--global) rather than the local project config.
+func (m *MisePlugin) useGlobalConfig() bool {
+	miseLocal := os.Getenv("MISE_LOCAL")
+	if miseLocal == "" {
+		return true
+	}
+	// Validate environment variable value to prevent manipulation
+	if miseLocal != "1" && miseLocal != "true" && miseLocal != "0" && miseLocal != "false" {
+		m.logger.Warning("Invalid MISE_LOCAL value, using default --global")
+		return true
+	}
+	return miseLocal != "1" && miseLocal != "true"
+}
 
 // HandleInstall installs development tools using Mise
 func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
@@ -27,15 +44,9 @@ func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 	// `mise install` only downloads a version and has no --global flag; `mise
 	// use` installs the tool and records it in the global config (or, with
 	// MISE_LOCAL, the local one) so it is active on PATH.
-	useArgs := []string{"use", "--global"}
-	miseLocal := os.Getenv("MISE_LOCAL")
-	if miseLocal != "" {
-		// Validate environment variable value to prevent manipulation
-		if miseLocal != "1" && miseLocal != "true" && miseLocal != "0" && miseLocal != "false" {
-			m.logger.Warning("Invalid MISE_LOCAL value, using default --global")
-		} else if miseLocal == "1" || miseLocal == "true" {
-			useArgs = []string{"use"}
-		}
+	useArgs := []string{"use"}
+	if m.useGlobalConfig() {
+		useArgs = append(useArgs, "--global")
 	}
 
 	// Use parallel installer for multiple tools
@@ -95,12 +106,18 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 		}
 	}
 
-	// `mise unuse` drops each tool from the config file that requested it
-	// (the one HandleInstall wrote) and prunes the install when nothing else
-	// needs it. `mise uninstall` would delete the files but leave the config
-	// entry, so `mise current` and is-installed would still report the tool.
-	// One call edits the config once, so tools never race on the file.
-	if err := sdk.ExecCommandWithContext(ctx, false, "mise", append([]string{"unuse"}, args...)...); err != nil {
+	// `mise unuse --global` (equivalent to `mise unuse -g`) edits the global
+	// config (~/.config/mise/config.toml) that HandleInstall wrote, leaving a
+	// project's own mise.toml pin alone (or, with MISE_LOCAL, edits the local
+	// config), and prunes the install when nothing else needs it. `mise
+	// uninstall` would delete the files but leave the config entry, so `mise
+	// current` would still report the tool. One call edits
+	// the config once, so tools never race on the file.
+	unuseArgs := []string{"unuse"}
+	if m.useGlobalConfig() {
+		unuseArgs = append(unuseArgs, "--global")
+	}
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", append(unuseArgs, args...)...); err != nil {
 		m.logger.Warning("Failed to remove tools %s: %v", strings.Join(args, ", "), err)
 		return err
 	}
@@ -109,8 +126,26 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 	return nil
 }
 
-// HandleUpdate updates Mise plugins and tool versions
+// HandleUpdate updates Mise plugins and tool versions. When tool specs are
+// provided (e.g. node@24), it upgrades only those tools to the newest release
+// matching each spec while keeping the recorded version prefix.
 func (m *MisePlugin) HandleUpdate(ctx context.Context, args []string) error {
+	if len(args) > 0 {
+		for _, tool := range args {
+			if err := m.ValidateToolSpec(tool); err != nil {
+				return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
+			}
+		}
+
+		m.logger.Printf("Updating tools with Mise: %s\n", strings.Join(args, ", "))
+		if err := sdk.ExecCommandWithContext(ctx, false, "mise", append([]string{"upgrade"}, args...)...); err != nil {
+			return fmt.Errorf("failed to update tools %s: %w", strings.Join(args, ", "), err)
+		}
+
+		m.logger.Success("Updated tools: %s", strings.Join(args, ", "))
+		return nil
+	}
+
 	m.logger.Println("Updating Mise plugins and tools...")
 
 	// Update plugins
@@ -192,14 +227,24 @@ func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error
 	}
 
 	// Check if tool is installed
-	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "current", tool)
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "where", tool)
 	if err != nil {
+		// mise also exits 1 for errors such as an invalid config file, so
+		// only its "missing version" messages mean the tool is absent.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr := string(exitErr.Stderr)
+			if strings.Contains(stderr, "not installed") || strings.Contains(stderr, "no versions found") {
+				return &sdk.NotInstalledError{Packages: []string{tool}}
+			}
+		}
 		return fmt.Errorf("failed to check whether tool '%s' is installed: %w", tool, err)
 	}
-	if strings.TrimSpace(output) == "" {
+	installPath := strings.TrimSpace(output)
+	if installPath == "" {
 		return &sdk.NotInstalledError{Packages: []string{tool}}
 	}
 
-	m.logger.Success("Tool %s is installed: %s", tool, strings.TrimSpace(output))
+	m.logger.Success("Tool %s is installed: %s", tool, installPath)
 	return nil
 }

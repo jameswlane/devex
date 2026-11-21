@@ -91,11 +91,17 @@ var _ = Describe("Noninteractive installer authorization", func() {
 		defer cancel()
 		done := make(chan error, 1)
 		go func() { done <- installer.executeCommandStream(ctx, "sudo -n apt-get update") }()
-		Eventually(func() bool { _, err := os.Stat(pidFile); return err == nil }).Should(BeTrue())
-		data, err := os.ReadFile(pidFile)
-		Expect(err).NotTo(HaveOccurred())
-		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-		Expect(err).NotTo(HaveOccurred())
+		// The shell's redirect creates the pid file before printf writes to it, so
+		// wait for a parseable pid rather than mere file existence.
+		var pid int
+		Eventually(func() error {
+			data, err := os.ReadFile(pidFile)
+			if err != nil {
+				return err
+			}
+			pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
+			return err
+		}).Should(Succeed())
 		cancel()
 		Eventually(done).Should(Receive(MatchError(context.Canceled)))
 		Expect(syscall.Kill(pid, 0)).To(Equal(syscall.ESRCH))

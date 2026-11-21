@@ -182,3 +182,53 @@ var _ = Describe("HandleEnsureInstalled shell activation", func() {
 		Expect(string(content)).To(Equal(existing))
 	})
 })
+
+var _ = Describe("Zsh shell integration", func() {
+	It("activates mise from ~/.local/bin when that directory is not on PATH", func() {
+		zshPath, err := exec.LookPath("zsh")
+		if err != nil {
+			Skip("zsh not installed")
+		}
+
+		home := GinkgoT().TempDir()
+		userBin := filepath.Join(home, ".local", "bin")
+		Expect(os.MkdirAll(userBin, 0o755)).To(Succeed())
+		fakeMise := "#!/bin/sh\necho 'export MISE_ACTIVATED=yes'\n"
+		Expect(os.WriteFile(filepath.Join(userBin, "mise"), []byte(fakeMise), 0o755)).To(Succeed())
+
+		plugin := &main.MisePlugin{PackageManagerPlugin: sdk.NewPackageManagerPlugin(sdk.PluginInfo{Name: "package-manager-mise", Version: "test"}, "mise")}
+		Expect(main.ConfigureZshIntegration(plugin, home)).To(Succeed())
+
+		cmd := exec.Command(zshPath, "-f", "-c", `. "$HOME/.zshrc"; printf %s "$MISE_ACTIVATED"`)
+		// An empty PATH keeps a system-wide mise from shadowing the fixture.
+		cmd.Env = []string{"HOME=" + home, "PATH=" + GinkgoT().TempDir()}
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(Equal("yes"))
+	})
+})
+
+var _ = Describe("Fish shell integration", func() {
+	It("activates mise from ~/.local/bin when that directory is not on PATH", func() {
+		fishPath, err := exec.LookPath("fish")
+		if err != nil {
+			Skip("fish not installed")
+		}
+
+		home := GinkgoT().TempDir()
+		userBin := filepath.Join(home, ".local", "bin")
+		Expect(os.MkdirAll(userBin, 0o755)).To(Succeed())
+		fakeMise := "#!/bin/sh\necho 'set -gx MISE_ACTIVATED yes'\n"
+		Expect(os.WriteFile(filepath.Join(userBin, "mise"), []byte(fakeMise), 0o755)).To(Succeed())
+
+		plugin := &main.MisePlugin{PackageManagerPlugin: sdk.NewPackageManagerPlugin(sdk.PluginInfo{Name: "package-manager-mise", Version: "test"}, "mise")}
+		Expect(main.ConfigureFishIntegration(plugin, home)).To(Succeed())
+
+		cmd := exec.Command(fishPath, "--no-config", "-c", `source "$HOME/.config/fish/config.fish"; printf %s "$MISE_ACTIVATED"`)
+		// An empty PATH keeps a system-wide mise from shadowing the fixture.
+		cmd.Env = []string{"HOME=" + home, "PATH=" + GinkgoT().TempDir()}
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(Equal("yes"))
+	})
+})

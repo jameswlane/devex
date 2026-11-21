@@ -46,9 +46,9 @@ backend)
 		"run:docker ps" "run:kubectl version --client" "run:helm version")
 	;;
 full-stack)
-	EXPECT=(pkg:git pkg:curl pkg:wget pkg:postgresql pkg:redis-server
+	EXPECT=(pkg:git pkg:curl pkg:wget pkg:postgresql pkg:redis-server pkg:code pkg:google-chrome-stable pkg:firefox-devedition
 		svc:docker svc:postgresql svc:redis-server
-		"run:docker ps" "run:code --version" "run:chromium --version" "run:firefox --version")
+		"run:docker ps" "run:code --version" "run:google-chrome --version" "run:firefox-devedition --version")
 	;;
 databases)
 	ANSWERS=(databases=postgres,redis,mysql mysql_password=devex-smoke-test)
@@ -91,13 +91,10 @@ done
 known_issue() { # step; sets ISSUE and SIGNATURE
 	ISSUE="" SIGNATURE=""
 	case "$TEMPLATE:$1" in
-	full-stack:install)
-		ISSUE=462 SIGNATURE='published using classic confinement|exec: "snap": executable file not found'
-		;;
 	mobile:install | game-development:install)
 		ISSUE=569 SIGNATURE='Flatpak system operation ConfigureRemote not allowed'
 		;;
-	minimal:status | backend:status)
+	minimal:status | backend:status | full-stack:status)
 		ISSUE=570 SIGNATURE='has no recorded resources for template'
 		;;
 	esac

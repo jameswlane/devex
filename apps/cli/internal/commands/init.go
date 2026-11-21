@@ -376,7 +376,7 @@ func runInteractiveInit(settings config.CrossPlatformSettings, repo types.Reposi
 	}
 
 	// Save configuration
-	if err := saveInitConfig(config, settings); err != nil {
+	if err := saveInitConfig(config, settings, force); err != nil {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
@@ -440,7 +440,7 @@ func initWithProfile(profileName string, settings config.CrossPlatformSettings, 
 	}
 
 	// Save configuration
-	if err := saveInitConfig(config, settings); err != nil {
+	if err := saveInitConfig(config, settings, force); err != nil {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
@@ -497,7 +497,11 @@ func importInitConfiguration(file string, settings config.CrossPlatformSettings,
 	if err := validateImportCandidate(context.Background(), settings, map[string]interface{}{"configurations": map[string]interface{}{"default": imported}}); err != nil {
 		return fmt.Errorf("import validation failed: %w", err)
 	}
-	if err := config.WriteDefaultConfig(configDir); err != nil {
+	writeDefaults := config.WriteDefaultConfig
+	if force {
+		writeDefaults = config.OverwriteDefaultConfig
+	}
+	if err := writeDefaults(configDir); err != nil {
 		return fmt.Errorf("failed to create default configuration: %w", err)
 	}
 
@@ -681,7 +685,7 @@ func importDesktop(content interface{}, configDir string) error {
 	return nil
 }
 
-func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) error {
+func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings, force bool) error {
 	if err := validateBeforeMutation(context.Background(), settings); err != nil {
 		return err
 	}
@@ -726,7 +730,7 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 	}
 
 	// Create basic configuration files if they don't exist
-	if err := createDefaultConfigs(configDir, config); err != nil {
+	if err := createDefaultConfigs(configDir, config, force); err != nil {
 		return fmt.Errorf("failed to create default configs: %w", err)
 	}
 
@@ -757,6 +761,9 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 	return nil
 }
 
-func createDefaultConfigs(configDir string, _ InitConfig) error {
+func createDefaultConfigs(configDir string, _ InitConfig, force bool) error {
+	if force {
+		return config.OverwriteDefaultConfig(configDir)
+	}
 	return config.WriteDefaultConfig(configDir)
 }

@@ -3,12 +3,14 @@ package commands_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	shipconfig "github.com/jameswlane/devex/apps/cli/config"
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
@@ -43,6 +45,30 @@ var _ = Describe("Init command configuration layout", func() {
 		validate := commands.NewInitCmd(mocks.NewMockRepository(), loaded)
 		validate.SetArgs([]string{"--validate"})
 		Expect(validate.Execute()).To(Succeed())
+	})
+
+	It("overwrites modified shipped catalog files when --force is set", func() {
+		const relPath = "applications/development/build-essential.yaml"
+		shipped, err := shipconfig.Files.ReadFile(relPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		settings := config.CrossPlatformSettings{HomeDir: homeDir}
+		initCmd := commands.NewInitCmd(mocks.NewMockRepository(), settings)
+		initCmd.SetArgs([]string{"--profile", "backend", "--interactive=false"})
+		Expect(initCmd.Execute()).To(Succeed())
+
+		target := filepath.Join(settings.GetConfigDir(), filepath.FromSlash(relPath))
+		modified := strings.Replace(string(shipped), "Essential development tools", "User modified tools", 1)
+		Expect(modified).NotTo(Equal(string(shipped)))
+		Expect(os.WriteFile(target, []byte(modified), 0600)).To(Succeed())
+
+		forceCmd := commands.NewInitCmd(mocks.NewMockRepository(), settings)
+		forceCmd.SetArgs([]string{"--force", "--profile", "backend", "--interactive=false"})
+		Expect(forceCmd.Execute()).To(Succeed())
+
+		after, err := os.ReadFile(target)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(after).To(Equal(shipped))
 	})
 
 	It("imports applications into the canonical tree", func() {

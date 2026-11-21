@@ -211,14 +211,14 @@ lifecycle:
           metadata:
             tool: awscli
   maintain:
-    # Re-running `mise use` moves each tool to the newest release that
+    # Running `mise upgrade` moves each tool to the newest release that
     # matches the version prefix recorded at install time.
     - id: kubectl-update
       order: 10
       if: has_resource("kubectl")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.kubectl.external_id }}"
     - id: helm-update
@@ -226,7 +226,7 @@ lifecycle:
       if: has_resource("helm")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.helm.external_id }}"
     - id: kind-update
@@ -234,7 +234,7 @@ lifecycle:
       if: has_resource("kind")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.kind.external_id }}"
     - id: terraform-update
@@ -242,7 +242,7 @@ lifecycle:
       if: has_resource("terraform")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.terraform.external_id }}"
     - id: opentofu-update
@@ -250,7 +250,7 @@ lifecycle:
       if: has_resource("opentofu")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.opentofu.external_id }}"
     - id: awscli-update
@@ -258,7 +258,7 @@ lifecycle:
       if: has_resource("awscli")
       plugin:
         name: package-manager-mise
-        command: install
+        command: update
         args:
           - "{{ resource.awscli.external_id }}"
   status:
@@ -269,7 +269,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.kubectl.metadata.tool }}"
+          - "{{ resource.kubectl.external_id }}"
     - id: helm-status
       order: 20
       if: has_resource("helm")
@@ -277,7 +277,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.helm.metadata.tool }}"
+          - "{{ resource.helm.external_id }}"
     - id: kind-status
       order: 30
       if: has_resource("kind")
@@ -285,7 +285,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.kind.metadata.tool }}"
+          - "{{ resource.kind.external_id }}"
     - id: terraform-status
       order: 40
       if: has_resource("terraform")
@@ -293,7 +293,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.terraform.metadata.tool }}"
+          - "{{ resource.terraform.external_id }}"
     - id: opentofu-status
       order: 50
       if: has_resource("opentofu")
@@ -301,7 +301,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.opentofu.metadata.tool }}"
+          - "{{ resource.opentofu.external_id }}"
     - id: awscli-status
       order: 60
       if: has_resource("awscli")
@@ -309,7 +309,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.awscli.metadata.tool }}"
+          - "{{ resource.awscli.external_id }}"
   remove:
     # Docker Engine is shared with other templates and is never removed here.
     - id: kubectl-remove

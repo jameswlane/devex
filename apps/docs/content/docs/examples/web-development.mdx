@@ -20,7 +20,7 @@ DevEx ships two web templates:
 | Template | Installs | Status |
 | --- | --- | --- |
 | `web-development` | mise, then Node.js 24 through mise | Installs on a fresh machine. It doesn't install VS Code or Chrome |
-| `full-stack` | Git, curl, wget, Docker, PostgreSQL, Redis, VS Code, Chrome and Firefox Developer Edition | Stops at the VS Code snap on Ubuntu ([#462](https://github.com/jameswlane/devex/issues/462)) |
+| `full-stack` | Git, curl, wget, Docker, PostgreSQL, Redis, VS Code, Chrome and Firefox Developer Edition | Installs VS Code, Chrome (`amd64`) and Firefox Developer Edition from their official APT repositories on Debian and Ubuntu |
 
 ```bash
 devex template info web-development
@@ -83,7 +83,11 @@ devex remove --template databases --run latest --force   # keeps the data volume
 
 ## Editor and browser
 
-DevEx doesn't install VS Code or Chrome on Debian and Ubuntu yet ([#553](https://github.com/jameswlane/devex/issues/553)). Install them from [code.visualstudio.com](https://code.visualstudio.com/) and [google.com/chrome](https://www.google.com/chrome/).
+On Debian and Ubuntu, Visual Studio Code, Google Chrome (`amd64` only) and Firefox Developer Edition are available in the application catalog and install from their official APT repositories:
+
+```bash
+devex install "Visual Studio Code" "Google Chrome" --non-interactive
+```
 
 ## Smoke procedure
 

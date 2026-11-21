@@ -258,7 +258,7 @@ func runInteractiveInitWithTemplates(settings config.CrossPlatformSettings, repo
 	customize := strings.ToLower(strings.TrimSpace(response)) == "y"
 
 	// Apply template with optional customizations
-	if err := applyTemplate(*selectedTemplate, settings, p, customize, reader, green, yellow, cyan); err != nil {
+	if err := applyTemplate(*selectedTemplate, settings, p, customize, force, reader, green, yellow, cyan); err != nil {
 		return fmt.Errorf("failed to apply template: %w", err)
 	}
 
@@ -342,7 +342,7 @@ func selectTemplateFromList(templateManager *templates.TemplateManager, reader *
 }
 
 // applyTemplate applies the selected template to create configuration
-func applyTemplate(template templates.Template, settings config.CrossPlatformSettings, platformInfo platform.DetectionResult, customize bool, reader *bufio.Reader, green, yellow, cyan func(...interface{}) string) error {
+func applyTemplate(template templates.Template, settings config.CrossPlatformSettings, platformInfo platform.DetectionResult, customize, force bool, reader *bufio.Reader, green, yellow, cyan func(...interface{}) string) error {
 	configDir := settings.GetConfigDir()
 
 	// Create config directory if it doesn't exist
@@ -358,7 +358,7 @@ func applyTemplate(template templates.Template, settings config.CrossPlatformSet
 	}
 
 	// Generate configuration files from template
-	if err := generateConfigFromTemplate(template, configDir, platformInfo); err != nil {
+	if err := generateConfigFromTemplate(template, configDir, platformInfo, force); err != nil {
 		return fmt.Errorf("failed to generate configuration: %w", err)
 	}
 
@@ -419,8 +419,12 @@ func customizeTemplate(template *templates.Template, reader *bufio.Reader, yello
 }
 
 // generateConfigFromTemplate creates configuration files from template
-func generateConfigFromTemplate(template templates.Template, configDir string, platformInfo platform.DetectionResult) error {
-	if err := config.WriteDefaultConfig(configDir); err != nil {
+func generateConfigFromTemplate(template templates.Template, configDir string, platformInfo platform.DetectionResult, force bool) error {
+	writeDefaults := config.WriteDefaultConfig
+	if force {
+		writeDefaults = config.OverwriteDefaultConfig
+	}
+	if err := writeDefaults(configDir); err != nil {
 		return fmt.Errorf("failed to create default configuration: %w", err)
 	}
 	if !template.Metadata.Additive {

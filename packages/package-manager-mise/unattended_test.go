@@ -23,9 +23,20 @@ var _ = Describe("Unattended mise execution", func() {
 		Expect(plugin.HandleUpdate(context.Background(), nil)).To(Succeed())
 		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
 			{Args: []string{"use", "--global", "node@22"}},
-			{Args: []string{"unuse", "node@22"}},
+			{Args: []string{"unuse", "--global", "node@22"}},
 			{Args: []string{"plugins", "update"}},
 			{Args: []string{"upgrade"}},
+		}))
+	})
+
+	It("upgrades specific tools within their version prefix without updating plugins", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		plugin := main.NewMisePlugin()
+		Expect(plugin.HandleUpdate(context.Background(), []string{"node@24", "java@21"})).To(Succeed())
+		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+			{Args: []string{"upgrade", "node@24", "java@21"}},
 		}))
 	})
 
@@ -52,7 +63,11 @@ var _ = Describe("Unattended mise execution", func() {
 		GinkgoT().Setenv("MISE_LOCAL", "1")
 		plugin := main.NewMisePlugin()
 		Expect(plugin.HandleInstall(context.Background(), []string{"node@22"})).To(Succeed())
-		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{{Args: []string{"use", "node@22"}}}))
+		Expect(plugin.HandleRemove(context.Background(), []string{"node@22"})).To(Succeed())
+		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+			{Args: []string{"use", "node@22"}},
+			{Args: []string{"unuse", "node@22"}},
+		}))
 	})
 
 	It("runs ensure-installed when mise is not on PATH yet", func() {

@@ -8,6 +8,11 @@
     <meta name="theme-color" content="#0b0b0f" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>" />
     <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
+    <script type="module">
+        import { injectSpeedInsights } from 'https://esm.sh/@vercel/speed-insights';
+
+        injectSpeedInsights();
+    </script>
     <style>
         :root { --bg: #0b0b0f; --fg: #cbd5e1; --muted: #64748b; }
         html,body { height: 100%; margin: 0; }
