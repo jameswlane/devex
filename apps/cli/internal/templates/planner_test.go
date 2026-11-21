@@ -42,6 +42,33 @@ var _ = Describe("Template Runtime Planner", func() {
 		Entry("backend", "backend"),
 		Entry("full-stack", "full-stack"),
 	)
+
+	DescribeTable("resolves editor and browsers from the catalog in the full-stack template",
+		func(stepID, ref string) {
+			manager := templates.NewTemplateManager(GinkgoT().TempDir())
+			spec, err := manager.GetTemplateSpec("full-stack")
+			Expect(err).NotTo(HaveOccurred())
+			found := false
+			for _, step := range spec.Lifecycle[templates.LifecycleInstall] {
+				if step.App != nil {
+					Expect(step.App.Installer).NotTo(Equal("snap"), "full-stack step %s must not use snap", step.ID)
+					if step.App.App != nil {
+						Expect(step.App.App.InstallMethod).NotTo(Equal("snap"), "full-stack step %s must not use snap", step.ID)
+					}
+				}
+				if step.ID == stepID {
+					Expect(step.App).NotTo(BeNil())
+					Expect(step.App.Ref).To(Equal(ref))
+					Expect(step.App.App).To(BeNil())
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue(), "full-stack template must retain %s as a catalog reference", ref)
+		},
+		Entry("Visual Studio Code", "visual-studio-code", "Visual Studio Code"),
+		Entry("Google Chrome", "google-chrome", "Google Chrome"),
+		Entry("Firefox Developer Edition", "firefox-developer-edition", "Firefox Developer Edition"),
+	)
 	var (
 		tempDir string
 		manager *templates.TemplateManager
