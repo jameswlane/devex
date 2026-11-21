@@ -67,7 +67,7 @@ devex package-manager dnf update
 devex package-manager dnf group-install "Development Tools"
 
 # Search packages
-devex package-manager dnf search "web server"
+devex package-manager dnf search web server
 ```
 
 ## 🔧 Configuration
