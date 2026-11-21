@@ -25,9 +25,4 @@ linux:
         chmod a+r /etc/apt/keyrings/packages.mozilla.org.asc
         printf 'deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main\n' \
           > /etc/apt/sources.list.d/mozilla.list
-        cat > /etc/apt/preferences.d/mozilla <<'EOF'
-        Package: *
-        Pin: origin packages.mozilla.org
-        Pin-Priority: 1000
-        EOF
         apt-get update
