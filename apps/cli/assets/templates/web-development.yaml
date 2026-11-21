@@ -74,7 +74,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.node.metadata.tool }}"
+          - "{{ resource.node.external_id }}"
   remove:
     - id: node-remove
       order: 10

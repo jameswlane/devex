@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	main "github.com/jameswlane/devex/packages/package-manager-mise"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 )
 
 var _ = Describe("Tool Manager", func() {
@@ -141,44 +141,71 @@ var _ = Describe("Tool Manager", func() {
 
 	Describe("HandleIsInstalled", func() {
 		Context("with valid tool", func() {
-			BeforeEach(func() {
-				binDir := GinkgoT().TempDir()
-				fakeMise := filepath.Join(binDir, "mise")
-				script := `#!/bin/sh
-if [ "$#" -eq 2 ] && [ "$1" = "current" ] && [ "$2" = "node" ]; then
-	echo "24.11.1"
-	exit 0
-fi
-if [ "$#" -eq 2 ] && [ "$1" = "current" ] && [ "$2" = "go" ]; then
-	exit 0
-fi
-echo "mise ERROR $* not found in mise tool registry" >&2
-exit 1
-`
-				Expect(os.WriteFile(fakeMise, []byte(script), 0o755)).To(Succeed())
-
-				origPath, hadPath := os.LookupEnv("PATH")
-				Expect(os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)).To(Succeed())
-				DeferCleanup(func() {
-					if hadPath {
-						_ = os.Setenv("PATH", origPath)
-					} else {
-						_ = os.Unsetenv("PATH")
-					}
+			It("returns nil when mise where reports an install path", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				recorder.Script("mise", []string{"where", "node@24"}, sdktest.Response{
+					ExitCode: 0,
+					Stdout:   "/home/devex-test-user/.local/share/mise/installs/node/24.1.0\n",
 				})
+
+				Expect(plugin.HandleIsInstalled(context.Background(), []string{"node@24"})).To(Succeed())
+				Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+					{Args: []string{"where", "node@24"}},
+				}))
 			})
 
-			It("should check versioned tool specs by tool name", func() {
-				err := plugin.HandleIsInstalled(context.Background(), []string{"node@lts"})
-				Expect(err).NotTo(HaveOccurred())
+			It("passes a version alias such as node@lts through to mise where", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				recorder.Script("mise", []string{"where", "node@lts"}, sdktest.Response{
+					ExitCode: 0,
+					Stdout:   "/home/devex-test-user/.local/share/mise/installs/node/24.1.0\n",
+				})
+
+				Expect(plugin.HandleIsInstalled(context.Background(), []string{"node@lts"})).To(Succeed())
+				Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+					{Args: []string{"where", "node@lts"}},
+				}))
 			})
 
-			It("should return NotInstalledError when no version is active", func() {
-				err := plugin.HandleIsInstalled(context.Background(), []string{"go@latest"})
+			It("returns NotInstalledError when mise where exits non-zero for a missing tool", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				recorder.Script("mise", []string{"where", "node@24"}, sdktest.Response{
+					ExitCode: 1,
+					Stderr:   "mise ERROR node@24 not installed\n",
+				})
+
+				err := plugin.HandleIsInstalled(context.Background(), []string{"node@24"})
 				Expect(err).To(HaveOccurred())
 				var notInstalled *sdk.NotInstalledError
 				Expect(errors.As(err, &notInstalled)).To(BeTrue())
-				Expect(notInstalled.Packages).To(Equal([]string{"go@latest"}))
+				Expect(notInstalled.Packages).To(Equal([]string{"node@24"}))
+				Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+					{Args: []string{"where", "node@24"}},
+				}))
+			})
+
+			It("returns NotInstalledError when mise where prints empty output", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				recorder.Script("mise", []string{"where", "node@24"}, sdktest.Response{
+					ExitCode: 0,
+					Stdout:   "   \n",
+				})
+
+				err := plugin.HandleIsInstalled(context.Background(), []string{"node@24"})
+				Expect(err).To(HaveOccurred())
+				var notInstalled *sdk.NotInstalledError
+				Expect(errors.As(err, &notInstalled)).To(BeTrue())
+				Expect(notInstalled.Packages).To(Equal([]string{"node@24"}))
+			})
+
+			It("returns a wrapped error when mise cannot be executed", func() {
+				sdktest.NewRecorder(GinkgoT())
+
+				err := plugin.HandleIsInstalled(context.Background(), []string{"node@24"})
+				Expect(err).To(HaveOccurred())
+				var notInstalled *sdk.NotInstalledError
+				Expect(errors.As(err, &notInstalled)).To(BeFalse())
+				Expect(err.Error()).To(ContainSubstring("failed to check whether tool 'node@24' is installed"))
 			})
 		})
 

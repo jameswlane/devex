@@ -269,7 +269,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.kubectl.metadata.tool }}"
+          - "{{ resource.kubectl.external_id }}"
     - id: helm-status
       order: 20
       if: has_resource("helm")
@@ -277,7 +277,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.helm.metadata.tool }}"
+          - "{{ resource.helm.external_id }}"
     - id: kind-status
       order: 30
       if: has_resource("kind")
@@ -285,7 +285,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.kind.metadata.tool }}"
+          - "{{ resource.kind.external_id }}"
     - id: terraform-status
       order: 40
       if: has_resource("terraform")
@@ -293,7 +293,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.terraform.metadata.tool }}"
+          - "{{ resource.terraform.external_id }}"
     - id: opentofu-status
       order: 50
       if: has_resource("opentofu")
@@ -301,7 +301,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.opentofu.metadata.tool }}"
+          - "{{ resource.opentofu.external_id }}"
     - id: awscli-status
       order: 60
       if: has_resource("awscli")
@@ -309,7 +309,7 @@ lifecycle:
         name: package-manager-mise
         command: is-installed
         args:
-          - "{{ resource.awscli.metadata.tool }}"
+          - "{{ resource.awscli.external_id }}"
   remove:
     # Docker Engine is shared with other templates and is never removed here.
     - id: kubectl-remove

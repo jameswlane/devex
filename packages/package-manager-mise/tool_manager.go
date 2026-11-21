@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -206,17 +208,20 @@ func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error
 		return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 	}
 
-	toolName, _, _ := strings.Cut(tool, "@")
-
 	// Check if tool is installed
-	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "current", toolName)
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "where", tool)
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return &sdk.NotInstalledError{Packages: []string{tool}}
+		}
 		return fmt.Errorf("failed to check whether tool '%s' is installed: %w", tool, err)
 	}
-	if strings.TrimSpace(output) == "" {
+	installPath := strings.TrimSpace(output)
+	if installPath == "" {
 		return &sdk.NotInstalledError{Packages: []string{tool}}
 	}
 
-	m.logger.Success("Tool %s is installed: %s", tool, strings.TrimSpace(output))
+	m.logger.Success("Tool %s is installed: %s", tool, installPath)
 	return nil
 }
