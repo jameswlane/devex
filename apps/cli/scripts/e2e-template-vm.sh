@@ -92,15 +92,15 @@ main() {
 	upload "$WORK/devex" "$GUEST_DIR/template-check.sh"
 	guest "timeout 600 cloud-init status --wait >/dev/null; sudo ln -sf /var/tmp/devex-vm-bin/devex /usr/local/bin/devex"
 
-	guest "bash /var/tmp/devex-vm-bin/template-check.sh prepare $TEMPLATE" 2>&1 | tee "$ARTIFACTS/prepare.log" >&2
+	guest "DEVEX_REGISTRY_CI=1 bash /var/tmp/devex-vm-bin/template-check.sh prepare $TEMPLATE" 2>&1 | tee "$ARTIFACTS/prepare.log" >&2
 
 	log "installing template $TEMPLATE"
-	guest "timeout $STEP_TIMEOUT bash /var/tmp/devex-vm-bin/template-check.sh install $TEMPLATE" 2>&1 |
+	guest "DEVEX_REGISTRY_CI=1 timeout $STEP_TIMEOUT bash /var/tmp/devex-vm-bin/template-check.sh install $TEMPLATE" 2>&1 |
 		tee "$ARTIFACTS/install.log" >&2
 	# Each SSH command is a new login, so this sees what a user sees after
 	# logging back in, including new group membership and shell setup.
 	log "verifying template $TEMPLATE from a new login"
-	guest "timeout $STEP_TIMEOUT bash /var/tmp/devex-vm-bin/template-check.sh verify $TEMPLATE" 2>&1 |
+	guest "DEVEX_REGISTRY_CI=1 timeout $STEP_TIMEOUT bash /var/tmp/devex-vm-bin/template-check.sh verify $TEMPLATE" 2>&1 |
 		tee "$ARTIFACTS/verify.log" >&2
 }
 

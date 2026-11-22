@@ -98,10 +98,12 @@ export async function GET(
 
 		// CI (our e2e suite) marks its requests so they don't inflate public counts
 		const automated = isAutomatedDownload(request);
+		// The plugin row may come from the lookup cache, so its count can be stale
+		let downloadCount = plugin.downloadCount;
 		if (!automated) {
 			// Update download count and last download time atomically
 			// By id: pluginName may be a short name ("apt") that no row is named
-			await prisma.plugin.update({
+			const updated = await prisma.plugin.update({
 				where: { id: plugin.id },
 				data: {
 					downloadCount: {
@@ -109,7 +111,9 @@ export async function GET(
 					},
 					lastDownload: new Date(),
 				},
+				select: { downloadCount: true },
 			});
+			downloadCount = updated.downloadCount;
 			// Feeds the rolling 24-hour total in /api/v1/stats
 			await recordDownload();
 		}
@@ -127,9 +131,7 @@ export async function GET(
 				"X-Plugin-Name": plugin.name,
 				"X-Plugin-Version": version,
 				"X-Platform": platform,
-				"X-Download-Count": (
-					plugin.downloadCount + (automated ? 0 : 1)
-				).toString(),
+				"X-Download-Count": downloadCount.toString(),
 			},
 		});
 	} catch (error) {

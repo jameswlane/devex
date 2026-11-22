@@ -7,7 +7,7 @@ import type {
 
 vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: vi.fn(), findFirst: vi.fn() },
+		plugin: { findMany: vi.fn() },
 		pluginVersion: { findUnique: vi.fn() },
 	},
 }));
@@ -18,6 +18,7 @@ vi.mock("@/lib/error-handler", () => ({
 }));
 
 import { GET } from "@/app/api/v1/plugins/[id]/versions/[version]/route";
+import { redis } from "@/lib/redis";
 
 type VersionDetail = Pick<
 	PluginVersion,
@@ -35,12 +36,7 @@ type VersionDetail = Pick<
 
 type MockPrisma = {
 	plugin: {
-		findUnique: Mock<
-			(args: { where: { name: string } }) => Promise<Plugin | null>
-		>;
-		findFirst: Mock<
-			(args: { where: { shortName: string } }) => Promise<Plugin | null>
-		>;
+		findMany: Mock<(args: unknown) => Promise<Plugin[]>>;
 	};
 	pluginVersion: {
 		findUnique: Mock<
@@ -94,10 +90,10 @@ function params(version: string, id = "package-manager-apt") {
 }
 
 describe("GET /api/v1/plugins/[id]/versions/[version]", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.clearAllMocks();
-		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
+		await redis.disconnect();
+		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
 		mockPrisma.pluginVersion.findUnique.mockResolvedValue(versionDetail);
 	});
 
@@ -176,10 +172,12 @@ describe("GET /api/v1/plugins/[id]/versions/[version]", () => {
 	});
 
 	it("returns 404 when latest has never been recorded", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue({
-			...plugin,
-			latestVersion: null,
-		});
+		mockPrisma.plugin.findMany.mockResolvedValue([
+			{
+				...plugin,
+				latestVersion: null,
+			},
+		]);
 
 		const response = await GET(request("latest"), params("latest"));
 
@@ -191,13 +189,12 @@ describe("GET /api/v1/plugins/[id]/versions/[version]", () => {
 		const response = await GET(request("not-semver"), params("not-semver"));
 
 		expect(response.status).toBe(400);
-		expect(mockPrisma.plugin.findUnique).not.toHaveBeenCalled();
+		expect(mockPrisma.plugin.findMany).not.toHaveBeenCalled();
 		expect(mockPrisma.pluginVersion.findUnique).not.toHaveBeenCalled();
 	});
 
 	it("returns 404 for an unknown plugin", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue(null);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
+		mockPrisma.plugin.findMany.mockResolvedValue([]);
 
 		const response = await GET(request("1.10.0"), params("1.10.0", "unknown"));
 
