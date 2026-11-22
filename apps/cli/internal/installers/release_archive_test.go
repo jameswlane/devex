@@ -123,7 +123,7 @@ var _ = Describe("Release archive installs", func() {
 
 	It("installs a pinned archive from the installation cache", func() {
 		archive = buildArchive(map[string]string{"lazygit": "binary"})
-		config := app("https://example.com/lazygit_1_linux_x86_64.tar.gz", "lazygit")
+		config := app("https://github.com/example/tool/releases/download/v1/lazygit_1_linux_x86_64.tar.gz", "lazygit")
 		home, err := os.UserHomeDir()
 		Expect(err).NotTo(HaveOccurred())
 		manager, err := cache.NewCacheManager(appconfig.CrossPlatformSettings{HomeDir: home})
@@ -143,9 +143,19 @@ var _ = Describe("Release archive installs", func() {
 		Expect(filepath.Join(destination, "lazygit")).To(BeARegularFile())
 	})
 
+	It("refuses an archive from an untrusted host before downloading it", func() {
+		archive = buildArchive(map[string]string{"lazygit": "binary"})
+		downloaded := false
+		runArchiveCommand = func(context.Context, string, ...string) (string, error) { downloaded = true; return "", nil }
+
+		err := InstallReleaseArchive(context.Background(), app("https://example.com/lazygit.tar.gz", "lazygit"))
+		Expect(err).To(MatchError(ContainSubstring("is not trusted")))
+		Expect(downloaded).To(BeFalse())
+	})
+
 	It("refuses an unpinned archive before downloading it", func() {
 		archive = buildArchive(map[string]string{"lazygit": "binary"})
-		config := app("https://example.com/lazygit.tar.gz", "lazygit")
+		config := app("https://github.com/example/tool/releases/download/v1/lazygit.tar.gz", "lazygit")
 		config.Verification.SHA256 = ""
 		downloaded := false
 		runArchiveCommand = func(context.Context, string, ...string) (string, error) { downloaded = true; return "", nil }
@@ -158,7 +168,7 @@ var _ = Describe("Release archive installs", func() {
 
 	It("rejects an archive whose checksum does not match", func() {
 		archive = buildArchive(map[string]string{"lazygit": "binary"})
-		config := app("https://example.com/lazygit.tar.gz", "lazygit")
+		config := app("https://github.com/example/tool/releases/download/v1/lazygit.tar.gz", "lazygit")
 		config.Verification.SHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte("something else")))
 
 		err := InstallReleaseArchive(context.Background(), config)
@@ -178,14 +188,14 @@ var _ = Describe("Release archive installs", func() {
 		Expect(writer.Close()).To(Succeed())
 		Expect(file.Close()).To(Succeed())
 
-		err = InstallReleaseArchive(context.Background(), app("https://example.com/evil.tar", "tool"))
+		err = InstallReleaseArchive(context.Background(), app("https://github.com/example/tool/releases/download/v1/evil.tar", "tool"))
 		Expect(err).To(MatchError(ContainSubstring("unsafe path")))
 		Expect(systemCalls).To(BeEmpty())
 	})
 
 	It("routes a curlpipe release archive to the archive installer instead of running it as a script", func() {
 		archive = buildArchive(map[string]string{"lazygit": "binary"})
-		config := app("https://example.com/lazygit.tar.gz", "lazygit")
+		config := app("https://github.com/example/tool/releases/download/v1/lazygit.tar.gz", "lazygit")
 
 		Expect(executeInstallCommand(context.Background(), config, nil)).To(Succeed())
 		Expect(filepath.Join(destination, "lazygit")).To(BeARegularFile())

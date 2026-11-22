@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -36,6 +37,9 @@ func IsReleaseArchive(downloadURL string) bool {
 	}
 	return false
 }
+
+// releaseArchiveHosts are the sources a release archive may come from.
+var releaseArchiveHosts = []string{"github.com"}
 
 // Seams for tests.
 var (
@@ -68,6 +72,9 @@ func InstallReleaseArchive(ctx context.Context, app types.AppConfig) error {
 	parsed, err := url.Parse(app.DownloadURL)
 	if err != nil || parsed.Scheme != "https" {
 		return fmt.Errorf("release archive URL for %s must use https: %q", app.Name, app.DownloadURL)
+	}
+	if !slices.Contains(releaseArchiveHosts, parsed.Hostname()) {
+		return fmt.Errorf("release archive host %s for %s is not trusted (allowed: %s)", parsed.Hostname(), app.Name, strings.Join(releaseArchiveHosts, ", "))
 	}
 
 	workDir, err := os.MkdirTemp("", "devex-archive-*")
