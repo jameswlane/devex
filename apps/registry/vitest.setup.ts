@@ -8,6 +8,13 @@ Object.assign(process.env, {
 	DATABASE_URL: "file:./test.db",
 	NEXTAUTH_SECRET: "test-secret",
 	NEXTAUTH_URL: "http://localhost:3000",
+	// Empty, not deleted: dotenv never overrides a set variable, so a local
+	// .env cannot point tests at a live Redis
+	KV_REST_API_URL: "",
+	KV_REST_API_TOKEN: "",
+	UPSTASH_REDIS_REST_URL: "",
+	UPSTASH_REDIS_REST_TOKEN: "",
+	REDIS_URL: "",
 });
 
 // Suppress console output during tests unless it's an error

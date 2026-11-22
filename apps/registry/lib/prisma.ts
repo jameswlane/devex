@@ -1,7 +1,9 @@
-import { withAccelerate } from "@prisma/extension-accelerate";
 import { PrismaClient } from "../generated/prisma/client";
 import { logger } from "./logger";
-import { prismaConnectionOptions } from "./prisma-connection";
+import {
+	prismaConnectionOptions,
+	resolveDatabaseUrl,
+} from "./prisma-connection";
 
 // Retry configuration for database operations
 interface RetryConfig {
@@ -82,12 +84,11 @@ interface DatabasePoolConfig {
 	poolTimeout?: number;
 }
 
-// Create Prisma client with Accelerate extension and enhanced connection pooling
+// Create Prisma client over pooled TCP with the PostgreSQL driver adapter
 const createPrismaClient = () => {
-	const connectionString = process.env.PRISMA_DATABASE_URL
-		? enhanceDatabaseUrlWithPooling(process.env.PRISMA_DATABASE_URL)
-		: undefined;
-	const client = new PrismaClient({
+	const url = resolveDatabaseUrl();
+	const connectionString = url ? enhanceDatabaseUrlWithPooling(url) : undefined;
+	return new PrismaClient({
 		...prismaConnectionOptions(connectionString),
 		log:
 			process.env.NODE_ENV === "development"
@@ -95,9 +96,6 @@ const createPrismaClient = () => {
 				: ["error"],
 		errorFormat: "pretty",
 	});
-
-	// Extend with Accelerate since it's enabled on Prisma Cloud for additional connection pooling
-	return client.$extends(withAccelerate());
 };
 
 // Helper function to enhance database URL with connection pooling parameters
@@ -110,7 +108,7 @@ function enhanceDatabaseUrlWithPooling(originalUrl: string): string {
 
 		// Set connection pool size (adjust based on your needs)
 		if (!params.has("connection_limit")) {
-			params.set("connection_limit", "20");
+			params.set("connection_limit", "5");
 		}
 
 		// Set pool timeout (time to wait for available connection)
@@ -208,10 +206,10 @@ class ConnectionPoolManager {
 const poolManager = new ConnectionPoolManager();
 
 // Type the client properly to avoid union type issues
-type AcceleratedPrismaClient = ReturnType<typeof createPrismaClient>;
+type RegistryPrismaClient = ReturnType<typeof createPrismaClient>;
 
 const globalForPrisma = globalThis as unknown as {
-	prisma: AcceleratedPrismaClient | undefined;
+	prisma: RegistryPrismaClient | undefined;
 };
 
 // Create the client instance
@@ -221,7 +219,7 @@ const prismaInstance = globalForPrisma.prisma ?? createPrismaClient();
 // to prevent creating multiple database connections
 globalForPrisma.prisma = prismaInstance;
 
-// Export the accelerated client with proper typing
+// Export the client with proper typing
 export const prisma = prismaInstance;
 
 // Export additional utilities
@@ -354,7 +352,7 @@ if (process.env.NODE_ENV === "production") {
 export function ensurePrisma() {
 	if (!prisma) {
 		throw new Error(
-			"Prisma client not available. Check PRISMA_DATABASE_URL configuration.",
+			"Prisma client not available. Check DATABASE_URL_POOLED or DATABASE_URL configuration.",
 		);
 	}
 	return prisma;

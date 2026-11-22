@@ -7,7 +7,7 @@ import type {
 
 vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+		plugin: { findMany: vi.fn(), update: vi.fn() },
 		pluginVersion: { findUnique: vi.fn() },
 	},
 }));
@@ -18,15 +18,11 @@ vi.mock("@/lib/download-stats", () => ({
 
 import { GET } from "@/app/api/v1/plugins/[id]/download/[platform]/route";
 import { recordDownload } from "@/lib/download-stats";
+import { redis } from "@/lib/redis";
 
 type MockPrisma = {
 	plugin: {
-		findUnique: Mock<
-			(args: { where: { name: string } }) => Promise<Plugin | null>
-		>;
-		findFirst: Mock<
-			(args: { where: { shortName: string } }) => Promise<Plugin | null>
-		>;
+		findMany: Mock<(args: unknown) => Promise<Plugin[]>>;
 		update: Mock<
 			(args: {
 				where: { id: string };
@@ -133,19 +129,23 @@ const params = {
 };
 
 describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.clearAllMocks();
-		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
-		mockPrisma.plugin.update.mockResolvedValue(plugin);
+		await redis.disconnect();
+		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
+		mockPrisma.plugin.update.mockResolvedValue({
+			...plugin,
+			downloadCount: plugin.downloadCount + 1,
+		});
 		mockPrisma.pluginVersion.findUnique.mockResolvedValue(pinnedVersion);
 	});
 
 	it("downloads by short name", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue(null);
-		mockPrisma.plugin.findFirst.mockResolvedValue(plugin);
+		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
 
-		const response = await GET(request(), params);
+		const response = await GET(request(), {
+			params: Promise.resolve({ id: "apt", platform: "linux-amd64" }),
+		});
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get("location")).toBe(latestUrl);
@@ -156,19 +156,37 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 	});
 
 	it("prefers the real plugin over a legacy row named after its short name", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue({
-			...plugin,
-			id: "legacy",
-			name: "apt",
-			latestVersion: null,
-			binaries: {},
-		});
-		mockPrisma.plugin.findFirst.mockResolvedValue(plugin);
+		mockPrisma.plugin.findMany.mockResolvedValue([
+			{
+				...plugin,
+				id: "legacy",
+				name: "apt",
+				latestVersion: null,
+				binaries: {},
+			},
+			plugin,
+		]);
 
-		const response = await GET(request(), params);
+		const response = await GET(request(), {
+			params: Promise.resolve({ id: "apt", platform: "linux-amd64" }),
+		});
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get("location")).toBe(latestUrl);
+	});
+
+	it("reports the updated count when the plugin lookup is cached", async () => {
+		mockPrisma.plugin.update
+			.mockResolvedValueOnce({ ...plugin, downloadCount: 11 })
+			.mockResolvedValueOnce({ ...plugin, downloadCount: 12 });
+
+		const first = await GET(request(), params);
+		const second = await GET(request(), params);
+
+		// The second lookup is served from the cache, with a stale count of 10
+		expect(mockPrisma.plugin.findMany).toHaveBeenCalledTimes(1);
+		expect(first.headers.get("X-Download-Count")).toBe("11");
+		expect(second.headers.get("X-Download-Count")).toBe("12");
 	});
 
 	it("keeps latest-binary redirect and counter behavior without version", async () => {
@@ -229,10 +247,12 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 	});
 
 	it("serves a pinned release for a platform the current release dropped", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue({
-			...plugin,
-			platforms: ["macos"],
-		});
+		mockPrisma.plugin.findMany.mockResolvedValue([
+			{
+				...plugin,
+				platforms: ["macos"],
+			},
+		]);
 
 		const response = await GET(request("1.9.0"), params);
 
@@ -241,10 +261,12 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 	});
 
 	it("still rejects an unsupported platform without a pinned version", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue({
-			...plugin,
-			platforms: ["macos"],
-		});
+		mockPrisma.plugin.findMany.mockResolvedValue([
+			{
+				...plugin,
+				platforms: ["macos"],
+			},
+		]);
 
 		const response = await GET(request(), params);
 
@@ -300,11 +322,13 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 
 		beforeEach(() => {
 			// Platforms are stored as "macos"; the route key says "darwin"
-			mockPrisma.plugin.findUnique.mockResolvedValue({
-				...plugin,
-				platforms: ["macos", "linux"],
-				binaries: { "darwin-arm64": darwinBinary(darwinUrl) },
-			});
+			mockPrisma.plugin.findMany.mockResolvedValue([
+				{
+					...plugin,
+					platforms: ["macos", "linux"],
+					binaries: { "darwin-arm64": darwinBinary(darwinUrl) },
+				},
+			]);
 			mockPrisma.pluginVersion.findUnique.mockResolvedValue({
 				...pinnedVersion,
 				binaries: { "darwin-arm64": darwinBinary(pinnedDarwinUrl) },
@@ -331,10 +355,12 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 		"https://registry.devex.sh/api/v1/plugins/package-manager-apt/download/linux-amd64",
 		"http://localhost/api/v1/plugins/apt/download/linux-amd64?version=1.0.0",
 	])("refuses to redirect back into the download route (%s)", async (url) => {
-		mockPrisma.plugin.findUnique.mockResolvedValue({
-			...plugin,
-			binaries: { "linux-amd64": { url, checksum: "", size: 1 } },
-		});
+		mockPrisma.plugin.findMany.mockResolvedValue([
+			{
+				...plugin,
+				binaries: { "linux-amd64": { url, checksum: "", size: 1 } },
+			},
+		]);
 
 		const response = await GET(request(), params);
 

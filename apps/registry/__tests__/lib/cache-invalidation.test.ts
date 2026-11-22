@@ -2,10 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	revalidateTag: vi.fn(),
-	accelerateInvalidate: vi.fn(async (_input: { tags: string[] }) => ({
-		requestId: "r",
-	})),
-	accelerateInvalidateAll: vi.fn(async () => ({ requestId: "r" })),
 	invalidateCdnTags: vi.fn(async () => {}),
 }));
 
@@ -15,14 +11,6 @@ vi.mock("../../lib/logger", () => ({
 vi.mock("next/cache", () => ({
 	revalidateTag: mocks.revalidateTag,
 	revalidatePath: vi.fn(),
-}));
-vi.mock("../../lib/prisma", () => ({
-	prisma: {
-		$accelerate: {
-			invalidate: mocks.accelerateInvalidate,
-			invalidateAll: mocks.accelerateInvalidateAll,
-		},
-	},
 }));
 vi.mock("../../lib/cdn-cache", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../../lib/cdn-cache")>()),
@@ -51,7 +39,6 @@ describe("cache invalidation (#493)", () => {
 		}
 		process.env.NEXT_RUNTIME = "nodejs";
 		process.env.VERCEL = "1";
-		process.env.PRISMA_DATABASE_URL = "prisma+postgres://accelerate.test/?k=1";
 		vi.clearAllMocks();
 		mocks.revalidateTag.mockReset();
 		vi.resetModules();
@@ -98,11 +85,10 @@ describe("cache invalidation (#493)", () => {
 			for (const key of keptKeys) {
 				expect(await redis.exists(key), key).toBe(true);
 			}
-			expect(mocks.accelerateInvalidateAll).toHaveBeenCalledTimes(1);
 		},
 	);
 
-	it("a plugin write clears Accelerate and Next tags before the CDN", async () => {
+	it("a plugin write clears Next tags before the CDN", async () => {
 		const { invalidateOnDataChange } = await load();
 
 		await invalidateOnDataChange("delete", "plugin", "tool-git");
@@ -111,20 +97,10 @@ describe("cache invalidation (#493)", () => {
 		expect(tags).toEqual(
 			expect.arrayContaining(["stats", "registry-stats", "plugins"]),
 		);
-		const accelerateTags = mocks.accelerateInvalidate.mock.calls.flatMap(
-			([input]) => input.tags,
-		);
-		expect(accelerateTags).toEqual(
-			expect.arrayContaining(["registry", "stats"]),
-		);
-		for (const [input] of mocks.accelerateInvalidate.mock.calls) {
-			expect(input.tags.length).toBeLessThanOrEqual(5);
-		}
 
 		expect(mocks.invalidateCdnTags).toHaveBeenCalled();
 		const lastOrigin = Math.max(
 			...mocks.revalidateTag.mock.invocationCallOrder,
-			...mocks.accelerateInvalidate.mock.invocationCallOrder,
 		);
 		expect(
 			Math.min(...mocks.invalidateCdnTags.mock.invocationCallOrder),
@@ -134,26 +110,26 @@ describe("cache invalidation (#493)", () => {
 	it("runs an invalidation that starts while another is in flight", async () => {
 		const { cacheInvalidation } = await load();
 		let release = () => {};
-		mocks.accelerateInvalidate.mockImplementationOnce(
+		mocks.invalidateCdnTags.mockImplementationOnce(
 			() =>
-				new Promise((resolve) => {
-					release = () => resolve({ requestId: "r" });
+				new Promise<void>((resolve) => {
+					release = () => resolve();
 				}),
 		);
 		const run = () =>
 			cacheInvalidation.invalidate({
 				resource: "plugin",
-				invalidateDatabase: true,
+				invalidateCDN: true,
 				waitForCompletion: true,
 			});
 
 		const first = run();
 		await vi.waitFor(() =>
-			expect(mocks.accelerateInvalidate).toHaveBeenCalledTimes(1),
+			expect(mocks.invalidateCdnTags).toHaveBeenCalledTimes(1),
 		);
 		const second = run();
 		await vi.waitFor(() =>
-			expect(mocks.accelerateInvalidate).toHaveBeenCalledTimes(2),
+			expect(mocks.invalidateCdnTags).toHaveBeenCalledTimes(2),
 		);
 		release();
 		await Promise.all([first, second]);

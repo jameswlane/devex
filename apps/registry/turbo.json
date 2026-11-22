@@ -11,6 +11,7 @@
 				"CDN_CACHE_DURATION",
 				"CI",
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DEFAULT_CACHE_DURATION",
 				"DEFAULT_CONNECTION_TIMEOUT",
 				"DEFAULT_PAGE_SIZE",
@@ -72,6 +73,7 @@
 				"CDN_CACHE_DURATION",
 				"CI",
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DEFAULT_CACHE_DURATION",
 				"DEFAULT_CONNECTION_TIMEOUT",
 				"DEFAULT_PAGE_SIZE",
@@ -132,6 +134,7 @@
 				"CDN_CACHE_DURATION",
 				"CI",
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DEFAULT_CACHE_DURATION",
 				"DEFAULT_CONNECTION_TIMEOUT",
 				"DEFAULT_PAGE_SIZE",
@@ -193,6 +196,7 @@
 				"CDN_CACHE_DURATION",
 				"CI",
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DEFAULT_CACHE_DURATION",
 				"DEFAULT_CONNECTION_TIMEOUT",
 				"DEFAULT_PAGE_SIZE",
@@ -251,6 +255,7 @@
 			"inputs": ["prisma/**", "prisma.config.ts", ".env*"],
 			"env": [
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DIRECT_DATABASE_URL",
 				"PRISMA_DATABASE_URL",
 				"!NEXT_PUBLIC_VERCEL_URL"
@@ -262,6 +267,7 @@
 			"cache": false,
 			"env": [
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DIRECT_DATABASE_URL",
 				"PRISMA_DATABASE_URL",
 				"POSTGRES_URL"
@@ -271,6 +277,7 @@
 			"cache": false,
 			"env": [
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DIRECT_DATABASE_URL",
 				"PRISMA_DATABASE_URL",
 				"POSTGRES_URL"
@@ -281,6 +288,7 @@
 			"cache": false,
 			"env": [
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DIRECT_DATABASE_URL",
 				"PRISMA_DATABASE_URL",
 				"POSTGRES_URL"
@@ -291,6 +299,7 @@
 			"cache": false,
 			"env": [
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DIRECT_DATABASE_URL",
 				"PRISMA_DATABASE_URL",
 				"POSTGRES_URL",
@@ -302,6 +311,7 @@
 			"cache": false,
 			"env": [
 				"DATABASE_URL",
+				"DATABASE_URL_POOLED",
 				"DIRECT_DATABASE_URL",
 				"PRISMA_DATABASE_URL",
 				"POSTGRES_URL"

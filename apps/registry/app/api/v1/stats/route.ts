@@ -28,8 +28,7 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 			async () => {
 				const startTime = Date.now();
 
-				// Execute all queries in parallel with Prisma Accelerate caching
-				// This leverages Prisma's query optimization and Accelerate's edge cache
+				// Execute all queries in parallel
 				// Totals, platforms and downloads share one definition with
 				// /api/v1/registry (#483); only the breakdowns live here.
 				const [
@@ -45,18 +44,15 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 					prismaClient.application.groupBy({
 						by: ["category"],
 						_count: { category: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
 					}),
 					prismaClient.plugin.groupBy({
 						by: ["type"],
 						where: { status: "active" },
 						_count: { type: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
 					}),
 					prismaClient.config.groupBy({
 						by: ["category"],
 						_count: { category: true },
-						cacheStrategy: { swr: 600, ttl: 300 },
 					}),
 				]);
 				const {

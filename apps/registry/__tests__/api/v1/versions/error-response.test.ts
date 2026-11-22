@@ -15,7 +15,7 @@ import type { Plugin } from "../../../../generated/prisma/client";
 // Real error-handler and logger; only the database and rate limiter are faked.
 vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: vi.fn(), findFirst: vi.fn() },
+		plugin: { findMany: vi.fn() },
 		pluginVersion: { findUnique: vi.fn() },
 	},
 }));
@@ -29,11 +29,11 @@ vi.mock("@/lib/rate-limit-redis", () => ({
 
 import { GET } from "@/app/api/v1/plugins/[id]/versions/[version]/route";
 import { logger } from "@/lib/logger";
+import { redis } from "@/lib/redis";
 
 type MockPrisma = {
 	plugin: {
-		findUnique: Mock<(args: unknown) => Promise<Plugin | null>>;
-		findFirst: Mock<(args: unknown) => Promise<Plugin | null>>;
+		findMany: Mock<(args: unknown) => Promise<Plugin[]>>;
 	};
 	pluginVersion: {
 		findUnique: Mock<(args: unknown) => Promise<never>>;
@@ -67,12 +67,12 @@ describe("GET /api/v1/plugins/[id]/versions/latest with plugin_versions missing"
 	const originalNodeEnv = process.env.NODE_ENV;
 	let errorSpy: MockInstance<typeof logger.error>;
 
-	beforeEach(() => {
+	beforeEach(async () => {
+		await redis.disconnect();
 		errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
 		vi.spyOn(logger, "warn").mockImplementation(() => {});
 		vi.spyOn(logger, "info").mockImplementation(() => {});
-		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
+		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
 		mockPrisma.pluginVersion.findUnique.mockRejectedValue(
 			new PrismaClientKnownRequestError(MISSING_TABLE_MESSAGE, {
 				code: "P2021",

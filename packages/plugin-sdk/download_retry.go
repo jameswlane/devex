@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +65,9 @@ func (d *Downloader) doWithRetry(ctx context.Context, client *http.Client, metho
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
+		if isRegistryCIDownload() {
+			req.Header.Set("X-DevEx-CI", "1")
+		}
 		resp, err := client.Do(req)
 		var retryAfter time.Duration
 		if err == nil {
@@ -114,6 +118,14 @@ func (d *Downloader) waitForRetry(ctx context.Context, attempt int, retryAfter t
 		backoff = defaultRetryBackoff
 	}
 	return backoff(ctx, attempt, retryAfter)
+}
+
+func isRegistryCIDownload() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DEVEX_REGISTRY_CI"))) {
+	case "1", "true":
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("CI")), "true")
 }
 
 func isTransientHTTPStatus(status int) bool {
