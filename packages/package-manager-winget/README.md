@@ -140,9 +140,9 @@ windows:
   uninstall_command: Docker.DockerDesktop
 ```
 
-The CLI keeps `--scope` for installation, installed-state checks, and removal so
-a machine-scope package is checked and removed at the same system scope that
-installed it.
+The CLI keeps `--scope` for installation, installed-state checks, upgrades, and
+removal so a machine-scope package is checked, upgraded, and removed at the same
+system scope that installed it.
 
 ## Tests
 

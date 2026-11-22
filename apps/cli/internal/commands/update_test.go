@@ -148,14 +148,28 @@ exit 1
 		Expect(run("upgrade", "Git", "--dry-run")).To(Succeed())
 		Expect(out.String()).To(ContainSubstring(`Native invocation: winget upgrade "Git.Git"`))
 	})
-	It("upgrades the packages a structured definition installs", func() {
+	It("upgrades the packages a structured definition installs and keeps winget scope", func() {
 		structured := app("Docker", "winget", "")
 		structured.AllPlatforms.Packages = []string{"Docker.DockerDesktop"}
 		structured.AllPlatforms.Options = []string{"--scope=machine"}
 		legacy := app("Git", "winget", "Git.Git --scope machine")
 		settings.Terminal.Utilities = []types.CrossPlatformApp{structured, legacy}
 		Expect(run("upgrade", "Docker", "Git", "--dry-run")).To(Succeed())
-		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "Docker.DockerDesktop" "Git.Git"` + "\n"))
+		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "--scope=machine" "Docker.DockerDesktop" "Git.Git"` + "\n"))
+	})
+	It("groups winget upgrades separately by scope", func() {
+		machine := app("Docker", "winget", "")
+		machine.AllPlatforms.Packages = []string{"Docker.DockerDesktop"}
+		machine.AllPlatforms.Options = []string{"--scope=machine"}
+		user := app("JQ", "winget", "")
+		user.AllPlatforms.Packages = []string{"jqlang.jq"}
+		user.AllPlatforms.Options = []string{"--scope=user"}
+		unscoped := app("Git", "winget", "Git.Git")
+		settings.Terminal.Utilities = []types.CrossPlatformApp{machine, user, unscoped}
+		Expect(run("upgrade", "Docker", "JQ", "Git", "--dry-run")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "Git.Git"` + "\n"))
+		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "--scope=machine" "Docker.DockerDesktop"` + "\n"))
+		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "--scope=user" "jqlang.jq"` + "\n"))
 	})
 	It("refuses a structured Zypper pattern upgrade instead of upgrading a package", func() {
 		pattern := app("Devel", "zypper", "")
