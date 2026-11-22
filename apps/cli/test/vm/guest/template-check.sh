@@ -91,7 +91,9 @@ done
 known_issue() { # step; sets ISSUE and SIGNATURE
 	ISSUE="" SIGNATURE=""
 	case "$TEMPLATE:$1" in
-	*) ;;
+	mobile:install | game-development:install)
+		ISSUE=569 SIGNATURE='Flatpak system operation ConfigureRemote not allowed'
+		;;
 	esac
 }
 
@@ -101,8 +103,11 @@ is_known_failure() {
 }
 
 # After a known install failure, whether the failed step blocks this expectation.
+# The mobile toolchains install before Flathub, so they are still checked.
 blocked_by_install_issue() {
 	case "$TEMPLATE:$1" in
+	mobile:flatpak:*) return 0 ;;
+	mobile:*) return 1 ;;
 	*) return 0 ;;
 	esac
 }
