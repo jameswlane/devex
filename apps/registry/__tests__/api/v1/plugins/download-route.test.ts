@@ -133,7 +133,10 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 		vi.clearAllMocks();
 		await redis.disconnect();
 		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
-		mockPrisma.plugin.update.mockResolvedValue(plugin);
+		mockPrisma.plugin.update.mockResolvedValue({
+			...plugin,
+			downloadCount: plugin.downloadCount + 1,
+		});
 		mockPrisma.pluginVersion.findUnique.mockResolvedValue(pinnedVersion);
 	});
 
@@ -170,6 +173,20 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get("location")).toBe(latestUrl);
+	});
+
+	it("reports the updated count when the plugin lookup is cached", async () => {
+		mockPrisma.plugin.update
+			.mockResolvedValueOnce({ ...plugin, downloadCount: 11 })
+			.mockResolvedValueOnce({ ...plugin, downloadCount: 12 });
+
+		const first = await GET(request(), params);
+		const second = await GET(request(), params);
+
+		// The second lookup is served from the cache, with a stale count of 10
+		expect(mockPrisma.plugin.findMany).toHaveBeenCalledTimes(1);
+		expect(first.headers.get("X-Download-Count")).toBe("11");
+		expect(second.headers.get("X-Download-Count")).toBe("12");
 	});
 
 	it("keeps latest-binary redirect and counter behavior without version", async () => {

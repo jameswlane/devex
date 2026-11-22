@@ -79,7 +79,6 @@ func (s *suiteEnvironment) environment(home string, overrides map[string]string)
 	}
 	values["HOME"] = home
 	values["DEVEX_NONINTERACTIVE"] = "1"
-	values["DEVEX_REGISTRY_CI"] = "1"
 	values["DEVEX_PLUGIN_REGISTRY_URL"] = s.registry
 	values["XDG_CURRENT_DESKTOP"] = strings.ToUpper(s.desktop)
 	values["XDG_DATA_HOME"] = filepath.Join(home, ".local/share")

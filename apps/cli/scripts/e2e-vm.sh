@@ -133,14 +133,14 @@ main() {
 		registry="DEVEX_PLUGIN_REGISTRY_URL=$(printf '%q' "$DEVEX_PLUGIN_REGISTRY_URL")"
 	fi
 	log "running DevEx desktop setup inside the $DESKTOP session"
-	guest "$registry bash /var/tmp/devex-vm-bin/desktop-check.sh apply $DESKTOP" 2>&1 |
+	guest "DEVEX_REGISTRY_CI=1 $registry bash /var/tmp/devex-vm-bin/desktop-check.sh apply $DESKTOP" 2>&1 |
 		tee "$ARTIFACTS/apply.log" >&2
 	screenshot 02-session-after-setup
 
 	log "rebooting to verify the settings survive a fresh login"
 	reboot_guest
 	wait_for_session
-	guest "bash /var/tmp/devex-vm-bin/desktop-check.sh verify $DESKTOP" 2>&1 | tee "$ARTIFACTS/verify.log" >&2
+	guest "DEVEX_REGISTRY_CI=1 bash /var/tmp/devex-vm-bin/desktop-check.sh verify $DESKTOP" 2>&1 | tee "$ARTIFACTS/verify.log" >&2
 	screenshot 03-session-after-relogin
 }
 
