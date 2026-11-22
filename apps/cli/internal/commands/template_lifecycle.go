@@ -351,10 +351,11 @@ func selectTemplateRunResources(ctx context.Context, store state.StateStore, tem
 		return state.TemplateRun{}, nil, err
 	}
 	if action == templates.LifecycleStatus {
-		resources = sortTemplateResources(resources)
-	} else {
-		resources = filterActiveResources(resources)
+		// Templates that declare no resources (minimal, backend, full-stack)
+		// never record any, so status runs from the spec's status actions alone.
+		return run, sortTemplateResources(resources), nil
 	}
+	resources = filterActiveResources(resources)
 	if len(resources) == 0 {
 		return state.TemplateRun{}, nil, fmt.Errorf("run '%s' has no recorded resources for template '%s'", run.ID, templateID)
 	}

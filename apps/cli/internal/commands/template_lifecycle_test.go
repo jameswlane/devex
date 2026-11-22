@@ -428,6 +428,44 @@ func TestStatusRunResourcesIncludesRemovedRecordedResources(t *testing.T) {
 	}
 }
 
+func TestStatusRunResourcesAllowsRunWithoutRecordedResources(t *testing.T) {
+	store := newLifecycleMemoryStore()
+	store.runs["minimal-install"] = state.TemplateRun{
+		ID:         "minimal-install",
+		TemplateID: "minimal",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusSucceeded,
+		StartedAt:  time.Unix(100, 0),
+	}
+
+	run, resources, err := selectTemplateRunResources(context.Background(), store, "minimal", templates.LifecycleStatus, "latest")
+	if err != nil {
+		t.Fatalf("selectTemplateRunResources() error = %v, want nil for a template without resources", err)
+	}
+	if run.ID != "minimal-install" {
+		t.Fatalf("run.ID = %q, want minimal-install", run.ID)
+	}
+	if len(resources) != 0 {
+		t.Fatalf("resources = %#v, want none", resources)
+	}
+}
+
+func TestRemoveRunResourcesRequiresRecordedResources(t *testing.T) {
+	store := newLifecycleMemoryStore()
+	store.runs["minimal-install"] = state.TemplateRun{
+		ID:         "minimal-install",
+		TemplateID: "minimal",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusSucceeded,
+		StartedAt:  time.Unix(100, 0),
+	}
+
+	_, _, err := selectTemplateRunResources(context.Background(), store, "minimal", templates.LifecycleRemove, "latest")
+	if err == nil || !strings.Contains(err.Error(), "has no recorded resources") {
+		t.Fatalf("selectTemplateRunResources() error = %v, want no recorded resources error for remove", err)
+	}
+}
+
 func TestMaintainRunResourcesRequiresActiveResources(t *testing.T) {
 	now := time.Unix(200, 0)
 	store := newLifecycleMemoryStore()
