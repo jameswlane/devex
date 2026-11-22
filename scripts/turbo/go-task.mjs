@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { goFingerprint, version } from "./toolchain.mjs";
@@ -62,9 +63,21 @@ function main() {
 	}
 }
 
-if (
-	process.argv[1] &&
-	path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+export function isDirectExecution(
+	argv1 = process.argv[1],
+	moduleUrl = import.meta.url,
 ) {
+	if (!argv1) return false;
+	const entry = path.resolve(argv1);
+	const current = fileURLToPath(moduleUrl);
+	if (entry === current) return true;
+	try {
+		return fs.realpathSync(entry) === fs.realpathSync(current);
+	} catch {
+		return false;
+	}
+}
+
+if (isDirectExecution()) {
 	main();
 }

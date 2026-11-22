@@ -910,7 +910,7 @@ test("per-deployment VERCEL_URL does not bust Next.js build cache hashes", () =>
 });
 
 test("go-task dev-build keeps -race on windows/amd64 and omits it on windows/arm64", async () => {
-	const { resolveGoTask } = await import("./go-task.mjs");
+	const { isDirectExecution, resolveGoTask } = await import("./go-task.mjs");
 	assert.deepEqual(
 		resolveGoTask("dev-build", ["devex-plugin-package-manager-winget", "."], {
 			env: {},
@@ -950,4 +950,15 @@ test("go-task dev-build keeps -race on windows/amd64 and omits it on windows/arm
 			args: ["build", "-o", "devex-plugin-package-manager-winget", "."],
 		},
 	);
+	const linkDir = fs.mkdtempSync(path.join(os.tmpdir(), "devex-go-task-link-"));
+	fixtures.push(linkDir);
+	const symlink = path.join(linkDir, "go-task-link.mjs");
+	const goTaskPath = path.join(repo, "scripts/turbo/go-task.mjs");
+	fs.symlinkSync(goTaskPath, symlink);
+	assert.equal(isDirectExecution(symlink), true);
+	assert.equal(
+		isDirectExecution(path.join(repo, "scripts/turbo/run.mjs")),
+		false,
+	);
+	assert.equal(isDirectExecution(undefined), false);
 });
