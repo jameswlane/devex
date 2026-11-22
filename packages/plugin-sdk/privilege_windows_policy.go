@@ -22,6 +22,13 @@ type windowsPrivilegeAdapter struct {
 	execute  func(context.Context, ExecutionPlan, OperationIO) error
 }
 
+// NewWindowsPrivilegeAdapter returns the Windows token-checking privilege
+// adapter with a custom token-elevation probe, for tests that exercise
+// elevated and non-elevated Windows policy without altering the host token.
+func NewWindowsPrivilegeAdapter(elevated func() (bool, error)) PrivilegeAdapter {
+	return windowsPrivilegeAdapter{elevated: elevated}
+}
+
 func (a windowsPrivilegeAdapter) Run(ctx context.Context, plan ExecutionPlan, streams OperationIO) error {
 	if err := ctx.Err(); err != nil {
 		return err

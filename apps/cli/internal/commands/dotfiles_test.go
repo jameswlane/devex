@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,29 @@ import (
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 )
 
+func removeGitRepoDir(dir string) {
+	// GinkgoT().TempDir() registers os.RemoveAll directly, which can fail on
+	// Windows when git leaves read-only objects or brief sharing locks. Make
+	// everything writable and retry removal before TempDir's cleanup runs.
+	for attempt := 0; attempt < 10; attempt++ {
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() {
+				_ = os.Chmod(path, 0o700)
+			} else {
+				_ = os.Chmod(path, 0o600)
+			}
+			return nil
+		})
+		if err := os.RemoveAll(dir); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 var _ = Describe("Dotfiles commands", func() {
 	var (
 		home, repo          string
@@ -28,7 +52,7 @@ var _ = Describe("Dotfiles commands", func() {
 	git := func(args ...string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		command := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "core.autocrlf=false", "-c", "user.email=t@example.com", "-c", "user.name=t"}, args...)...)
+		command := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "core.autocrlf=false", "-c", "core.fsmonitor=false", "-c", "gc.auto=0", "-c", "user.email=t@example.com", "-c", "user.name=t"}, args...)...)
 		out, err := command.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(out))
 		return strings.TrimSpace(string(out))
@@ -73,6 +97,7 @@ var _ = Describe("Dotfiles commands", func() {
 			GinkgoT().Setenv(key, "")
 		}
 		repo = GinkgoT().TempDir()
+		DeferCleanup(func() { removeGitRepoDir(repo) })
 		git("init", "--quiet", "--initial-branch", "main")
 		write(filepath.Join(repo, "zsh", ".zshrc"), "export EDITOR=vim\n")
 		write(filepath.Join(repo, "gitconfig"), "[user]\n\tname = Me\n")

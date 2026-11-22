@@ -148,10 +148,13 @@ function testPluginsJob() {
 		path.join(repo, ".github/workflows/ci.yml"),
 		"utf8",
 	);
-	return workflow.slice(
-		workflow.indexOf("  test-plugins:"),
-		workflow.indexOf("  test-js:"),
-	);
+	const start = workflow.indexOf("\n  test-plugins:\n") + 1;
+	assert.ok(start > 0, "CI workflow defines a test-plugins job");
+	// The job ends at the next job key, wherever later jobs are placed.
+	const end = workflow.slice(start).search(/\n {2}[A-Za-z0-9_-]+:\n/);
+	return end === -1
+		? workflow.slice(start)
+		: workflow.slice(start, start + end + 1);
 }
 
 /**
@@ -160,10 +163,14 @@ function testPluginsJob() {
  * @returns {string}
  */
 function testPluginRun(job) {
-	const match =
-		/- name: Test plugin [^\n]*\n(?:\s+(?!run:)[^\n]*\n)*\s+run: ([^\n]+)\n/.exec(
-			job,
-		);
+	// Slice the "Test plugin" step and stop at the next "- " step boundary so a
+	// later step's run key can never be captured.
+	const stepStart = job.search(/^ {6}- name: Test plugin /m);
+	assert.ok(stepStart >= 0, "CI workflow defines a Test plugin step");
+	const rest = job.slice(stepStart);
+	const nextStep = rest.slice(1).search(/\n {6}- /);
+	const step = nextStep === -1 ? rest : rest.slice(0, nextStep + 1);
+	const match = /^ {8}run: ([^\n]+)$/m.exec(step);
 	assert.ok(match, "Test plugin step has a single-line run key");
 	return match[1];
 }
@@ -177,6 +184,24 @@ describe("CI workflow", () => {
 		);
 		assert.doesNotMatch(job, /_test\.go/);
 		assert.doesNotMatch(job, /\|\| echo "Linting failed/);
+	});
+
+	it("does not capture a later step's run key when the Test plugin step lacks one", () => {
+		const syntheticJob = [
+			"  test-plugins:",
+			"    steps:",
+			"      - name: Test plugin example",
+			"        env:",
+			"          PLUGIN_NAME: example",
+			"      - name: Disabled fallback",
+			"        if: false",
+			'        run: bash scripts/ci/test-plugin.sh "$PLUGIN_NAME"',
+			"",
+		].join("\n");
+		assert.throws(
+			() => testPluginRun(syntheticJob),
+			/Test plugin step has a single-line run key/,
+		);
 	});
 
 	it("passes the matrix value through the environment, not run text", () => {

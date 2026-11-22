@@ -641,7 +641,11 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 		configfiles.Apply(ctx, app.Name, app.GetOSConfig().ConfigFiles, true, func(message string) { fmt.Fprintln(out, message) })
 
 		pluginName := "package-manager-" + app.GetOSConfig().InstallMethod
-		privilege := sdk.PluginOperationPrivilege(plugins[pluginName].PluginInfo, []string{"install"})
+		installArgs := []string{"install"}
+		if request, reqErr := types.ResolvePackageInstall(app.GetOSConfig().InstallMethod, app.GetOSConfig().InstallCommand, app.GetOSConfig().Packages, app.GetOSConfig().Options); reqErr == nil {
+			installArgs = append(installArgs, request.Options...)
+		}
+		privilege := sdk.PluginOperationPrivilege(plugins[pluginName].PluginInfo, installArgs)
 		if privilege == nil {
 			fmt.Fprintf(out, "Would install %s (scope: unspecified; legacy or unavailable plugin metadata)\n", app.Name)
 			continue

@@ -225,7 +225,7 @@ var _ = Describe("Root platform support help", func() {
 		Expect(cmd.Execute()).To(Succeed())
 		Expect(output.String()).To(ContainSubstring("Stable: APT (Debian/Ubuntu)"))
 		Expect(output.String()).To(ContainSubstring("Experimental: DNF (Fedora/RHEL), Pacman (Arch), Flatpak, Snap, Homebrew"))
-		Expect(output.String()).To(ContainSubstring("Planned (no plugin): Mac App Store, winget, Chocolatey, Scoop"))
+		Expect(output.String()).To(ContainSubstring("Planned (no plugin): Chocolatey, Scoop"))
 		Expect(output.String()).To(ContainSubstring("https://docs.devex.sh/platforms"))
 		Expect(diagnostics.String()).To(BeEmpty())
 		Expect(filepath.Join(home, ".devex", "plugins")).NotTo(BeADirectory())

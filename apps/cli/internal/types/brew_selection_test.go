@@ -51,7 +51,21 @@ var _ = Describe("Homebrew formula and Cask selection", func() {
 		Entry("zypper short pattern option", types.AppConfig{InstallMethod: "zypper", Options: []string{"-t", "pattern"}}, "zypper remove apparmor", "zypper remove apparmor --type=pattern"),
 		Entry("zypper pattern only in install_command", types.AppConfig{InstallMethod: "zypper", InstallCommand: "-t pattern apparmor"}, "apparmor", "apparmor --type=pattern"),
 		Entry("zypper command already selects", types.AppConfig{InstallMethod: "zypper", Options: []string{"--type=pattern"}}, "-t package apparmor", "-t package apparmor"),
+		Entry("winget scope option", types.AppConfig{InstallMethod: "winget", Packages: []string{"Docker.DockerDesktop"}, Options: []string{"--scope=machine"}}, "Docker.DockerDesktop", "Docker.DockerDesktop --scope=machine"),
+		Entry("winget scope only in install_command", types.AppConfig{InstallMethod: "winget", InstallCommand: "Docker.DockerDesktop --scope machine"}, "Docker.DockerDesktop", "Docker.DockerDesktop --scope=machine"),
+		Entry("winget command already scoped", types.AppConfig{InstallMethod: "winget", Options: []string{"--scope=machine"}}, "--scope=user Git.Git", "--scope=user Git.Git"),
+		Entry("unscoped winget", types.AppConfig{InstallMethod: "winget", InstallCommand: "Git.Git"}, "Git.Git", "Git.Git"),
 	)
+
+	It("checks a structured winget package at the scope that installed it", func() {
+		structured := types.AppConfig{InstallMethod: "winget", Packages: []string{"Docker.DockerDesktop"}, Options: []string{"--scope=machine"}}
+		Expect(structured.PackageQueryCommand()).To(Equal("winget install '--scope=machine' 'Docker.DockerDesktop'"))
+		request, err := types.ResolvePackageInstall("winget", structured.PackageQueryCommand(), nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(request).To(Equal(types.PackageInstallRequest{Packages: []string{"Docker.DockerDesktop"}, Options: []string{"--scope=machine"}}))
+		unscoped := types.AppConfig{InstallMethod: "winget", Packages: []string{"Git.Git"}}
+		Expect(unscoped.PackageQueryCommand()).To(Equal("winget install 'Git.Git'"))
+	})
 
 	It("selects the zypper pattern for installed queries of legacy commands", func() {
 		app := types.AppConfig{InstallMethod: "zypper", InstallCommand: "devel_basis", Options: []string{"--type=pattern"}}

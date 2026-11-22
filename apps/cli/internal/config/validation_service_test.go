@@ -69,7 +69,7 @@ var _ = Describe("Shared semantic validation", func() {
 		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
 	})
 	It("reports planned methods and native dependencies as infos even in strict mode", func() {
-		settings.ApplicationOverrides = []types.CrossPlatformApp{{Name: "terminal", Windows: types.OSConfig{InstallMethod: "winget", InstallCommand: "terminal", Dependencies: []string{"native-package"}}}}
+		settings.ApplicationOverrides = []types.CrossPlatformApp{{Name: "terminal", Windows: types.OSConfig{InstallMethod: "chocolatey", InstallCommand: "terminal", Dependencies: []string{"native-package"}}}}
 		result, err := config.ValidateConfig(context.Background(), settings, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Valid).To(BeTrue())

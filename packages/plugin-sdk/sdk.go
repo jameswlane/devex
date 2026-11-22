@@ -268,6 +268,9 @@ type PluginCommand struct {
 	Usage       string              `json:"usage"`
 	Flags       map[string]string   `json:"flags,omitempty"`
 	Privilege   *OperationPrivilege `json:"privilege,omitempty"`
+	// FlagPrivileges overrides Privilege when a matching flag token (such as
+	// "--scope=machine" or "--scope", "machine") appears before "--" in args.
+	FlagPrivileges map[string]*OperationPrivilege `json:"flag_privileges,omitempty"`
 }
 
 // Plugin interface for implementing plugins

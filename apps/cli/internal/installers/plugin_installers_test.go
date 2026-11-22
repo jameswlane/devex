@@ -64,6 +64,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("pip probe", "pip", "is-installed"),
 		Entry("brew probe", "brew", "is-installed"),
 		Entry("mas probe", "mas", "is-installed"),
+		Entry("winget probe", "winget", "is-installed"),
 	)
 
 	DescribeTable("reports a package the plugin found absent as not installed, without an error",
@@ -86,6 +87,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("appimage", "appimage"),
 		Entry("brew", "brew"),
 		Entry("mas", "mas"),
+		Entry("winget", "winget"),
 	)
 
 	DescribeTable("skips the installed probe for plugins without an is-installed operation",

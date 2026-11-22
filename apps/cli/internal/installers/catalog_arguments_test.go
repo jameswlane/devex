@@ -35,7 +35,7 @@ var _ = Describe("Catalog package arguments", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(installed).To(BeTrue())
 			switch method {
-			case "apt", "brew", "deb", "dnf", "flatpak", "mas", "mise", "pip", "appimage", "zypper":
+			case "apt", "brew", "deb", "dnf", "flatpak", "mas", "mise", "pip", "appimage", "winget", "zypper":
 				Expect(executor.args).To(Equal(append([]string{"is-installed"}, want...)))
 			default:
 				// List-only methods skip the installed probe; the last call is the removal.
@@ -60,6 +60,9 @@ var _ = Describe("Catalog package arguments", func() {
 		Entry("App Store command", "mas", "mas install 497799835", []string{"497799835"}),
 		Entry("brew tap", "brew", "jesseduffield/lazydocker/lazydocker", []string{"jesseduffield/lazydocker/lazydocker"}),
 		Entry("Windows identifier", "winget", "GitHub.cli", []string{"GitHub.cli"}),
+		Entry("winget machine scope", "winget", "Docker.DockerDesktop --scope machine", []string{"--scope=machine", "Docker.DockerDesktop"}),
+		Entry("winget command with scope", "winget", "winget install --scope=user Git.Git", []string{"--scope=user", "Git.Git"}),
+		Entry("Microsoft Store identifier", "winget", "9NBLGGH4NNS1", []string{"9NBLGGH4NNS1"}),
 		Entry("flake reference", "nixflake", "github:ghostty-org/ghostty", []string{"github:ghostty-org/ghostty"}),
 		Entry("Go module", "go", "github.com/jesseduffield/lazydocker@latest", []string{"github.com/jesseduffield/lazydocker@latest"}),
 		Entry("separate version", "asdf", "lazydocker latest", []string{"lazydocker", "latest"}),

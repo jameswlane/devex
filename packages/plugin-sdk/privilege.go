@@ -416,8 +416,35 @@ func PluginOperationPrivilege(info PluginInfo, args []string) *OperationPrivileg
 		return nil
 	}
 	for _, command := range info.Commands {
-		if command.Name == args[0] {
-			return command.Privilege
+		if command.Name != args[0] {
+			continue
+		}
+		if len(command.FlagPrivileges) > 0 {
+			if override := matchFlagPrivilege(command.FlagPrivileges, args[1:]); override != nil {
+				return override
+			}
+		}
+		return command.Privilege
+	}
+	return nil
+}
+
+func matchFlagPrivilege(overrides map[string]*OperationPrivilege, args []string) *OperationPrivilege {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if privilege, ok := overrides[arg]; ok && privilege != nil {
+			return privilege
+		}
+		if !strings.Contains(arg, "=") && i+1 < len(args) {
+			if privilege, ok := overrides[arg+"="+args[i+1]]; ok && privilege != nil {
+				return privilege
+			}
 		}
 	}
 	return nil

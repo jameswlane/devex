@@ -145,6 +145,7 @@ describe("command line", () => {
 			"package-manager-dnf",
 			"package-manager-mas",
 			"package-manager-snap",
+			"package-manager-winget",
 			"package-manager-yay",
 			"package-manager-yum",
 		]) {

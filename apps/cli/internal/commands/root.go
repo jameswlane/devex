@@ -65,8 +65,8 @@ It automates the installation and configuration of:
 
 Package manager support:
   • Stable: APT (Debian/Ubuntu)
-  • Experimental: DNF (Fedora/RHEL), Pacman (Arch), Flatpak, Snap, Homebrew
-  • Planned (no plugin): Mac App Store, winget, Chocolatey, Scoop
+  • Experimental: DNF (Fedora/RHEL), Pacman (Arch), Flatpak, Snap, Homebrew, Mac App Store, winget
+  • Planned (no plugin): Chocolatey, Scoop
 
 Support matrix and limitations: https://docs.devex.sh/platforms
 

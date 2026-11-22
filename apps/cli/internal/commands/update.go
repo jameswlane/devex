@@ -16,7 +16,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
-	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -143,14 +142,19 @@ func maintenanceFailures(action string, failures []error) error {
 	return fmt.Errorf("%s failed (%d failures): %w", action, len(failures), errors.Join(failures...))
 }
 
+type maintenanceGroupKey struct {
+	manager string
+	scope   string
+}
+
 func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]packageMaintenanceOperation, []error) {
-	grouped := map[string][]string{}
+	grouped := map[maintenanceGroupKey][]string{}
 	var failures []error
 	for _, app := range apps {
 		c := app.GetOSConfig()
 		supported := false
 		switch c.InstallMethod {
-		case "apt", "dnf", "zypper", "xbps", "eopkg":
+		case "apt", "dnf", "zypper", "xbps", "eopkg", "winget":
 			supported = true
 		case "apk", "emerge":
 			supported = action == "update"
@@ -162,10 +166,10 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 			continue
 		}
 		if action == "update" {
-			grouped[c.InstallMethod] = nil
+			grouped[maintenanceGroupKey{manager: c.InstallMethod}] = nil
 			continue
 		}
-		packages, err := installers.CatalogPackageArguments(c.InstallMethod, c.InstallCommand)
+		packages, scope, err := maintenancePackages(c)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", app.Name, err))
 			continue
@@ -184,29 +188,72 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 			failures = append(failures, fmt.Errorf("%s: unsafe package identifier", app.Name))
 			continue
 		}
-		grouped[c.InstallMethod] = append(grouped[c.InstallMethod], packages...)
+		key := maintenanceGroupKey{manager: c.InstallMethod, scope: scope}
+		grouped[key] = append(grouped[key], packages...)
 	}
-	managers := make([]string, 0, len(grouped))
-	for manager := range grouped {
-		managers = append(managers, manager)
+	keys := make([]maintenanceGroupKey, 0, len(grouped))
+	for key := range grouped {
+		keys = append(keys, key)
 	}
-	sort.Strings(managers)
-	plan := make([]packageMaintenanceOperation, 0, len(managers))
-	for _, manager := range managers {
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].manager != keys[j].manager {
+			return keys[i].manager < keys[j].manager
+		}
+		return keys[i].scope < keys[j].scope
+	})
+	plan := make([]packageMaintenanceOperation, 0, len(keys))
+	for _, key := range keys {
 		args := []string{action}
-		if manager == "apt" && action == "upgrade" {
+		if key.manager == "apt" && action == "upgrade" {
 			args[0] = "upgrade-packages"
 		}
+		if key.scope != "" {
+			args = append(args, key.scope)
+		}
 		seen := map[string]bool{}
-		for _, pkg := range grouped[manager] {
+		for _, pkg := range grouped[key] {
 			if !seen[pkg] {
 				args = append(args, pkg)
 				seen[pkg] = true
 			}
 		}
-		plan = append(plan, packageMaintenanceOperation{manager: manager, args: args})
+		plan = append(plan, packageMaintenanceOperation{manager: key.manager, args: args})
 	}
 	return plan, failures
+}
+
+// maintenancePackages resolves identifiers the way installation does, from
+// install_command or from packages and options, so an upgrade targets the
+// packages that were installed. Zypper keeps its --type selection in packages,
+// which the identifier check refuses rather than upgrading a different kind of
+// package. Winget returns its --scope separately so user-scope, machine-scope,
+// and unscoped upgrades stay grouped by scope and unattended runs keep the
+// explicit scope required by the winget plugin.
+func maintenancePackages(c types.OSConfig) ([]string, string, error) {
+	request, err := types.ResolvePackageInstall(c.InstallMethod, c.InstallCommand, c.Packages, c.Options)
+	if err != nil {
+		return nil, "", err
+	}
+	switch c.InstallMethod {
+	case "zypper":
+		return append(request.Options, request.Packages...), "", nil
+	case "winget":
+		scope := ""
+		var extra []string
+		for _, opt := range request.Options {
+			if strings.HasPrefix(opt, "--scope=") {
+				if scope != "" && scope != opt {
+					return nil, "", fmt.Errorf("conflicting --scope values %q and %q", strings.TrimPrefix(scope, "--scope="), strings.TrimPrefix(opt, "--scope="))
+				}
+				scope = opt
+			} else {
+				extra = append(extra, opt)
+			}
+		}
+		return append(extra, request.Packages...), scope, nil
+	default:
+		return request.Packages, "", nil
+	}
 }
 
 // maintenanceNativeCommands documents the audited plugin contracts.
@@ -219,6 +266,7 @@ func maintenanceNativeCommands(op packageMaintenanceOperation) []string {
 		"dnf:upgrade":          {"dnf upgrade --assumeyes"}, "zypper:upgrade": {"zypper --non-interactive update"},
 		"xbps:upgrade": {"xbps-install --yes --update"}, "eopkg:upgrade": {"eopkg upgrade --yes-all"},
 		"snap:upgrade": {"snap refresh"}, "nixpkgs:upgrade": {"nix-env --upgrade"}, "mas:upgrade": {"mas upgrade"},
+		"winget:update": {"winget source update"}, "winget:upgrade": {"winget upgrade"},
 	}
 	result := append([]string(nil), commands[op.manager+":"+op.args[0]]...)
 	if op.manager == "apt" && interaction.IsInteractiveMode() {

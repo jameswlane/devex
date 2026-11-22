@@ -92,6 +92,9 @@ func ResolvePackageInstall(method, command string, packages, options []string) (
 			if method == "zypper" && value != "package" && value != "pattern" {
 				return request, fmt.Errorf("zypper option --type must be package or pattern, not %q", value)
 			}
+			if method == "winget" && value != "user" && value != "machine" {
+				return request, fmt.Errorf("winget option --scope must be user or machine, not %q", value)
+			}
 			request.Options = append(request.Options, name+"="+value)
 		} else {
 			if inline {
@@ -138,6 +141,11 @@ func packageOption(method, name string) (takesValue, supported bool) {
 	case "zypper":
 		// --type selects packages or SUSE software patterns.
 		if name == "--type" {
+			return true, true
+		}
+	case "winget":
+		// --scope selects a user or machine installer; machine needs elevation.
+		if name == "--scope" {
 			return true, true
 		}
 	}
@@ -224,7 +232,7 @@ func (config OSConfig) ShellPackageArguments() (string, error) {
 
 func isPackageManager(name string) bool {
 	switch name {
-	case "sudo", "apt", "apt-get", "snap", "dnf", "yum", "brew", "flatpak", "mas", "pip", "pacman", "zypper":
+	case "sudo", "apt", "apt-get", "snap", "dnf", "yum", "brew", "flatpak", "mas", "pip", "pacman", "winget", "zypper":
 		return true
 	}
 	return false
@@ -244,8 +252,9 @@ func (a AppConfig) PackageQueryCommand() string {
 			}
 		}
 	}
-	if a.InstallMethod == "zypper" {
-		// Keep the package or pattern selection; it names what to query.
+	if a.InstallMethod == "zypper" || a.InstallMethod == "winget" {
+		// Keep zypper's package or pattern selection, which names what to
+		// query, and winget's scope, which checks at the scope that installed.
 		if request, err := ResolvePackageInstall(a.InstallMethod, "", a.Packages, a.Options); err == nil {
 			args = append(append([]string{}, request.Options...), args...)
 		}
@@ -258,10 +267,11 @@ func (a AppConfig) PackageQueryCommand() string {
 
 // WithKindSelector appends the app's typed kind selection to a legacy command
 // string that does not select a kind itself, so query and removal act on the
-// same kind that installation chose: Homebrew's --cask or --formula, or
-// Zypper's --type. Appending keeps "brew uninstall NAME" forms parseable.
+// same kind that installation chose: Homebrew's --cask or --formula, Zypper's
+// --type, or winget's --scope. Appending keeps "brew uninstall NAME" forms
+// parseable.
 func (a AppConfig) WithKindSelector(command string) string {
-	if (a.InstallMethod != "brew" && a.InstallMethod != "zypper") || strings.TrimSpace(command) == "" {
+	if (a.InstallMethod != "brew" && a.InstallMethod != "zypper" && a.InstallMethod != "winget") || strings.TrimSpace(command) == "" {
 		return command
 	}
 	tokens, err := splitPackageCommand(command)
@@ -293,6 +303,10 @@ func kindSelector(method string, tokens []string) string {
 			selector = token
 		case method == "zypper" && (token == "-t" || token == "--type") && i+1 < len(tokens):
 			selector = "--type=" + tokens[i+1]
+		case method == "winget" && strings.HasPrefix(token, "--scope="):
+			selector = token
+		case method == "winget" && token == "--scope" && i+1 < len(tokens):
+			selector = "--scope=" + tokens[i+1]
 		}
 	}
 	return selector

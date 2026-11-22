@@ -18,11 +18,12 @@ var _ = Describe("Application graph validation", func() {
 	It("accepts supported and planned install methods", func() {
 		apps := []types.CrossPlatformApp{
 			linuxApp("git", "apt", "git"),
-			{Name: "Terminal", Windows: types.OSConfig{InstallMethod: "winget", InstallCommand: "Microsoft.WindowsTerminal"}},
+			{Name: "Terminal", Windows: types.OSConfig{InstallMethod: "chocolatey", InstallCommand: "microsoft-windows-terminal"}},
 		}
 		Expect(config.ValidateApplicationGraph(apps)).To(BeEmpty())
 		Expect(config.ClassifyInstallMethod("apt")).To(Equal(config.MethodSupported))
-		Expect(config.ClassifyInstallMethod("winget")).To(Equal(config.MethodPlanned))
+		Expect(config.ClassifyInstallMethod("chocolatey")).To(Equal(config.MethodPlanned))
+		Expect(config.ClassifyInstallMethod("winget")).To(Equal(config.MethodSupported))
 		Expect(config.ClassifyInstallMethod("aptt")).To(Equal(config.MethodUnknown))
 	})
 

@@ -1,13 +1,14 @@
 ---
 title: Windows Support
-description: Native Windows package managers are planned; WSL uses Linux support levels.
+description: winget is an experimental native Windows package manager; Chocolatey and Scoop are planned. WSL uses Linux support levels.
 ---
 
 # Windows Support
 
-Native Windows package management is **planned**. No winget, Chocolatey or
-Scoop plugin exists in this repository. Windows entries in application
-configuration describe intended methods, not working DevEx installers.
+Native Windows package management is **experimental** through the
+[winget plugin](https://github.com/jameswlane/devex/tree/main/packages/package-manager-winget).
+Chocolatey and Scoop are **planned**: Windows entries that use those methods
+describe intended installers, not working ones.
 
 ## Prepare Windows
 
@@ -29,7 +30,6 @@ Windows 11. Set up these prerequisites on a fresh machine before running DevEx:
 Automating these steps inside DevEx is tracked in open issues:
 
 - [Windows prerequisite checks in `devex setup` #623](https://github.com/jameswlane/devex/issues/623)
-- [winget plugin #111](https://github.com/jameswlane/devex/issues/111)
 - [PowerShell configuration #135](https://github.com/jameswlane/devex/issues/135)
 - [Windows Terminal profiles #136](https://github.com/jameswlane/devex/issues/136)
 - [Git for Windows bootstrap #139](https://github.com/jameswlane/devex/issues/139)
@@ -85,9 +85,40 @@ mise exec -- task lint
   lifecycle spec writes a stray untracked file into the checkout because of an
   unquoted Windows path.
 
+## winget
+
+The `package-manager-winget` plugin installs, checks, upgrades and removes
+packages by exact winget identifier (`winget install --id <id> --exact`).
+`devex update` runs `winget source update`, which only refreshes metadata;
+`devex upgrade` upgrades only the selected packages.
+
+DevEx does not elevate on Windows. Run it from a regular terminal for the
+default and `--scope=user` installs; in interactive sessions, winget shows a
+UAC prompt for any installer that needs administrator rights, and a declined
+prompt is reported as an authorization error. For `--scope=machine`, run DevEx
+from a terminal opened with **Run as administrator**. In unattended mode
+(`DEVEX_UNATTENDED=1` or `CI=true`), pass an explicit `--scope=user` or
+`--scope=machine` so winget never blocks on a UAC prompt.
+
+```yaml
+# applications/development/ripgrep.yaml
+name: ripgrep
+description: Fast recursive search
+category: Development Tools
+windows:
+  install_method: winget
+  install_command: BurntSushi.ripgrep.MSVC
+  uninstall_command: BurntSushi.ripgrep.MSVC
+```
+
+Add `--scope machine` to `install_command` (for example
+`Docker.DockerDesktop --scope machine`) to install machine-wide. The
+[plugin README](https://github.com/jameswlane/devex/tree/main/packages/package-manager-winget)
+lists every native command, the winget result codes DevEx interprets, and the
+opt-in smoke test that installs and removes a real package.
+
 ## Planned managers
 
-- [winget plugin #111](https://github.com/jameswlane/devex/issues/111)
 - [Chocolatey plugin #112](https://github.com/jameswlane/devex/issues/112)
 - [Scoop plugin #113](https://github.com/jameswlane/devex/issues/113)
 
