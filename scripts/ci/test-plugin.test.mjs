@@ -148,10 +148,13 @@ function testPluginsJob() {
 		path.join(repo, ".github/workflows/ci.yml"),
 		"utf8",
 	);
-	return workflow.slice(
-		workflow.indexOf("  test-plugins:"),
-		workflow.indexOf("  test-js:"),
-	);
+	const start = workflow.indexOf("\n  test-plugins:\n") + 1;
+	assert.ok(start > 0, "CI workflow defines a test-plugins job");
+	// The job ends at the next job key, wherever later jobs are placed.
+	const end = workflow.slice(start).search(/\n {2}[A-Za-z0-9_-]+:\n/);
+	return end === -1
+		? workflow.slice(start)
+		: workflow.slice(start, start + end + 1);
 }
 
 /**
@@ -160,8 +163,9 @@ function testPluginsJob() {
  * @returns {string}
  */
 function testPluginRun(job) {
+	// Stop at the step's own run key, not a later step's.
 	const match =
-		/- name: Test plugin [^\n]*\n(?:\s+(?!run:)[^\n]*\n)*\s+run: ([^\n]+)\n/.exec(
+		/- name: Test plugin [^\n]*\n(?:[ \t]+(?![ \t]|run:)[^\n]*\n)*?[ \t]+run: ([^\n]+)\n/.exec(
 			job,
 		);
 	assert.ok(match, "Test plugin step has a single-line run key");
