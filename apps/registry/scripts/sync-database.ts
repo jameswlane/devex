@@ -9,16 +9,16 @@ import {
 	applicationPlatformData,
 } from "../lib/application-platforms";
 import { requestRegistryCdnPurge } from "../lib/cdn-cache";
-import { prismaConnectionOptions } from "../lib/prisma-connection";
+import {
+	prismaConnectionOptions,
+	resolveDatabaseUrl,
+} from "../lib/prisma-connection";
 import { recordRegistryStatsSnapshot } from "../lib/registry-stats";
 
 // Get GitHub URL from environment variable
 const GITHUB_BASE_URL =
 	process.env.GITHUB_BASE_URL || "https://github.com/jameswlane/devex";
 
-// No withAccelerate() extension: this script never uses cacheStrategy, and the
-// extension shares one Accelerate session token across concurrent requests.
-// With it, every upsert after the first few timed out with P6004 (#478).
 const defaultPrisma = new PrismaClient(prismaConnectionOptions());
 
 /** Throws when any record failed, so the caller can exit non-zero. */
@@ -380,9 +380,9 @@ async function main() {
 	console.log("🚀 Starting database sync...\n");
 
 	// Check for required authentication/authorization
-	if (!process.env.PRISMA_DATABASE_URL) {
+	if (!resolveDatabaseUrl()) {
 		console.error(
-			"❌ Missing required PRISMA_DATABASE_URL environment variable",
+			"❌ Missing a PostgreSQL URL: set DATABASE_URL_POOLED, DATABASE_URL or PRISMA_DATABASE_URL (Accelerate URLs are not supported)",
 		);
 		process.exit(1);
 	}

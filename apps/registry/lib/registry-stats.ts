@@ -1,7 +1,6 @@
 import type { PrismaClient } from "../generated/prisma/client";
 
-// Only the delegates used here, so plain, transaction and Accelerate-extended
-// clients all fit.
+// Only the delegates used here, so plain and transaction clients both fit.
 type StatsClient = Pick<
 	PrismaClient,
 	"application" | "plugin" | "config" | "stack"

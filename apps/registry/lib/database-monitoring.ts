@@ -1,4 +1,3 @@
-import { withAccelerate } from "@prisma/extension-accelerate";
 import { PrismaClient } from "../generated/prisma/client";
 import { logger, logPerformance } from "./logger";
 import { prismaConnectionOptions } from "./prisma-connection";
@@ -34,8 +33,6 @@ const PERFORMANCE_THRESHOLDS = {
 export class MonitoredPrismaClient extends PrismaClient {
 	private metrics: QueryMetrics[] = [];
 	private readonly maxMetricsSize = 1000;
-	private extendedClient: ReturnType<typeof this.createExtendedClient> | null =
-		null;
 
 	constructor(options?: ConstructorParameters<typeof PrismaClient>[0]) {
 		super({
@@ -103,23 +100,6 @@ export class MonitoredPrismaClient extends PrismaClient {
 				timestamp: new Date().toISOString(),
 			});
 		});
-	}
-
-	/**
-	 * Create an extended client with Accelerate
-	 */
-	private createExtendedClient() {
-		return this.$extends(withAccelerate());
-	}
-
-	/**
-	 * Get the extended client instance
-	 */
-	public getExtendedClient() {
-		if (!this.extendedClient) {
-			this.extendedClient = this.createExtendedClient();
-		}
-		return this.extendedClient;
 	}
 
 	/**
