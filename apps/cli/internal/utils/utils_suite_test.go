@@ -12,6 +12,7 @@ import (
 )
 
 func TestUtils(t *testing.T) {
+	testhelper.ResolveTempDir()
 	t.Parallel()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Utils Suite")

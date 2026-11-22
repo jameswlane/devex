@@ -11,6 +11,7 @@ import (
 )
 
 func TestTemplateExec(t *testing.T) {
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Template Execution Runtime Suite")
 }

@@ -14,6 +14,7 @@ import (
 )
 
 func TestTui(t *testing.T) {
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Tui Suite")
 }
