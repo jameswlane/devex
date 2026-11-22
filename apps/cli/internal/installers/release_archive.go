@@ -105,6 +105,16 @@ func InstallReleaseArchive(ctx context.Context, app types.AppConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to read archive %s: %w: %s", path.Base(parsed.Path), err, strings.TrimSpace(listing))
 	}
+	// Link members could redirect later writes outside the destination.
+	verbose, err := runArchiveCommand(ctx, "tar", "-tvf", archive)
+	if err != nil {
+		return fmt.Errorf("failed to read archive %s: %w: %s", path.Base(parsed.Path), err, strings.TrimSpace(verbose))
+	}
+	for _, line := range strings.Split(verbose, "\n") {
+		if strings.HasPrefix(line, "l") || strings.HasPrefix(line, "h") {
+			return fmt.Errorf("archive %s contains a link member, which is not supported: %s", path.Base(parsed.Path), strings.TrimSpace(line))
+		}
+	}
 	binaryEntry := ""
 	for _, entry := range strings.Split(strings.TrimSpace(listing), "\n") {
 		entry = strings.TrimSpace(entry)
@@ -146,7 +156,7 @@ func InstallReleaseArchive(ctx context.Context, app types.AppConfig) error {
 	if output, err := runSystemCommand(ctx, "mkdir", "-p", app.InstallDir); err != nil {
 		return fmt.Errorf("failed to create %s: %w: %s", app.InstallDir, err, strings.TrimSpace(output))
 	}
-	if output, err := runSystemCommand(ctx, "tar", "--no-same-owner", "-xf", archive, "-C", app.InstallDir); err != nil {
+	if output, err := runSystemCommand(ctx, "tar", "--no-same-owner", "--no-overwrite-dir", "-xf", archive, "-C", app.InstallDir); err != nil {
 		return fmt.Errorf("failed to extract %s into %s: %w: %s", path.Base(parsed.Path), app.InstallDir, err, strings.TrimSpace(output))
 	}
 	return nil

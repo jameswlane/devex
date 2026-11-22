@@ -193,6 +193,18 @@ var _ = Describe("Release archive installs", func() {
 		Expect(systemCalls).To(BeEmpty())
 	})
 
+	It("rejects archives with link members", func() {
+		root := filepath.Join(fixtureDir, "links")
+		Expect(os.MkdirAll(root, 0o755)).To(Succeed())
+		Expect(os.Symlink("../outside", filepath.Join(root, "escape"))).To(Succeed())
+		archive = filepath.Join(fixtureDir, "links.tar.gz")
+		Expect(exec.Command("tar", "-czf", archive, "-C", root, "escape").Run()).To(Succeed())
+
+		err := InstallReleaseArchive(context.Background(), app("https://github.com/example/tool/releases/download/v1/links.tar.gz", "tool"))
+		Expect(err).To(MatchError(ContainSubstring("link member")))
+		Expect(systemCalls).To(BeEmpty())
+	})
+
 	It("routes a curlpipe release archive to the archive installer instead of running it as a script", func() {
 		archive = buildArchive(map[string]string{"lazygit": "binary"})
 		config := app("https://github.com/example/tool/releases/download/v1/lazygit.tar.gz", "lazygit")
