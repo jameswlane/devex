@@ -94,9 +94,6 @@ known_issue() { # step; sets ISSUE and SIGNATURE
 	mobile:install | game-development:install)
 		ISSUE=569 SIGNATURE='Flatpak system operation ConfigureRemote not allowed'
 		;;
-	minimal:status | backend:status | full-stack:status)
-		ISSUE=570 SIGNATURE='has no recorded resources for template'
-		;;
 	esac
 }
 
