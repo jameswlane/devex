@@ -77,6 +77,13 @@ describe("Prisma 7 connection options", () => {
 		);
 	});
 
+	it("refuses to fall back to PG* defaults when only an Accelerate URL is set", () => {
+		process.env.PRISMA_DATABASE_URL =
+			"prisma+postgres://accelerate.example/?api_key=test";
+		expect(() => prismaConnectionOptions()).toThrow(/Accelerate URLs/);
+		expect(PrismaPg).not.toHaveBeenCalled();
+	});
+
 	it("keeps pool and schema settings when using PostgreSQL", () => {
 		const url =
 			"postgresql://localhost/registry?connection_limit=12&pool_timeout=7&statement_timeout=1500&schema=custom";
@@ -84,11 +91,13 @@ describe("Prisma 7 connection options", () => {
 		expect(options.adapter).toBeDefined();
 		expect(PrismaPg).toHaveBeenCalledWith(
 			{
-				connectionString: url,
+				// statement_timeout is a startup parameter PgBouncer rejects
+				connectionString:
+					"postgresql://localhost/registry?connection_limit=12&pool_timeout=7&schema=custom",
 				max: 12,
 				connectionTimeoutMillis: 7000,
 				idleTimeoutMillis: 10000,
-				statement_timeout: 1500,
+				query_timeout: 1500,
 			},
 			{ schema: "custom" },
 		);
@@ -102,7 +111,7 @@ describe("Prisma 7 connection options", () => {
 				max: 5,
 				connectionTimeoutMillis: 5000,
 				idleTimeoutMillis: 10000,
-				statement_timeout: 10000,
+				query_timeout: 10000,
 			},
 			{ schema: "public" },
 		);

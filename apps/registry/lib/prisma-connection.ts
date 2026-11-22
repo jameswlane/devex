@@ -27,22 +27,41 @@ export function resolveDatabaseUrl(
 	].find((url) => !!url && !isAccelerateUrl(url));
 }
 
-/** PostgreSQL driver adapter options. The pool connects lazily. */
+/**
+ * PostgreSQL driver adapter options. The pool connects lazily.
+ *
+ * statement_timeout is applied client-side (query_timeout) and stripped from the
+ * URL: pg sends it as a startup parameter, which the transaction-mode PgBouncer
+ * behind Prisma Postgres pooled URLs rejects.
+ */
 export function prismaConnectionOptions(
 	connectionString = resolveDatabaseUrl(),
 ) {
-	const params = connectionString
-		? new URL(connectionString).searchParams
-		: null;
+	if (
+		!connectionString &&
+		[process.env.DATABASE_URL_POOLED, process.env.PRISMA_DATABASE_URL].some(
+			isAccelerateUrl,
+		)
+	) {
+		// Without this, pg would silently fall back to PGHOST/PGDATABASE defaults.
+		throw new Error(
+			"Prisma Accelerate URLs are no longer supported: set DATABASE_URL_POOLED or DATABASE_URL to a postgres:// URL",
+		);
+	}
+
+	const url = connectionString ? new URL(connectionString) : null;
+	const params = url?.searchParams;
+	const statementTimeout = Number(params?.get("statement_timeout") ?? 10000);
+	params?.delete("statement_timeout");
 	return {
 		adapter: new PrismaPg(
 			{
-				connectionString,
+				connectionString: url?.toString(),
 				max: Number(params?.get("connection_limit") ?? 5),
 				connectionTimeoutMillis:
 					Number(params?.get("pool_timeout") ?? 5) * 1000,
 				idleTimeoutMillis: 10000,
-				statement_timeout: Number(params?.get("statement_timeout") ?? 10000),
+				query_timeout: statementTimeout,
 			},
 			{ schema: params?.get("schema") ?? "public" },
 		),
