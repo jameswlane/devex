@@ -24,6 +24,14 @@ var _ = Describe("Copy hooks in a confirmed install", func() {
 		if os.Geteuid() == 0 {
 			Skip("copies switch users when running as root")
 		}
+		// Keep the direct copy path exercised even on elevated Windows runners
+		// (where os.Geteuid() == -1 while PrivilegeResolver.Elevated is true);
+		// elevated user-switching behavior is covered below.
+		originalResolver := sdk.NewPrivilegeResolver
+		resolver := originalResolver()
+		resolver.Elevated = false
+		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
+		DeferCleanup(func() { sdk.NewPrivilegeResolver = originalResolver })
 		dir := GinkgoT().TempDir()
 		source, destination = filepath.Join(dir, "source"), filepath.Join(dir, "destination")
 		Expect(os.WriteFile(source, []byte("confirmed"), 0o600)).To(Succeed())
