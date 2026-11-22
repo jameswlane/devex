@@ -19,6 +19,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -259,7 +260,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("previews rollback before confirmation, package installation, file restoration and service restart", func() {
-		backup := filepath.Join(home, ".devex", "backups", "nginx_20261030_120000")
+		backup := filepath.Join(devexpaths.ForHome(home).Backups(), "nginx_20261030_120000")
 		Expect(os.MkdirAll(backup, 0o700)).To(Succeed())
 		settings.Terminal.Utilities = append(settings.Terminal.Utilities, types.CrossPlatformApp{
 			Name: "nginx", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "nginx"},
@@ -282,7 +283,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("rejects unsupported rollback methods without mutation", func() {
-		Expect(os.MkdirAll(filepath.Join(home, ".devex", "backups", "unsupported_20261030_120000"), 0o700)).To(Succeed())
+		Expect(os.MkdirAll(filepath.Join(devexpaths.ForHome(home).Backups(), "unsupported_20261030_120000"), 0o700)).To(Succeed())
 		settings.Terminal.Utilities = append(settings.Terminal.Utilities, types.CrossPlatformApp{
 			Name: "unsupported", AllPlatforms: types.OSConfig{InstallMethod: "unknown"},
 		})
@@ -292,7 +293,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("leaves existing plugin binaries untouched and does not run them during root preview initialization", func() {
-		pluginDir := filepath.Join(home, ".devex", "plugins")
+		pluginDir := devexpaths.ForHome(home).Plugins()
 		Expect(os.MkdirAll(pluginDir, 0o700)).To(Succeed())
 		plugin := filepath.Join(pluginDir, "devex-package-manager-apt")
 		Expect(os.WriteFile(plugin, []byte("#!/bin/sh\nprintf plugin >> \"$DEVEX_TEST_COMMAND_RECORD\"\nexit 91\n"), 0o700)).To(Succeed())
@@ -354,7 +355,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("still attempts rollback execution when preview is explicitly disabled", func() {
-		Expect(os.MkdirAll(filepath.Join(home, ".devex", "backups", "preview-app_20261030_120000"), 0o700)).To(Succeed())
+		Expect(os.MkdirAll(filepath.Join(devexpaths.ForHome(home).Backups(), "preview-app_20261030_120000"), 0o700)).To(Succeed())
 		Expect(execute("rollback", "--dry-run=false", "--offline", "--force", "--app", "preview-app")).To(MatchError(ContainSubstring("failed to reinstall application")))
 		data, err := os.ReadFile(record)
 		Expect(err).NotTo(HaveOccurred())
