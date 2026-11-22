@@ -16,6 +16,8 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 )
 
 var _ = Describe("Dotfiles commands", func() {
@@ -26,7 +28,7 @@ var _ = Describe("Dotfiles commands", func() {
 	git := func(args ...string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		command := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "user.email=t@example.com", "-c", "user.name=t"}, args...)...)
+		command := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "core.autocrlf=false", "-c", "user.email=t@example.com", "-c", "user.name=t"}, args...)...)
 		out, err := command.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(out))
 		return strings.TrimSpace(string(out))
@@ -63,7 +65,9 @@ var _ = Describe("Dotfiles commands", func() {
 		}
 		DeferCleanup(viper.Reset)
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
+		GinkgoT().Setenv("GIT_CONFIG_NOSYSTEM", "1")
+		GinkgoT().Setenv("GIT_CONFIG_GLOBAL", filepath.Join(GinkgoT().TempDir(), "gitconfig"))
 		GinkgoT().Setenv("CI", "true")
 		for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "DEVEX_CONFIG_DIR", "DEVEX_DATA_DIR", "DEVEX_STATE_DIR", "DEVEX_CACHE_DIR", "DEVEX_DOTFILES_REPOSITORY", "DEVEX_DOTFILES_REF"} {
 			GinkgoT().Setenv(key, "")
@@ -194,8 +198,21 @@ var _ = Describe("Dotfiles commands", func() {
 	})
 
 	DescribeTable("refuses destinations that reach DevEx's own directories through a symlinked parent",
-		func(dir string) {
-			protected := filepath.Join(home, dir)
+		func(kind string) {
+			dirs := devexpaths.ForHome(home)
+			var protected string
+			switch kind {
+			case "config":
+				protected = dirs.Config
+			case "data":
+				protected = dirs.Data
+			case "state":
+				protected = dirs.State
+			case "cache":
+				protected = dirs.Cache
+			}
+			dir, err := filepath.Rel(home, protected)
+			Expect(err).NotTo(HaveOccurred())
 			write(filepath.Join(protected, "config.yaml"), "mine\n")
 			Expect(os.Symlink(dir, filepath.Join(home, "alias"))).To(Succeed())
 			write(filepath.Join(repo, "devex-dotfiles.yaml"), "files:\n  - source: gitconfig\n    destination: ~/alias/config.yaml\n")
@@ -205,13 +222,13 @@ var _ = Describe("Dotfiles commands", func() {
 			Expect(diagnostics.String()).To(ContainSubstring("inside DevEx's own directory"))
 			Expect(read(filepath.Join(protected, "config.yaml"))).To(Equal("mine\n"))
 			Expect(backups(filepath.Join(dir, "*.devex-bak"))).To(BeEmpty())
-			Expect(filepath.Join(home, ".local", "state", "devex", "dotfiles.json")).NotTo(BeAnExistingFile())
-			Expect(filepath.Join(home, ".local", "state", "devex", "config-files")).NotTo(BeADirectory())
+			Expect(filepath.Join(dirs.State, "dotfiles.json")).NotTo(BeAnExistingFile())
+			Expect(filepath.Join(dirs.State, "config-files")).NotTo(BeADirectory())
 		},
-		Entry("configuration", filepath.Join(".config", "devex")),
-		Entry("data", filepath.Join(".local", "share", "devex")),
-		Entry("state", filepath.Join(".local", "state", "devex")),
-		Entry("cache", filepath.Join(".cache", "devex")),
+		Entry("configuration", "config"),
+		Entry("data", "data"),
+		Entry("state", "state"),
+		Entry("cache", "cache"),
 	)
 
 	It("reports when nothing has been synced", func() {

@@ -153,6 +153,10 @@ var _ = Describe("Resuming persisted runs", func() {
 		Expect(store.ReleaseLifecycleLock(context.Background(), "resume", "other")).To(Succeed())
 		lock.Hostname = "remote-host"
 		Expect(store.AcquireLifecycleLock(context.Background(), lock, state.LockOptions{})).To(Succeed())
+		acquiredAt := time.Now().Round(0)
+		for !time.Now().Round(0).After(acquiredAt) {
+			time.Sleep(time.Millisecond)
+		}
 		executor.fail = false
 		_, err = runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{LockStaleTimeout: time.Nanosecond})
 		Expect(err).NotTo(HaveOccurred())

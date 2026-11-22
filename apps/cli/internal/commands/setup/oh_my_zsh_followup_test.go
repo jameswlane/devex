@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/setupundo"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	managed "github.com/jameswlane/devex/packages/plugin-sdk/shellrc"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -21,6 +23,7 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_DATA_DIR", "")
 		GinkgoT().Setenv("XDG_DATA_HOME", "")
 		calls = nil
@@ -53,7 +56,7 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 		expected := make([]string, 0, len(toolEntries)+5)
 		expected = append(expected, toolEntries...)
 		expected = append(expected,
-			`source "$HOME/.local/share/devex/defaults/zsh/rc"`,
+			zshSourceEntry(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh", "rc"), home),
 			`export ZSH="$HOME/.oh-my-zsh"`,
 			"ZSH_THEME='theme-b'",
 			"plugins=(git docker kubectl)",
@@ -84,7 +87,7 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 
 			Expect(readOhMyZshTestFile(zshrc)).To(Equal(original))
 			Expect(calls).To(BeEmpty())
-			Expect(filepath.Join(home, ".local", "share", "devex", "defaults", "zsh")).NotTo(BeADirectory())
+			Expect(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh")).NotTo(BeADirectory())
 			Expect(model.installation.getChanges()).To(ConsistOf("your ~/.zshrc already loads Oh My Zsh; it is left unchanged"))
 		},
 		Entry("source with an unquoted ZSH variable", `source $ZSH/oh-my-zsh.sh`),
@@ -135,7 +138,7 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 	It("deploys zsh-syntax-valid defaults with safe PATH and guarded tool aliases", func(ctx SpecContext) {
 		model := newOhMyZshTestModel(home, "zsh", true)
 		Expect(model.applyOhMyZsh(ctx)).To(Succeed())
-		defaultsDir := filepath.Join(home, ".local", "share", "devex", "defaults", "zsh")
+		defaultsDir := filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh")
 
 		shell := readOhMyZshTestFile(filepath.Join(defaultsDir, "shell"))
 		Expect(shell).To(ContainSubstring(`case ":$PATH:" in`))

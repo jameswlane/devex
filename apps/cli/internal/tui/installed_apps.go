@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -87,8 +88,22 @@ func binaryInstalled(cfg types.OSConfig) bool {
 		}
 	}
 	for _, dir := range dirs {
-		if isExecutable(filepath.Join(dir, name)) {
+		if hasExecutableInDir(dir, name) {
 			return true
+		}
+	}
+	return false
+}
+
+func hasExecutableInDir(dir, name string) bool {
+	if isExecutable(filepath.Join(dir, name)) {
+		return true
+	}
+	if runtime.GOOS == "windows" && filepath.Ext(name) == "" {
+		for _, ext := range []string{".exe", ".cmd", ".bat", ".com"} {
+			if isExecutable(filepath.Join(dir, name+ext)) {
+				return true
+			}
 		}
 	}
 	return false
@@ -96,7 +111,14 @@ func binaryInstalled(cfg types.OSConfig) bool {
 
 func isExecutable(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		ext := strings.ToLower(filepath.Ext(path))
+		return ext == ".exe" || ext == ".cmd" || ext == ".bat" || ext == ".com"
+	}
+	return info.Mode().Perm()&0o111 != 0
 }
 
 func expandHome(path string) string {

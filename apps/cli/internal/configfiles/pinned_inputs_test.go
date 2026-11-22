@@ -12,6 +12,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/execinputs"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -19,7 +20,7 @@ var _ = Describe("Config files in a confirmed install", func() {
 	var home, source, destination, marker string
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		source = filepath.Join(home, "source.conf")
 		destination = filepath.Join(home, ".config", "tool", "tool.conf")
 		marker = filepath.Join(home, "marker")

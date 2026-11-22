@@ -18,6 +18,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -53,7 +54,7 @@ var _ = Describe("Registered plugin commands", func() {
 		}
 		GinkgoT().Setenv("TERM", "xterm")
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		// Keep the fake home authoritative even when the suite is launched under sudo.
 		original := sdk.NewPrivilegeResolver
 		resolver := original()

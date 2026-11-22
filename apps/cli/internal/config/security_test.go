@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -202,6 +203,9 @@ var _ = Describe("Directory Loading Error Handling", func() {
 
 		Context("with permission issues", func() {
 			It("should handle unreadable files", func() {
+				if runtime.GOOS == "windows" {
+					Skip("POSIX 0000 file mode does not prevent owner reads on Windows")
+				}
 				unreadableFile := filepath.Join(tempDir, "unreadable.yaml")
 				os.WriteFile(unreadableFile, []byte("test: value"), 0000)
 
@@ -416,6 +420,9 @@ var _ = Describe("Recursive Directory Loading", func() {
 
 		Context("with permission issues", func() {
 			It("should continue walking when encountering permission errors", func() {
+				if runtime.GOOS == "windows" {
+					Skip("POSIX 0000 directory mode does not prevent owner reads on Windows")
+				}
 				// Create accessible and inaccessible directories
 				accessibleDir := filepath.Join(tempDir, "accessible")
 				inaccessibleDir := filepath.Join(tempDir, "inaccessible")

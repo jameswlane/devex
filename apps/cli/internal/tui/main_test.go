@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 // TestMain isolates the whole test binary, including plain `go test` functions
@@ -20,7 +21,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	_ = os.Setenv("HOME", dir)
+	testhelper.ApplyProfileEnv(dir)
 	_ = os.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
 	_ = os.Setenv("DEVEX_STATE_DIR", "")
 	viper.Set(state.DBPathConfigKey, filepath.Join(dir, "state.db"))

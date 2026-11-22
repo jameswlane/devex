@@ -10,6 +10,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -22,7 +23,7 @@ var _ = Describe("Organization policy command", func() {
 	BeforeEach(func() {
 		viper.Reset()
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		teamDir := filepath.Join(home, "team")
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
 		policyPath = filepath.Join(teamDir, "policy.yaml")

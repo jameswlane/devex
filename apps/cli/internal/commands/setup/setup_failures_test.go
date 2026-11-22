@@ -15,6 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -42,7 +43,7 @@ var _ = Describe("Setup failure regressions", func() {
 		Expect(pluginDirs).NotTo(BeEmpty())
 		pluginDirs = append(pluginDirs, filepath.Join(setupRepoRoot(), "packages/tool-git"))
 		for _, dir := range pluginDirs {
-			path := filepath.Join(GinkgoT().TempDir(), filepath.Base(dir))
+			path := testhelper.Executable(GinkgoT().TempDir(), filepath.Base(dir))
 			cmd := exec.CommandContext(ctx, "go", "build", "-o", path, ".")
 			cmd.Dir = dir
 			output, err := cmd.CombinedOutput()
@@ -118,7 +119,7 @@ var _ = Describe("Setup failure regressions", func() {
 	})
 
 	It("lists every app and configuration failure in both summaries and the log", func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 		Expect(log.InitFileLogger(false)).To(Succeed())
 		DeferCleanup(func() { Expect(log.Close()).To(Succeed()); log.InitTestLogger() })
@@ -141,7 +142,7 @@ var _ = Describe("Setup failure regressions", func() {
 	})
 
 	It("captures plugin stdout and stderr in the log and preserves failure details", func(ctx SpecContext) {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 		Expect(log.InitFileLogger(false)).To(Succeed())
 		DeferCleanup(func() { Expect(log.Close()).To(Succeed()); log.InitTestLogger() })
@@ -175,13 +176,17 @@ var _ = Describe("Setup failure regressions", func() {
 
 	It("counts post-install warnings in the final summary while keeping the app installed", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("XDG_CACHE_HOME", GinkgoT().TempDir())
 		repo := mocks.NewMockRepository()
 		settings := config.CrossPlatformSettings{HomeDir: home}
 		installer := tui.NewStreamingInstaller(nil, repo, ctx, settings)
+		installCmd := "true"
+		if runtime.GOOS == "windows" {
+			installCmd = "cmd /c exit 0"
+		}
 		app := types.CrossPlatformApp{Name: "fd-find", AllPlatforms: types.OSConfig{
-			InstallMethod: "generic", InstallCommand: "true", PostInstall: []types.InstallCommand{{Shell: "false"}},
+			InstallMethod: "generic", InstallCommand: installCmd, PostInstall: []types.InstallCommand{{Shell: "false"}},
 		}}
 		err := installer.InstallApps(ctx, []types.CrossPlatformApp{app}, settings)
 		Expect(err).To(HaveOccurred())

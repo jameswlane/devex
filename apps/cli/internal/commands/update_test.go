@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
@@ -64,7 +66,7 @@ var _ = Describe("Package maintenance commands", func() {
 	BeforeEach(func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		settings = config.CrossPlatformSettings{Terminal: config.TerminalApplicationsConfig{Utilities: []types.CrossPlatformApp{app("Git", "apt", "apt install git"), app("Curl", "apt", "curl"), app("Editor", "dnf", "editor")}}}
 		recorder = &maintenanceRecorder{}
 		initialized = 0
@@ -95,17 +97,34 @@ var _ = Describe("Package maintenance commands", func() {
 		dir := GinkgoT().TempDir()
 		logPath := filepath.Join(dir, "calls")
 		GinkgoT().Setenv("DEVEX_TEST_CALL_LOG", logPath)
-		script := `#!/bin/sh
-if [ "$1" = "--plugin-info" ]; then
- echo '{"name":"package-manager-apt","version":"old","commands":[{"name":"upgrade"}]}'
- exit 0
-fi
-printf '%s\n' "$*" >> "$DEVEX_TEST_CALL_LOG"
-if [ "$1" = "upgrade" ]; then exit 0; fi
-echo "unknown command: $1" >&2
-exit 1
+		srcDir := GinkgoT().TempDir()
+		src := `package main
+import ("fmt"; "os"; "strings")
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--plugin-info" {
+		fmt.Println("{\"name\":\"package-manager-apt\",\"version\":\"old\",\"commands\":[{\"name\":\"upgrade\"}]}")
+		return
+	}
+	f, _ := os.OpenFile(os.Getenv("DEVEX_TEST_CALL_LOG"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if f != nil {
+		_, _ = f.WriteString(strings.Join(os.Args[1:], " ") + "\n")
+		_ = f.Close()
+	}
+	if len(os.Args) > 1 && os.Args[1] == "upgrade" {
+		return
+	}
+	cmd := ""
+	if len(os.Args) > 1 { cmd = os.Args[1] }
+	fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
+	os.Exit(1)
+}
 `
-		Expect(os.WriteFile(filepath.Join(dir, "devex-plugin-package-manager-apt"), []byte(script), 0755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(srcDir, "main.go"), []byte(src), 0o600)).To(Succeed())
+		pluginBin := testhelper.Executable(dir, "devex-plugin-package-manager-apt")
+		build := exec.CommandContext(context.Background(), "go", "build", "-o", pluginBin, "main.go")
+		build.Dir = srcDir
+		buildOut, buildErr := build.CombinedOutput()
+		Expect(buildErr).NotTo(HaveOccurred(), string(buildOut))
 		manager := sdk.NewExecutableManager(dir)
 		maintenanceExecutor = func(context.Context, pluginBootstrapProvider) (packageMaintenanceExecutor, error) {
 			return manager, nil

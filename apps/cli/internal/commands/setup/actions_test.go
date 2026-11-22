@@ -6,12 +6,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
@@ -24,7 +26,7 @@ var _ = Describe("Dynamic desktop installation", func() {
 	var state *types.SetupState
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("XDG_CACHE_HOME", GinkgoT().TempDir())
 		GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 		settings = config.CrossPlatformSettings{HomeDir: home, ApplicationOverrides: []types.CrossPlatformApp{
@@ -45,6 +47,9 @@ var _ = Describe("Dynamic desktop installation", func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	It("runs each selected app and its lifecycle hooks once through the wizard", func() {
+		if runtime.GOOS == "windows" {
+			Skip("generic POSIX shell hook execution requires sh/bash")
+		}
 		recorder := filepath.Join(settings.HomeDir, "calls")
 		for i := range 2 {
 			cfg := &settings.ApplicationOverrides[i].AllPlatforms

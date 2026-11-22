@@ -2,11 +2,11 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -18,7 +18,7 @@ var _ = Describe("Organization policy plugin enforcement", func() {
 
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		teamDir := filepath.Join(home, "team")
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
 		policyPath = filepath.Join(teamDir, "policy.yaml")
@@ -33,14 +33,7 @@ var _ = Describe("Organization policy plugin enforcement", func() {
 	It("refuses a denied plugin before execution and runs an allowed plugin", func() {
 		pluginDir := GinkgoT().TempDir()
 		marker := filepath.Join(pluginDir, "executed")
-		script := fmt.Sprintf(`#!/bin/sh
-if [ "${1-}" = --plugin-info ]; then
- echo '{"name":"tool-example","version":"1.0.0"}'
- exit 0
-fi
-touch %q
-`, marker)
-		Expect(os.WriteFile(filepath.Join(pluginDir, "devex-plugin-tool-example"), []byte(script), 0o700)).To(Succeed())
+		writeFakePlugin(pluginDir, fakePluginConfig{Name: "tool-example", Mode: "touch", MarkerPath: marker})
 		bootstrap := &PluginBootstrap{homeDir: home, manager: sdk.NewExecutableManager(pluginDir)}
 
 		writePolicy("version: '1'\nplugins:\n  deny: [tool-example]\n")

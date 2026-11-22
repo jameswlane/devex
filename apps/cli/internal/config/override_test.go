@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -438,6 +439,9 @@ terminal_applications:
 		})
 
 		It("handles permission errors gracefully", func() {
+			if runtime.GOOS == "windows" {
+				Skip("POSIX 0000 file mode does not prevent owner reads on Windows")
+			}
 			// Create default config
 			defaultConfigPath := filepath.Join(defaultConfigDir, "test.yaml")
 			defaultConfig := `test_setting: "default_value"`

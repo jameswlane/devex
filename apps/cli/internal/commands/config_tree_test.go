@@ -14,6 +14,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/recovery"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/undo"
 	"github.com/jameswlane/devex/apps/cli/internal/version"
@@ -23,7 +24,7 @@ var _ = Describe("Configuration tree operations", func() {
 	var settings config.CrossPlatformSettings
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
 		GinkgoT().Setenv("DEVEX_ENV", "dev")
 		settings = config.CrossPlatformSettings{HomeDir: home}
@@ -168,7 +169,7 @@ var _ = Describe("Configuration tree operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		manifest := &templates.CustomTemplateManifest{ID: "tree", Name: "Tree", Version: "1.0.0"}
 		Expect(manager.CreateTemplate(manifest, dir)).To(Succeed())
-		Expect(manifest.Files).To(ContainElements(filepath.Join("applications", "development", "git.yaml"), filepath.Join("system", "git.yaml")))
+		Expect(manifest.Files).To(ContainElements("applications/development/git.yaml", "system/git.yaml"))
 		Expect(filepath.Join(manifest.Source.Path, "applications/development/git.yaml")).To(BeAnExistingFile())
 	})
 
@@ -230,7 +231,9 @@ var _ = Describe("Configuration tree operations", func() {
 		Expect(string(metadata)).To(ContainSubstring("shell: zsh"))
 		output := filepath.Join(GinkgoT().TempDir(), "legacy.yaml")
 		Expect(exportConfiguration(context.Background(), settings, "yaml", output, nil, nil, false, false)).To(Succeed())
-		imported := config.CrossPlatformSettings{HomeDir: GinkgoT().TempDir()}
+		importedHome := GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), importedHome)
+		imported := config.CrossPlatformSettings{HomeDir: importedHome}
 		Expect(importConfiguration(context.Background(), imported, output, true, false, false, true, false)).To(Succeed())
 		Expect(filepath.Join(imported.GetUserConfigDir(), "applications/development/old-tool.yaml")).To(BeAnExistingFile())
 		Expect(filepath.Join(imported.GetUserConfigDir(), "environment.yaml")).NotTo(BeAnExistingFile())

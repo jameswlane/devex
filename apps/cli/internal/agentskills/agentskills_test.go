@@ -15,6 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/spf13/cobra"
 )
@@ -60,7 +61,7 @@ func resolve(example string) (*cobra.Command, []string) {
 
 var _ = Describe("DevEx agent skill", func() {
 	BeforeEach(func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 	})
 
 	It("has valid Agent Skills frontmatter", func() {

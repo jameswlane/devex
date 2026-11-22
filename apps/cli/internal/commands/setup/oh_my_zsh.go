@@ -286,7 +286,7 @@ func ohMyZshOwnsRCEntry(entry string) bool {
 		return false
 	}
 	target := strings.Trim(strings.TrimSpace(strings.TrimPrefix(entry, "source ")), `"'`)
-	return strings.HasSuffix(target, "/defaults/zsh/rc") && (strings.HasPrefix(target, "$HOME/") || filepath.IsAbs(target))
+	return strings.HasSuffix(filepath.ToSlash(target), "/defaults/zsh/rc") && (strings.HasPrefix(target, "$HOME/") || filepath.IsAbs(target))
 }
 
 func (m *SetupModel) applyOhMyZsh(ctx context.Context) error {

@@ -19,6 +19,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	"github.com/spf13/viper"
@@ -399,7 +400,7 @@ var _ = Describe("APT batching", func() {
 		// $HOME under sudo, so the recheck must use the resolved home.
 		home := GinkgoT().TempDir()
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		GinkgoT().Setenv("XDG_CONFIG_HOME", "")
 		GinkgoT().Setenv("DEVEX_CONFIG_DIR", "")
 		Expect(security.TeamConfigDir(home)).NotTo(Equal(security.TeamConfigDir("")))

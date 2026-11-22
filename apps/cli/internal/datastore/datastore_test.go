@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/datastore"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -11,7 +12,7 @@ import (
 var _ = Describe("SQLite initialization", func() {
 	It("returns the complete embedded schema on a fresh install", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Chdir(home)
 		db, err := datastore.NewSQLiteContext(ctx, filepath.Join(home, "datastore.db"))
 		Expect(err).NotTo(HaveOccurred())

@@ -36,7 +36,7 @@ func ConfigurationFiles(dir string) ([]string, error) {
 				if err != nil {
 					return err
 				}
-				files = append(files, relative)
+				files = append(files, filepath.ToSlash(relative))
 			}
 			return nil
 		})

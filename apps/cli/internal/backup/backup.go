@@ -59,7 +59,7 @@ type BackupOptions struct {
 func NewBackupManager(baseDir string) *BackupManager {
 	dirs, err := devexpaths.Resolve()
 	backups := filepath.Join(baseDir, "backups")
-	if err == nil && (baseDir == dirs.Config || baseDir == dirs.State) {
+	if err == nil && (baseDir == dirs.Config || (baseDir == dirs.State && dirs.State != dirs.Data)) {
 		backups = dirs.Backups()
 		baseDir = dirs.Config
 	}

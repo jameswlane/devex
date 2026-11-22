@@ -5,11 +5,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
@@ -37,7 +40,7 @@ var _ = Describe("Application config_files lifecycle", func() {
 				recorder = sdktest.NewRecorder(GinkgoT(), "config-test", "config-post-test")
 				home = GinkgoT().TempDir()
 				hookObserved = false
-				GinkgoT().Setenv("HOME", home)
+				testhelper.SetProfileEnv(GinkgoT(), home)
 				GinkgoT().Setenv("CONFIG_TEST_HOME", home)
 				source = filepath.Join(home, "source")
 				destination = filepath.Join(home, ".config", "example", "config")
@@ -120,6 +123,9 @@ var _ = Describe("Application config_files lifecycle", func() {
 						Expect(os.Symlink(outside, filepath.Join(home, "link"))).To(Succeed())
 						invalid.Destination = filepath.Join(home, "link", "invalid")
 					case "permission":
+						if runtime.GOOS == "windows" {
+							Skip("POSIX 0500 directory mode does not prevent owner writes on Windows")
+						}
 						denied := filepath.Join(home, "denied")
 						Expect(os.Mkdir(denied, 0500)).To(Succeed())
 						DeferCleanup(func() { Expect(os.Chmod(denied, 0700)).To(Succeed()) })
@@ -131,8 +137,8 @@ var _ = Describe("Application config_files lifecycle", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.Warnings).To(HaveLen(1))
 					Expect(result.Warnings[0]).To(ContainSubstring(app.Name))
-					Expect(result.Warnings[0]).To(ContainSubstring(invalid.Source))
-					Expect(result.Warnings[0]).To(ContainSubstring(invalid.Destination))
+					Expect(result.Warnings[0]).To(ContainSubstring(strconv.Quote(invalid.Source)))
+					Expect(result.Warnings[0]).To(ContainSubstring(strconv.Quote(invalid.Destination)))
 					Expect(result.Files).To(HaveLen(1))
 					Expect(destination).To(BeAnExistingFile())
 				},

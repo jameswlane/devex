@@ -3,6 +3,7 @@ package security_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -203,7 +204,9 @@ var _ = Describe("Security", func() {
 			// Check file exists and has secure permissions
 			info, err := os.Stat(tmpFile.Name())
 			Expect(err).ToNot(HaveOccurred())
-			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0600)))
+			if runtime.GOOS != "windows" {
+				Expect(info.Mode().Perm()).To(Equal(os.FileMode(0600)))
+			}
 		})
 
 		It("should clean up temporary files safely", func() {

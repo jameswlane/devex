@@ -187,7 +187,10 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 		CacheDir:        filepath.Join(sdk.PathsForHome(homeDir).Cache, "plugins"),
 		VerifyChecksums: true, PublicKeyPath: viper.GetString("plugin.public-key"),
 	})
-	if resolver.Elevated && identity.UID != "0" {
+	// Unix sudo elevation runs as root on behalf of SUDO_USER and must chown
+	// downloaded plugins back to the invoking account; Windows elevation runs
+	// under the user's own SID without Unix numeric UID/GID ownership transfer.
+	if resolver.Elevated && runtime.GOOS != "windows" && identity.UID != "0" {
 		if err := downloader.SetInstallOwner(*identity); err != nil {
 			return nil, err
 		}
@@ -362,7 +365,11 @@ func (b *PluginBootstrap) IsPluginAvailable(ctx context.Context, pluginName stri
 	}
 
 	// An installed plugin is usable without asking the registry, including offline.
-	if info, err := os.Stat(filepath.Join(b.manager.GetPluginDir(), "devex-plugin-"+pluginName)); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+	pluginBase := "devex-plugin-" + pluginName
+	if runtime.GOOS == "windows" {
+		pluginBase += ".exe"
+	}
+	if info, err := os.Stat(filepath.Join(b.manager.GetPluginDir(), pluginBase)); err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode().Perm()&0o111 != 0) {
 		return true
 	}
 

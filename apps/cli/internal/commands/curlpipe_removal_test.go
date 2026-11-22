@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,6 +29,9 @@ var _ = Describe("Inline curlpipe removal", func() {
 	})
 
 	It("runs an explicit uninstall command without requiring the curlpipe plugin", func() {
+		if runtime.GOOS == "windows" {
+			Skip("curlpipe inline uninstall uses POSIX sh")
+		}
 		marker := filepath.Join(GinkgoT().TempDir(), "removed")
 		app := types.CrossPlatformApp{Name: "example", AllPlatforms: types.OSConfig{
 			InstallMethod: "curlpipe", UninstallCommand: fmt.Sprintf("printf removed > '%s'", marker),
@@ -41,6 +45,9 @@ var _ = Describe("Inline curlpipe removal", func() {
 	})
 
 	It("honors the caller's cancellation before running the uninstall command", func() {
+		if runtime.GOOS == "windows" {
+			Skip("curlpipe inline uninstall uses POSIX sh")
+		}
 		marker := filepath.Join(GinkgoT().TempDir(), "removed")
 		app := types.CrossPlatformApp{Name: "example", AllPlatforms: types.OSConfig{
 			InstallMethod: "curlpipe", UninstallCommand: fmt.Sprintf("printf removed > '%s'", marker),

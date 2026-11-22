@@ -24,20 +24,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Plain-install specs must not run real package managers unless they opt in.
-var _ = BeforeEach(func() {
-	original := preparePackageBatch
-	preparePackageBatch = func(context.Context, []types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) (tui.PackageBatch, error) {
-		return tui.PackageBatch{}, nil
-	}
-	DeferCleanup(func() { preparePackageBatch = original })
-	originalSources := prepareAptSources
-	prepareAptSources = func(context.Context, types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) error {
-		return nil
-	}
-	DeferCleanup(func() { prepareAptSources = originalSources })
-})
-
 var _ = Describe("Plain install package batching", func() {
 	aptApp := func(name, packages string) types.CrossPlatformApp {
 		return types.CrossPlatformApp{Name: name, Description: name + " test app", Category: "Development", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: packages, UninstallCommand: packages}}

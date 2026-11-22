@@ -5,12 +5,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentskills"
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -61,7 +63,7 @@ var _ = Describe("Agent skill installer", func() {
 
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("KIMI_CODE_HOME", "")
 	})
 
@@ -106,7 +108,9 @@ var _ = Describe("Agent skill installer", func() {
 			expectBundleMatches(destination)
 			info, err := os.Stat(filepath.Join(destination, "SKILL.md"))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o644)))
+			if runtime.GOOS != "windows" {
+				Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o644)))
+			}
 		},
 		Entry("Claude user", "claude", "user"),
 		Entry("Claude project", "claude", "project"),
@@ -303,8 +307,8 @@ var _ = Describe("Agent skill installer", func() {
 	)
 
 	It("reports an unwritable skill parent without changing it", func() {
-		if os.Geteuid() == 0 {
-			Skip("permission checks do not restrict root")
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			Skip("POSIX directory permissions do not restrict root or Windows owners")
 		}
 		parent := filepath.Join(home, ".claude", "skills")
 		Expect(os.MkdirAll(parent, 0o755)).To(Succeed())

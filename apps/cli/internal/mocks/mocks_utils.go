@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
@@ -154,6 +155,9 @@ func (m *MockUtils) ExecuteCommand(ctx context.Context, command string) (*exec.C
 		return nil, fmt.Errorf("mock ExecuteCommand failed")
 	}
 	// Return a mock command that will not actually execute
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "cmd", "/c", "echo", "mock-execution"), nil
+	}
 	cmd := exec.CommandContext(ctx, "echo", "mock-execution")
 	return cmd, nil
 }

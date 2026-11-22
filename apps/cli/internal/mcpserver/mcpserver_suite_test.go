@@ -18,6 +18,7 @@ func TestMCPServer(t *testing.T) {
 
 var _ = BeforeEach(func() {
 	home := GinkgoT().TempDir()
+	testhelper.SetProfileEnv(GinkgoT(), home)
 	GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", filepath.Join(home, "team"))
 	previous := security.SystemOrgPolicyPath
 	security.SystemOrgPolicyPath = filepath.Join(home, "system-policy.yaml")

@@ -112,8 +112,11 @@ var _ = Describe("PackageManagerCache", func() {
 				// Reset command tracking
 				mockExec.Commands = []string{}
 
+				// Ensure the monotonic/wall clock advances past the cache window on Windows.
+				time.Sleep(20 * time.Millisecond)
+
 				// Second update with very short cache window (should update again)
-				err = utilities.EnsurePackageManagerUpdated(ctx, "apt", mockRepo, 1*time.Nanosecond)
+				err = utilities.EnsurePackageManagerUpdated(ctx, "apt", mockRepo, 1*time.Millisecond)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mockExec.Commands).To(ContainElement("sudo apt-get update"))
 			})

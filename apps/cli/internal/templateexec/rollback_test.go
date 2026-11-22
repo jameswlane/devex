@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
@@ -118,7 +119,9 @@ var _ = Describe("Lifecycle compensation", func() {
 		Expect(string(data)).To(Equal("original"))
 		info, err := os.Stat(target)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o640)))
+		if goruntime.GOOS != "windows" {
+			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o640)))
+		}
 	})
 	It("persists backups across reopening the state store and retries without rewriting completed recovery", func() {
 		db := filepath.Join(GinkgoT().TempDir(), "state.db")
@@ -148,6 +151,9 @@ var _ = Describe("Lifecycle compensation", func() {
 		Expect(string(data)).To(Equal("later edit"))
 	})
 	DescribeTable("requires proven APT prior state", func(script, kind string) {
+		if goruntime.GOOS == "windows" {
+			Skip("APT dpkg-query compensation requires Linux")
+		}
 		dir := GinkgoT().TempDir()
 		Expect(os.WriteFile(filepath.Join(dir, "dpkg-query"), []byte("#!/bin/sh\n"+script), 0o700)).To(Succeed())
 		GinkgoT().Setenv("PATH", dir)

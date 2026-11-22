@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -22,7 +23,7 @@ var _ = Describe("Plugin installation progress", func() {
 	var model *SetupModel
 
 	BeforeEach(func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		viper.Reset()
 		viper.Set("offline", true)
 		DeferCleanup(viper.Reset)
@@ -89,7 +90,7 @@ var _ = Describe("Plugin installation progress", func() {
 	It("does not let the worker mutate statuses while the view reads them", func() {
 		blockedHome := filepath.Join(GinkgoT().TempDir(), "file")
 		Expect(os.WriteFile(blockedHome, nil, 0600)).To(Succeed())
-		GinkgoT().Setenv("HOME", blockedHome)
+		testhelper.SetProfileEnv(GinkgoT(), blockedHome)
 		events := make(chan tea.Msg)
 		worker := model.runPluginInstallation(context.Background(), events)
 		finished := make(chan struct{})

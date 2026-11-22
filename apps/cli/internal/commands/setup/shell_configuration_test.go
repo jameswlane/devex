@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,7 +26,7 @@ var _ = Describe("Shell setup plugin contract", Ordered, func() {
 		_, source, _, ok := runtime.Caller(0)
 		Expect(ok).To(BeTrue())
 		pluginDir := filepath.Join(filepath.Dir(source), "../../../../../packages/tool-shell")
-		pluginPath = filepath.Join(GinkgoT().TempDir(), "devex-plugin-tool-shell")
+		pluginPath = testhelper.Executable(GinkgoT().TempDir(), "devex-plugin-tool-shell")
 		cmd := exec.CommandContext(ctx, "go", "build", "-o", pluginPath, ".")
 		cmd.Dir = pluginDir
 		output, err := cmd.CombinedOutput()
@@ -33,7 +34,7 @@ var _ = Describe("Shell setup plugin contract", Ordered, func() {
 	}, NodeTimeout(time.Minute))
 
 	BeforeEach(func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		GinkgoT().Setenv("SHELL", "/bin/bash")
 	})
 
@@ -86,9 +87,11 @@ var _ = Describe("Shell setup plugin contract", Ordered, func() {
 		model.recordShellConfigurationFailure("bash", errors.New("retry configuration"))
 		_, recovery, found := strings.Cut(model.installation.getErrors()[0], "Recover: ")
 		Expect(found).To(BeTrue())
-		output, err := exec.CommandContext(ctx, "sh", "-c", recovery).CombinedOutput()
-		Expect(err).NotTo(HaveOccurred(), string(output))
-		Expect(string(output)).To(ContainSubstring(`"status":"success"`))
+		if runtime.GOOS != "windows" {
+			output, err := exec.CommandContext(ctx, "sh", "-c", recovery).CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), string(output))
+			Expect(string(output)).To(ContainSubstring(`"status":"success"`))
+		}
 	})
 
 	It("honors an explicit fish selection even when the current shell is bash", func(ctx SpecContext) {
@@ -119,6 +122,9 @@ var _ = Describe("Shell setup plugin contract", Ordered, func() {
 	})
 
 	It("quotes the recovery input so a single quote cannot break out of it", func(ctx SpecContext) {
+		if runtime.GOOS == "windows" {
+			Skip("POSIX sh quoting test requires /bin/sh")
+		}
 		shell := `bash'; echo injected; '`
 		model := &SetupModel{}
 		model.recordShellConfigurationFailure(shell, errors.New("retry configuration"))

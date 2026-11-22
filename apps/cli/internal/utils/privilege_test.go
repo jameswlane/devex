@@ -3,6 +3,7 @@ package utils_test
 import (
 	"context"
 	"os"
+	"runtime"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -21,6 +22,9 @@ var _ = Describe("User operation execution", func() {
 		Expect(utils.ExpandUserPlaceholders("$HOME/.config/${USER}/$LOGNAME", identity)).To(Equal("/Users/alice/.config/alice/alice"))
 	})
 	It("passes arguments literally and honors cancellation", func() {
+		if runtime.GOOS == "windows" {
+			Skip("POSIX printf execution requires Unix")
+		}
 		if os.Geteuid() == 0 {
 			Skip("requires a non-root runner; SDK contracts simulate elevated identity")
 		}
@@ -33,6 +37,9 @@ var _ = Describe("User operation execution", func() {
 		Expect(err).To(MatchError(context.Canceled))
 	})
 	It("retains the legacy shell-text form for hooks", func() {
+		if runtime.GOOS == "windows" {
+			Skip("POSIX bash hook execution requires Unix")
+		}
 		if os.Geteuid() == 0 {
 			Skip("requires a non-root runner")
 		}

@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"errors"
+	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	. "github.com/onsi/ginkgo/v2"
@@ -25,7 +26,7 @@ var _ = Describe("SSH choice in Git setup", func() {
 	})
 	It("previews generated paths, lack of passphrase and permissions", func() {
 		model.git.sshMode = "generate"
-		model.git.sshPath = "/home/jane/.ssh/devex"
+		model.git.sshPath = filepath.Join(GinkgoT().TempDir(), ".ssh", "devex")
 		preview := model.renderSSHPreview()
 		Expect(preview).To(ContainSubstring("UNENCRYPTED"))
 		Expect(preview).To(ContainSubstring(model.git.sshPath + ".pub"))
@@ -33,7 +34,7 @@ var _ = Describe("SSH choice in Git setup", func() {
 	})
 	It("runs only opted-in SSH when identity is unchanged", func() {
 		model.git.sshMode = "generate"
-		model.git.sshPath = "/home/jane/.ssh/devex"
+		model.git.sshPath = filepath.Join(GinkgoT().TempDir(), ".ssh", "devex")
 		executor := &consentExecutor{}
 		Expect(model.applyGitConfiguration(context.Background(), executor, "Jane", "jane@example.com")).To(Succeed())
 		Expect(executor.calls).To(Equal([][]string{{"ssh", "--mode", "generate", "--path", model.git.sshPath, "--apply"}}))
@@ -49,7 +50,7 @@ var _ = Describe("SSH choice in Git setup", func() {
 		executor := &consentExecutor{fail: errors.New("key unreadable")}
 		Expect(model.applyGitConfiguration(context.Background(), executor, "Jane", "jane@example.com")).NotTo(Succeed())
 		Expect(executor.calls).To(BeEmpty())
-		model.git.sshPath = "/home/jane/.ssh/devex"
+		model.git.sshPath = filepath.Join(GinkgoT().TempDir(), ".ssh", "devex")
 		Expect(model.applyGitConfiguration(context.Background(), executor, "Jane", "jane@example.com")).To(MatchError(ContainSubstring("key unreadable")))
 	})
 })

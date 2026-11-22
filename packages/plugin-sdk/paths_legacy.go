@@ -212,7 +212,10 @@ func openPathRoot(path string, trusted []string, create bool, owner *Downloader)
 func (p Paths) Migrate(ctx context.Context, dryRun bool, out io.Writer) error {
 	var owner *Downloader
 	resolver := NewPrivilegeResolver()
-	if resolver.Elevated {
+	// Unix sudo elevation runs as root on behalf of SUDO_USER and must chown
+	// migrated files back to the invoking account; Windows elevation runs under
+	// the invoking user's own SID without Unix numeric UID/GID ownership transfer.
+	if resolver.Elevated && runtime.GOOS != "windows" {
 		identity, err := resolver.ResolveUser(nil)
 		if err != nil {
 			return err

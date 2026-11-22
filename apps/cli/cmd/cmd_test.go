@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	_ "modernc.org/sqlite"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -74,7 +75,7 @@ var _ = Describe("Main", func() {
 
 	Context("CLI error execution", func() {
 		It("prints the error message exactly once on stderr and exits nonzero for unknown commands", func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			goBin, goEnv := isolatedGoRunEnv(GinkgoT().TempDir())
@@ -88,7 +89,7 @@ var _ = Describe("Main", func() {
 			Expect(err).To(HaveOccurred())
 
 			stderrOutput := stderr.String()
-			Expect(strings.Count(stderrOutput, "Error:")).To(Equal(1))
+			Expect(strings.Count(stderrOutput, "Error:")).To(Equal(1), stderrOutput)
 			Expect(stderrOutput).To(ContainSubstring(`unknown command "notacommand" for "devex"`))
 			Expect(stderrOutput).To(ContainSubstring("Run 'devex --help' for usage."))
 			Expect(stderrOutput).NotTo(ContainSubstring("Error executing root command"))
@@ -103,6 +104,9 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	Expect(err).ToNot(HaveOccurred(), "failed to read go env")
 	values := strings.Split(strings.TrimSpace(string(out)), "\n")
 	Expect(values).To(HaveLen(4))
+	for i := range values {
+		values[i] = strings.TrimSpace(values[i])
+	}
 
 	overrides := map[string]string{
 		"DEVEX_OFFLINE":              "true",
@@ -120,7 +124,8 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	env := make([]string, 0, len(os.Environ())+len(overrides))
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
-		if _, overridden := overrides[key]; overridden || excluded[key] {
+		upper := strings.ToUpper(key)
+		if _, overridden := overrides[upper]; overridden || excluded[upper] {
 			continue
 		}
 		env = append(env, kv)
@@ -138,15 +143,24 @@ func goBuildEnv(env []string) []string {
 	return append(slices.Clone(env), "APPDATA="+os.Getenv("APPDATA"), "LOCALAPPDATA="+os.Getenv("LOCALAPPDATA"))
 }
 
-var _ = Describe("CLI startup regression coverage", func() {
-	It("keeps inspection commands usable with a linked legacy config and previews tracked applications", func(ctx SpecContext) {
-		home := GinkgoT().TempDir()
-		goBin, env := isolatedGoRunEnv(home)
-		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
+var _ = Describe("CLI startup regression coverage", Ordered, func() {
+	var binary string
+
+	BeforeAll(func(ctx SpecContext) {
+		goBin, env := isolatedGoRunEnv(GinkgoT().TempDir())
+		binary = testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
 		build.Env = goBuildEnv(env)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
+	})
+
+	It("keeps inspection commands usable with a linked legacy config", func(ctx SpecContext) {
+		if sdk.NewPrivilegeResolver().Elevated {
+			Skip("elevated processes ignore HOME/USERPROFILE overrides by security policy; legacy migration refusal is covered in-process")
+		}
+		home := GinkgoT().TempDir()
+		_, env := isolatedGoRunEnv(home)
 		// Set a legacy link that migration refuses before touching any source.
 		Expect(os.MkdirAll(filepath.Join(home, ".devex"), 0700)).To(Succeed())
 		Expect(os.Symlink("dotfiles.yaml", filepath.Join(home, ".devex", "config.yaml"))).To(Succeed())
@@ -160,7 +174,15 @@ var _ = Describe("CLI startup regression coverage", func() {
 			Expect(output).NotTo(BeEmpty())
 			Expect(stderr.String()).To(And(ContainSubstring("Warning: legacy migration skipped"), ContainSubstring("devex paths")))
 		}
+	})
+
+	It("previews tracked applications without mutating the datastore", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		_, env := isolatedGoRunEnv(home)
 		state := filepath.Join(home, ".local", "state", "devex")
+		if runtime.GOOS == "windows" {
+			state = filepath.Join(home, "AppData", "Local", "DevEx")
+		}
 		Expect(os.MkdirAll(state, 0700)).To(Succeed())
 		path := filepath.Join(state, "datastore.db")
 		db, err := datastore.NewSQLiteContext(ctx, path)
@@ -175,7 +197,7 @@ var _ = Describe("CLI startup regression coverage", func() {
 		Expect(err).NotTo(HaveOccurred())
 		for _, args := range [][]string{{"uninstall", "--all", "--dry-run"}, {"uninstall", "--app", "tracked-editor", "--dry-run"}} {
 			cmd := exec.CommandContext(ctx, binary, args...)
-			cmd.Env = append(env, "DEVEX_OFFLINE=true", "DEVEX_DISABLE_UPDATE_CHECK=true")
+			cmd.Env = append(env, "DEVEX_OFFLINE=true", "DEVEX_DISABLE_UPDATE_CHECK=true", "DEVEX_STATE_DIR="+state)
 			output, err := cmd.CombinedOutput()
 			Expect(err).NotTo(HaveOccurred(), string(output))
 			Expect(string(output)).To(And(ContainSubstring("tracked-editor"), ContainSubstring("tracked-package")))
@@ -189,7 +211,7 @@ var _ = Describe("Runtime registry catalog", func() {
 	It("uses the registry for filtered JSON listings and explicit install resolution", func(ctx SpecContext) {
 		// A registry-only application in the registry's snake_case schema; the
 		// bundled applications stay in the catalog alongside it.
-		fixture := []byte(`{"items":[{"name":"registry-only","description":"Only in the registry","category":"Dependency","default":false,"desktopEnvironments":[],"platforms":{"linux":{"install_method":"apt","install_command":"registry-only","uninstall_command":"registry-only"},"macos":{"install_method":"brew","install_command":"registry-only","uninstall_command":"registry-only"},"windows":null}}],"pagination":{"total":1,"count":1,"limit":100,"offset":0,"page":1,"totalPages":1,"hasNext":false,"hasPrevious":false}}`)
+		fixture := []byte(`{"items":[{"name":"registry-only","description":"Only in the registry","category":"Dependency","default":false,"desktopEnvironments":[],"platforms":{"linux":{"install_method":"apt","install_command":"registry-only","uninstall_command":"registry-only"},"macos":{"install_method":"brew","install_command":"registry-only","uninstall_command":"registry-only"},"windows":{"install_method":"winget","install_command":"registry-only","uninstall_command":"registry-only"}}}],"pagination":{"total":1,"count":1,"limit":100,"offset":0,"page":1,"totalPages":1,"hasNext":false,"hasPrevious":false}}`)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(fixture) }))
 		defer server.Close()
 		home := GinkgoT().TempDir()

@@ -3,15 +3,25 @@ package commands_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
+func absTestPath(parts ...string) string {
+	root := "/"
+	if runtime.GOOS == "windows" {
+		root = `C:\`
+	}
+	return filepath.Join(append([]string{root}, parts...)...)
+}
+
 var _ = Describe("Uninstall cleanup path safety", func() {
-	const home = "/home/tester"
+	home := absTestPath("home", "tester")
 
 	DescribeTable("rejects paths whose removal would destroy unrelated data",
 		func(path string) {
@@ -20,12 +30,12 @@ var _ = Describe("Uninstall cleanup path safety", func() {
 		},
 		Entry("empty", ""),
 		Entry("relative", "some/dir"),
-		Entry("filesystem root", "/"),
+		Entry("filesystem root", absTestPath()),
 		Entry("system directory", "/etc"),
 		Entry("system directory with trailing slash", "/usr/"),
 		Entry("home directory", home),
-		Entry("home directory via traversal", home+"/.config/.."),
-		Entry("parent of home", "/home"),
+		Entry("home directory via traversal", filepath.Join(home, ".config", "..")),
+		Entry("parent of home", absTestPath("home")),
 	)
 
 	DescribeTable("allows paths inside the home directory or app-specific system paths",
@@ -34,14 +44,14 @@ var _ = Describe("Uninstall cleanup path safety", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(got).To(Equal(want))
 		},
-		Entry("app config dir", home+"/.config/myapp", home+"/.config/myapp"),
-		Entry("cleans the path", home+"/.config//myapp/", home+"/.config/myapp"),
-		Entry("app data outside home", "/opt/myapp/cache", "/opt/myapp/cache"),
+		Entry("app config dir", filepath.Join(home, ".config", "myapp"), filepath.Join(home, ".config", "myapp")),
+		Entry("cleans the path", home+string(filepath.Separator)+".config"+string(filepath.Separator)+string(filepath.Separator)+"myapp"+string(filepath.Separator), filepath.Join(home, ".config", "myapp")),
+		Entry("app data outside home", absTestPath("opt", "myapp", "cache"), absTestPath("opt", "myapp", "cache")),
 	)
 
 	It("removes an app directory under the home directory", func() {
 		tempHome := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", tempHome)
+		testhelper.SetProfileEnv(GinkgoT(), tempHome)
 		target := filepath.Join(tempHome, ".config", "myapp")
 		Expect(os.MkdirAll(filepath.Join(target, "nested"), 0o750)).To(Succeed())
 
@@ -53,7 +63,7 @@ var _ = Describe("Uninstall cleanup path safety", func() {
 
 	It("refuses to remove the home directory itself", func() {
 		tempHome := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", tempHome)
+		testhelper.SetProfileEnv(GinkgoT(), tempHome)
 
 		Expect(commands.RemoveFileIfExists("~/.")).ToNot(Succeed())
 		Expect(tempHome).To(BeADirectory())

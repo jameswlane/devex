@@ -8,6 +8,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -29,6 +31,7 @@ var _ = Describe("Template System", func() {
 		var err error
 		tempDir, err = os.MkdirTemp("", "devex-templates-test")
 		Expect(err).ToNot(HaveOccurred())
+		testhelper.SetProfileEnv(GinkgoT(), tempDir)
 
 		templateManager = templates.NewTemplateManager(tempDir)
 	})
@@ -577,7 +580,7 @@ lifecycle:
 			Expect(err).ToNot(HaveOccurred())
 
 			// Verify file was created
-			userTemplatesDir := filepath.Join(tempDir, ".config", "devex", "templates")
+			userTemplatesDir := filepath.Join(devexpaths.ForHome(tempDir).Config, "templates")
 			templateFile := filepath.Join(userTemplatesDir, "custom-test.yaml")
 			Expect(templateFile).To(BeAnExistingFile())
 

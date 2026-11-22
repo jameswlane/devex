@@ -398,6 +398,9 @@ func removeCreatedRC(path string, inspected os.FileInfo) error {
 	if err != nil {
 		return err
 	}
+	// Cache the file identity before renaming: on Windows os.SameFile loads
+	// the file ID lazily by path, which fails once the source has been moved.
+	_ = os.SameFile(inspected, inspected)
 	aside := filepath.Join(dir, filepath.Base(path))
 	if err := os.Rename(path, aside); err != nil {
 		_ = os.Remove(dir)

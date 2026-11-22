@@ -182,7 +182,8 @@ func (d *Detector) detectMacOSVersionContext(parent context.Context, platform *P
 func (d *Detector) detectWindowsVersion(platform *Platform) error {
 	return d.detectWindowsVersionContext(context.Background(), platform)
 }
-func (d *Detector) detectWindowsVersionContext(parent context.Context, platform *Platform) error {
+
+func (d *Detector) detectWindowsVersionViaShell(parent context.Context, platform *Platform) error {
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 

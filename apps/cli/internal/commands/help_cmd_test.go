@@ -13,6 +13,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("Help Command", func() {
@@ -46,7 +47,7 @@ var _ = Describe("Help Command", func() {
 		DeferCleanup(viper.Reset)
 
 		tempHome := GinkgoT().TempDir()
-		setEnv("HOME", tempHome)
+		testhelper.SetProfileEnv(GinkgoT(), tempHome)
 
 		for _, key := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE", "TERM"} {
 			setEnv(key, "")

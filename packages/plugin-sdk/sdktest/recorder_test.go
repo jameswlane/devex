@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -124,6 +125,9 @@ var _ = Describe("Recorder", func() {
 	})
 
 	It("records exact argument boundaries and elevation", func() {
+		if runtime.GOOS == "windows" {
+			Skip("SDK default privilege elevation requires Unix sudo adapter")
+		}
 		err := sdk.ExecCommandWithContext(context.Background(), true, "manager", "install", "two words", "", "quote'argument")
 		Expect(err).NotTo(HaveOccurred())
 
@@ -147,6 +151,9 @@ var _ = Describe("Recorder", func() {
 	})
 
 	It("records scoped authorization probes separately from execution", func() {
+		if runtime.GOOS == "windows" {
+			Skip("SDK default privilege elevation requires Unix sudo adapter")
+		}
 		Expect(sdk.ExecOperationWithContext(context.Background(), sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, "manager", "install")).To(Succeed())
 		Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{
 			{Args: []string{"-n", "true"}},
@@ -158,6 +165,9 @@ var _ = Describe("Recorder", func() {
 	})
 
 	It("supports explicit authorization and preserves scripted authorization denial", func() {
+		if runtime.GOOS == "windows" {
+			Skip("SDK default privilege elevation requires Unix sudo adapter")
+		}
 		sdk.DefaultPrivilegeAdapter = sdk.UnixSudoAdapter{
 			Authorize: func(ctx context.Context, sudo string) error {
 				return sdk.NewCommandContext(ctx, sudo, "-v").Run()
@@ -178,6 +188,9 @@ var _ = Describe("Recorder", func() {
 	})
 
 	It("does not treat a failed noninteractive probe as target denial", func() {
+		if runtime.GOOS == "windows" {
+			Skip("SDK default privilege elevation requires Unix sudo adapter")
+		}
 		recorder.Script("sudo", []string{"-n", "true"}, sdktest.Response{ExitCode: 1})
 		recorder.Script("manager", []string{"install"}, sdktest.Response{ExitCode: 42})
 		err := sdk.ExecOperationWithContext(context.Background(), sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, "manager", "install")
@@ -192,7 +205,9 @@ var _ = Describe("Recorder", func() {
 		_, err = sdk.RunCommand(hostCommand, "escaped")
 		Expect(err).To(MatchError(ContainSubstring("not a registered fake")))
 		Expect(sdk.ExecCommandWithContext(context.Background(), false, hostCommand, "escaped")).To(MatchError(ContainSubstring("not a registered fake")))
-		Expect(sdk.ExecCommandWithContext(context.Background(), true, hostCommand, "escaped")).To(MatchError("exit status 127"))
+		if runtime.GOOS != "windows" {
+			Expect(sdk.ExecCommandWithContext(context.Background(), true, hostCommand, "escaped")).To(MatchError("exit status 127"))
+		}
 		for _, scope := range []sdk.OperationScope{sdk.ScopeUser, sdk.ScopeSystem} {
 			err = sdk.ExecOperationWithContext(context.Background(), sdk.OperationPrivilege{Scope: scope}, hostCommand, "escaped")
 			Expect(err).To(HaveOccurred())

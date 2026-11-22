@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,7 +15,7 @@ import (
 var _ = Describe("Installer declarative post-install actions", func() {
 	It("executes without launching a shell and writes only setup's selected rc", func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("SHELL", "/bin/bash")
 		installer := &StreamingInstaller{}
 		commands := []types.InstallCommand{{ShellInit: map[string]string{"bash": "source ~/.bash-init", "zsh": "source ~/.zsh-init"}}, {Path: []string{"/opt/nvim/bin"}}}
@@ -34,7 +35,7 @@ var _ = Describe("Installer declarative post-install actions", func() {
 	})
 	It("rejects raw writes before command execution", func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		installer := &StreamingInstaller{}
 		err := installer.executeCommands(context.Background(), []types.InstallCommand{{Shell: "echo bad >> ~/.bashrc"}})
 		Expect(err).To(MatchError(ContainSubstring("raw shell rc appends")))

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
@@ -20,7 +21,7 @@ var _ = Describe("Configuration import merge", func() {
 	var original []byte
 	BeforeEach(func() {
 		settings = config.CrossPlatformSettings{HomeDir: GinkgoT().TempDir()}
-		GinkgoT().Setenv("HOME", settings.HomeDir)
+		testhelper.SetProfileEnv(GinkgoT(), settings.HomeDir)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
 		GinkgoT().Setenv("DEVEX_ENV", "")
 		target = filepath.Join(settings.GetUserConfigDir(), "applications/tools/git.yaml")

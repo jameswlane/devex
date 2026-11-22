@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -17,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -29,13 +31,13 @@ var _ = Describe("Install with an organization plan approval", func() {
 		installed                 []string
 		installErrs               []error
 	)
-	git := types.CrossPlatformApp{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "git"}}
+	git := types.CrossPlatformApp{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "git"}, Windows: types.OSConfig{InstallMethod: "winget", InstallCommand: "git"}}
 
 	BeforeEach(func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("CI", "true")
 		GinkgoT().Setenv("DEVEX_CONFIG_DIR", filepath.Join(home, "config"))
 		GinkgoT().Setenv("DEVEX_DATA_DIR", filepath.Join(home, "data"))
@@ -239,7 +241,9 @@ var _ = Describe("Install with an organization plan approval", func() {
 		Expect(output.String()).To(ContainSubstring("public_key: ed25519:"))
 		info, err := os.Stat(newKey)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o600)))
+		if runtime.GOOS != "windows" {
+			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o600)))
+		}
 		Expect(run("approval", "keygen", "--out", newKey)).To(MatchError(ContainSubstring("never overwrites")))
 
 		digest := "sha256:" + "2222222222222222222222222222222222222222222222222222222222222222"

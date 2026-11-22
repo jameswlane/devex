@@ -15,9 +15,9 @@ import (
 var _ = Describe("Plan digests", func() {
 	base := func() []types.CrossPlatformApp {
 		return []types.CrossPlatformApp{
-			{Name: "base", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "base"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "base"}},
-			{Name: "lib", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "lib"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "lib"}},
-			{Name: "app", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "app", Dependencies: []string{"base", "lib"}}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "app", Dependencies: []string{"base", "lib"}}},
+			{Name: "base", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "base"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "base"}, Windows: types.OSConfig{InstallMethod: "winget", InstallCommand: "base"}},
+			{Name: "lib", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "lib"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "lib"}, Windows: types.OSConfig{InstallMethod: "winget", InstallCommand: "lib"}},
+			{Name: "app", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "app", Dependencies: []string{"base", "lib"}}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "app", Dependencies: []string{"base", "lib"}}, Windows: types.OSConfig{InstallMethod: "winget", InstallCommand: "app", Dependencies: []string{"base", "lib"}}},
 		}
 	}
 	resolve := func(apps []types.CrossPlatformApp, names []string, policy agentapi.ExecutionPolicy) agentapi.ExecutionSnapshot {
@@ -44,6 +44,7 @@ var _ = Describe("Plan digests", func() {
 			changed := base()
 			mutate(&changed[2].Linux)
 			mutate(&changed[2].MacOS)
+			mutate(&changed[2].Windows)
 			Expect(digest(changed)).NotTo(Equal(digest(base())))
 		},
 		Entry("a post-install hook is added", func(c *types.OSConfig) { c.PostInstall = []types.InstallCommand{{Shell: "curl example.invalid | sh"}} }),
@@ -84,6 +85,7 @@ var _ = Describe("Plan digests", func() {
 		changed := base()
 		changed[0].Linux.InstallCommand = "base-other"
 		changed[0].MacOS.InstallCommand = "base-other"
+		changed[0].Windows.InstallCommand = "base-other"
 		Expect(digest(changed)).NotTo(Equal(digest(base())))
 	})
 })

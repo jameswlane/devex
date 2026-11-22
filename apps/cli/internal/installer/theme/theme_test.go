@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/installer/theme"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -192,7 +193,7 @@ var _ = Describe("Theme Manager", func() {
 	Describe("Theme Application", func() {
 		It("should apply theme files through the backed-up config handler", func() {
 			home := GinkgoT().TempDir()
-			GinkgoT().Setenv("HOME", home)
+			testhelper.SetProfileEnv(GinkgoT(), home)
 			source := filepath.Join(home, "theme.json")
 			Expect(os.WriteFile(source, []byte("theme"), 0600)).To(Succeed())
 			repo.data["app_theme_vscode"] = "dark"
