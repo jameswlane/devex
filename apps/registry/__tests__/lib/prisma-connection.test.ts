@@ -77,11 +77,31 @@ describe("Prisma 7 connection options", () => {
 		);
 	});
 
-	it("refuses to fall back to PG* defaults when only an Accelerate URL is set", () => {
-		process.env.PRISMA_DATABASE_URL =
-			"prisma+postgres://accelerate.example/?api_key=test";
-		expect(() => prismaConnectionOptions()).toThrow(/Accelerate URLs/);
-		expect(PrismaPg).not.toHaveBeenCalled();
+	it.each([
+		"DATABASE_URL_POOLED",
+		"PRISMA_DATABASE_URL",
+		"DATABASE_URL",
+	] as const)(
+		"refuses to fall back to PG* defaults when only %s holds an Accelerate URL",
+		(key) => {
+			process.env[key] = "prisma+postgres://accelerate.example/?api_key=test";
+			expect(() => prismaConnectionOptions()).toThrow(/Accelerate URLs/);
+			expect(PrismaPg).not.toHaveBeenCalled();
+		},
+	);
+
+	it("drops statement_timeout for pooled hosts, which reject it at startup", () => {
+		const url =
+			"postgres://u:p@pooled.db.prisma.io:5432/postgres?sslmode=require&statement_timeout=10000";
+		prismaConnectionOptions(url);
+		expect(PrismaPg).toHaveBeenCalledWith(
+			expect.objectContaining({
+				connectionString:
+					"postgres://u:p@pooled.db.prisma.io:5432/postgres?sslmode=require",
+				statement_timeout: undefined,
+			}),
+			{ schema: "public" },
+		);
 	});
 
 	it("keeps pool and schema settings when using PostgreSQL", () => {
@@ -91,13 +111,11 @@ describe("Prisma 7 connection options", () => {
 		expect(options.adapter).toBeDefined();
 		expect(PrismaPg).toHaveBeenCalledWith(
 			{
-				// statement_timeout is a startup parameter PgBouncer rejects
-				connectionString:
-					"postgresql://localhost/registry?connection_limit=12&pool_timeout=7&schema=custom",
+				connectionString: url,
 				max: 12,
 				connectionTimeoutMillis: 7000,
 				idleTimeoutMillis: 10000,
-				query_timeout: 1500,
+				statement_timeout: 1500,
 			},
 			{ schema: "custom" },
 		);
@@ -111,7 +129,7 @@ describe("Prisma 7 connection options", () => {
 				max: 5,
 				connectionTimeoutMillis: 5000,
 				idleTimeoutMillis: 10000,
-				query_timeout: 10000,
+				statement_timeout: 10000,
 			},
 			{ schema: "public" },
 		);
