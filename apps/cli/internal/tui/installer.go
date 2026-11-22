@@ -1144,14 +1144,15 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 // executeCurlPipeInstall handles curl pipe installations with security validation
 // SECURITY: Now validates URLs against trusted domains before execution
 func (si *StreamingInstaller) executeCurlPipeInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
-	if installers.IsReleaseArchive(osConfig.DownloadURL) {
-		si.sendLog("INFO", fmt.Sprintf("Installing release archive %s", osConfig.DownloadURL))
-		return installers.InstallReleaseArchive(ctx, releaseArchiveConfig(app, osConfig))
-	}
 	// SECURITY: Validate URL before attempting download
 	if err := validateDownloadURL(osConfig.DownloadURL); err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("URL validation failed for %s: %v", app.Name, err))
 		return fmt.Errorf("URL validation failed: %w", err)
+	}
+
+	if installers.IsReleaseArchive(osConfig.DownloadURL) {
+		si.sendLog("INFO", fmt.Sprintf("Installing release archive %s", osConfig.DownloadURL))
+		return installers.InstallReleaseArchive(ctx, releaseArchiveConfig(app, osConfig))
 	}
 
 	si.sendLog("INFO", fmt.Sprintf("Downloading from validated URL: %s", osConfig.DownloadURL))

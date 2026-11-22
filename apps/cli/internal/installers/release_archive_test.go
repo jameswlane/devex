@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"github.com/jameswlane/devex/apps/cli/internal/cache"
 	appconfig "github.com/jameswlane/devex/apps/cli/internal/config"
@@ -43,6 +44,9 @@ var _ = Describe("Release archive installs", func() {
 	}
 
 	BeforeEach(func() {
+		if runtime.GOOS == "windows" {
+			Skip("release archives install with POSIX tar and install")
+		}
 		fixtureDir = GinkgoT().TempDir()
 		destination = filepath.Join(GinkgoT().TempDir(), "dest")
 		systemCalls = nil
@@ -71,14 +75,19 @@ var _ = Describe("Release archive installs", func() {
 		}
 	})
 
+	// app pins the checksum of the current fixture archive.
 	app := func(url, binary string) types.AppConfig {
-		return types.AppConfig{
+		data, err := os.ReadFile(archive)
+		Expect(err).NotTo(HaveOccurred())
+		config := types.AppConfig{
 			BaseConfig:      types.BaseConfig{Name: "Tool"},
 			InstallMethod:   "curlpipe",
 			DownloadURL:     url,
 			InstallDir:      destination,
 			InstalledBinary: binary,
 		}
+		config.Verification.SHA256 = fmt.Sprintf("%x", sha256.Sum256(data))
+		return config
 	}
 
 	It("recognises release tarballs but not install scripts", func() {
@@ -91,18 +100,14 @@ var _ = Describe("Release archive installs", func() {
 	It("installs only the named binary when it sits at the archive top level", func() {
 		archive = buildArchive(map[string]string{"lazygit": "#!/bin/sh\necho lazygit\n", "LICENSE": "MIT"})
 		config := app("https://github.com/jesseduffield/lazygit/releases/download/v1/lazygit_1_linux_x86_64.tar.gz", "lazygit")
-		sum, err := os.ReadFile(archive)
-		Expect(err).NotTo(HaveOccurred())
-		config.Verification.SHA256 = fmt.Sprintf("%x", sha256.Sum256(sum))
-
 		Expect(InstallReleaseArchive(context.Background(), config)).To(Succeed())
 
 		info, err := os.Stat(filepath.Join(destination, "lazygit"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o755)))
 		Expect(filepath.Join(destination, "LICENSE")).NotTo(BeAnExistingFile())
-		Expect(systemCalls).To(HaveLen(1))
-		Expect(systemCalls[0][0]).To(Equal("install"))
+		Expect(systemCalls).To(HaveLen(2))
+		Expect(systemCalls[1][0]).To(Equal("install"))
 	})
 
 	It("extracts the whole archive when the binary lives in a subdirectory", func() {
@@ -118,10 +123,7 @@ var _ = Describe("Release archive installs", func() {
 
 	It("installs a pinned archive from the installation cache", func() {
 		archive = buildArchive(map[string]string{"lazygit": "binary"})
-		data, err := os.ReadFile(archive)
-		Expect(err).NotTo(HaveOccurred())
 		config := app("https://example.com/lazygit_1_linux_x86_64.tar.gz", "lazygit")
-		config.Verification.SHA256 = fmt.Sprintf("%x", sha256.Sum256(data))
 		home, err := os.UserHomeDir()
 		Expect(err).NotTo(HaveOccurred())
 		manager, err := cache.NewCacheManager(appconfig.CrossPlatformSettings{HomeDir: home})
@@ -139,6 +141,19 @@ var _ = Describe("Release archive installs", func() {
 
 		Expect(InstallReleaseArchive(context.Background(), config)).To(Succeed())
 		Expect(filepath.Join(destination, "lazygit")).To(BeARegularFile())
+	})
+
+	It("refuses an unpinned archive before downloading it", func() {
+		archive = buildArchive(map[string]string{"lazygit": "binary"})
+		config := app("https://example.com/lazygit.tar.gz", "lazygit")
+		config.Verification.SHA256 = ""
+		downloaded := false
+		runArchiveCommand = func(context.Context, string, ...string) (string, error) { downloaded = true; return "", nil }
+
+		err := InstallReleaseArchive(context.Background(), config)
+		Expect(err).To(MatchError(ContainSubstring("needs verification.sha256")))
+		Expect(downloaded).To(BeFalse())
+		Expect(systemCalls).To(BeEmpty())
 	})
 
 	It("rejects an archive whose checksum does not match", func() {

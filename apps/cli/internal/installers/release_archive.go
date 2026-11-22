@@ -61,6 +61,10 @@ func InstallReleaseArchive(ctx context.Context, app types.AppConfig) error {
 	if strings.ContainsAny(app.InstalledBinary, `/\`) || app.InstalledBinary == ".." {
 		return fmt.Errorf("installed_binary for %s must be a file name, got %q", app.Name, app.InstalledBinary)
 	}
+	// The archive is extracted as root, so it must be pinned.
+	if app.Verification.SHA256 == "" && app.Verification.SignatureURL == "" {
+		return fmt.Errorf("release archive for %s needs verification.sha256 or a signature before installation", app.Name)
+	}
 	parsed, err := url.Parse(app.DownloadURL)
 	if err != nil || parsed.Scheme != "https" {
 		return fmt.Errorf("release archive URL for %s must use https: %q", app.Name, app.DownloadURL)
@@ -122,7 +126,10 @@ func InstallReleaseArchive(ctx context.Context, app types.AppConfig) error {
 			return fmt.Errorf("archive entry %s is not a regular file", app.InstalledBinary)
 		}
 		log.Info("Installing release binary", "binary", app.InstalledBinary, "destination", app.InstallDir)
-		if output, err := runSystemCommand(ctx, "install", "-D", "-m", "0755", binary, filepath.Join(app.InstallDir, app.InstalledBinary)); err != nil {
+		if output, err := runSystemCommand(ctx, "mkdir", "-p", app.InstallDir); err != nil {
+			return fmt.Errorf("failed to create %s: %w: %s", app.InstallDir, err, strings.TrimSpace(output))
+		}
+		if output, err := runSystemCommand(ctx, "install", "-m", "0755", binary, filepath.Join(app.InstallDir, app.InstalledBinary)); err != nil {
 			return fmt.Errorf("failed to install %s into %s: %w: %s", app.InstalledBinary, app.InstallDir, err, strings.TrimSpace(output))
 		}
 		return nil
