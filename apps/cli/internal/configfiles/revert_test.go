@@ -6,8 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,7 +40,7 @@ var _ = Describe("Recorded copies", func() {
 		return out
 	}
 	recordPath := func() string {
-		return filepath.Join(home, ".local", "state", "devex", "config-files", fmt.Sprintf("%x.json", sha256.Sum256([]byte(app))))
+		return filepath.Join(devexpaths.ForHome(home).State, "config-files", fmt.Sprintf("%x.json", sha256.Sum256([]byte(app))))
 	}
 	editRecord := func(edit func(*configfiles.Result)) {
 		data, err := os.ReadFile(recordPath())
@@ -60,8 +64,8 @@ var _ = Describe("Recorded copies", func() {
 		return ""
 	}
 	skipAsRoot := func() {
-		if os.Geteuid() == 0 {
-			Skip("permission checks do not apply to root")
+		if os.Geteuid() == 0 || runtime.GOOS == "windows" {
+			Skip("POSIX directory permission checks do not apply to root or Windows")
 		}
 	}
 	// lock makes dir read-only (or inaccessible) until the spec ends.
@@ -72,7 +76,7 @@ var _ = Describe("Recorded copies", func() {
 
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		src = GinkgoT().TempDir()
 		write(filepath.Join(src, "a"), "managed a\n")
 		write(filepath.Join(src, "b"), "managed b\n")

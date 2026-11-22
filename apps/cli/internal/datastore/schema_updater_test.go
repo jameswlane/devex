@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing/fstest"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/migrations"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -19,7 +20,7 @@ var _ = Describe("Transactional schema updates", func() {
 
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		path = filepath.Join(home, "datastore.db")
 		var err error
 		conn, err = sql.Open("sqlite", path)

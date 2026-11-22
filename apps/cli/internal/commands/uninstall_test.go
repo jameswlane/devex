@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -95,7 +97,7 @@ var _ = Describe("Uninstall Command", func() {
 
 		// Create temporary directory for tests
 		tempDir = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", tempDir)
+		testhelper.SetProfileEnv(GinkgoT(), tempDir)
 
 		// Create test app configuration
 		testApp = types.AppConfig{
@@ -341,7 +343,7 @@ var _ = Describe("Uninstall Command", func() {
 		DescribeTable("handles curlpipe removal without discarding files or records prematurely",
 			func(removal string, succeeds bool, manualRequired bool) {
 				Expect(os.MkdirAll(filepath.Join(tempDir, "home"), 0700)).To(Succeed())
-				GinkgoT().Setenv("HOME", filepath.Join(tempDir, "home"))
+				testhelper.SetProfileEnv(GinkgoT(), filepath.Join(tempDir, "home"))
 				binary := filepath.Join(tempDir, "binary with spaces")
 				Expect(os.WriteFile(binary, []byte("installed"), 0600)).To(Succeed())
 				Expect(os.WriteFile(testApp.ConfigFiles[0].Destination, []byte("config"), 0600)).To(Succeed())
@@ -351,6 +353,9 @@ var _ = Describe("Uninstall Command", func() {
 					UninstallCommand: removal, ConfigFiles: testApp.ConfigFiles, CleanupFiles: testApp.CleanupFiles,
 				}}
 				if succeeds {
+					if runtime.GOOS == "windows" {
+						Skip("curlpipe inline uninstall uses POSIX sh")
+					}
 					// Verify shell quoting, environment expansion and flags are preserved.
 					GinkgoT().Setenv("DEVEX_TEST_REMOVAL_BINARY", binary)
 					definition.AllPlatforms.UninstallCommand = `rm -f -- "$DEVEX_TEST_REMOVAL_BINARY"`
@@ -774,7 +779,7 @@ var _ = Describe("BackupManager", func() {
 		mockRepo = mocks.NewMockRepository()
 
 		tempDir = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", tempDir)
+		testhelper.SetProfileEnv(GinkgoT(), tempDir)
 
 		// Create test app with config and data files
 		configFile := filepath.Join(tempDir, "test-config.conf")

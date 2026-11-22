@@ -8,43 +8,142 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/remoterun"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 const digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 const plan = `{"apps":[{"name":"git","method":"apt","dependencies":["base"],"effects":["package_install"],"privileges":"unknown"}],"dependency_order":["git"],"warnings":[],"digest":"` + digest + `"}`
 
-// fakeSSH writes an ssh stand-in that records its arguments and plays the
-// remote DevEx: --version, install --dry-run --format json, and install.
-func fakeSSH(dir string) string {
-	script := `#!/bin/sh
-printf '%s\n' "$@" > "$FAKE_DIR/args"
-remote=""
-for arg do remote="$arg"; done
-case "$FAKE_MODE" in
-  hostkey) echo "Host key verification failed." >&2; exit 255 ;;
-  auth) echo "me@host: Permission denied (publickey)." >&2; exit 255 ;;
-  missing) echo "sh: 1: devex: not found" >&2; exit 127 ;;
-  changed) case "$remote" in *--expect-plan*) echo "Error: the installation plan changed after it was confirmed (confirmed x, now y)" >&2; exit 1 ;; esac ;;
-  old) case "$remote" in *--expect-plan*) echo "Error: unknown flag: --expect-plan" >&2; exit 1 ;; esac ;;
-esac
-case "$remote" in
-  *--version*) echo "devex version 9.9.9" ;;
-  *--dry-run*) cat "$FAKE_DIR/plan.json"; count=$(cat "$FAKE_DIR/count" 2>/dev/null || echo 0); echo $((count+1)) > "$FAKE_DIR/count"; if [ -f "$FAKE_DIR/plan2.json" ] && [ "$count" -ge 1 ]; then cp "$FAKE_DIR/plan2.json" "$FAKE_DIR/plan.json"; fi ;;
-  *install*) echo "installing git..."; echo "remote warning" >&2; if [ "$FAKE_MODE" = slow ]; then sleep 30; fi; echo "installed git"; exit "${FAKE_EXIT:-0}" ;;
-esac
+var (
+	fakeSSHHostTempDir string
+	fakeSSHHostGoBin   string
+	fakeSSHHostEnv     []string
+
+	fakeSSHOnce sync.Once
+	fakeSSHBin  string
+	errFakeSSH  error
+)
+
+func init() {
+	fakeSSHHostTempDir = os.TempDir()
+	fakeSSHHostGoBin, _ = exec.LookPath("go")
+	fakeSSHHostEnv = append([]string(nil), os.Environ()...)
+}
+
+func ensureFakeSSH() (string, error) {
+	fakeSSHOnce.Do(func() {
+		dir, err := os.MkdirTemp(fakeSSHHostTempDir, "devex-remoterun-ssh-*")
+		if err != nil {
+			errFakeSSH = err
+			return
+		}
+		src := `package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+)
+
+func main() {
+	dir := os.Getenv("FAKE_DIR")
+	_ = os.WriteFile(filepath.Join(dir, "args"), []byte(strings.Join(os.Args[1:], "\n")+"\n"), 0o600)
+	remote := ""
+	if len(os.Args) > 1 {
+		remote = os.Args[len(os.Args)-1]
+	}
+	switch os.Getenv("FAKE_MODE") {
+	case "hostkey":
+		fmt.Fprintln(os.Stderr, "Host key verification failed.")
+		os.Exit(255)
+	case "auth":
+		fmt.Fprintln(os.Stderr, "me@host: Permission denied (publickey).")
+		os.Exit(255)
+	case "missing":
+		fmt.Fprintln(os.Stderr, "sh: 1: devex: not found")
+		os.Exit(127)
+	case "changed":
+		if strings.Contains(remote, "--expect-plan") {
+			fmt.Fprintln(os.Stderr, "Error: the installation plan changed after it was confirmed (confirmed x, now y)")
+			os.Exit(1)
+		}
+	case "old":
+		if strings.Contains(remote, "--expect-plan") {
+			fmt.Fprintln(os.Stderr, "Error: unknown flag: --expect-plan")
+			os.Exit(1)
+		}
+	}
+	switch {
+	case strings.Contains(remote, "--version"):
+		fmt.Println("devex version 9.9.9")
+	case strings.Contains(remote, "--dry-run"):
+		data, _ := os.ReadFile(filepath.Join(dir, "plan.json"))
+		_, _ = os.Stdout.Write(data)
+		countPath := filepath.Join(dir, "count")
+		count := 0
+		if raw, err := os.ReadFile(countPath); err == nil {
+			count, _ = strconv.Atoi(strings.TrimSpace(string(raw)))
+		}
+		_ = os.WriteFile(countPath, []byte(strconv.Itoa(count+1)+"\n"), 0o600)
+		if plan2, err := os.ReadFile(filepath.Join(dir, "plan2.json")); err == nil && count >= 1 {
+			_ = os.WriteFile(filepath.Join(dir, "plan.json"), plan2, 0o600)
+		}
+	case strings.Contains(remote, "install"):
+		fmt.Println("installing git...")
+		fmt.Fprintln(os.Stderr, "remote warning")
+		if os.Getenv("FAKE_MODE") == "slow" {
+			time.Sleep(30 * time.Second)
+		}
+		fmt.Println("installed git")
+		if raw := os.Getenv("FAKE_EXIT"); raw != "" {
+			if code, err := strconv.Atoi(raw); err == nil {
+				os.Exit(code)
+			}
+		}
+	}
+}
 `
-	path := filepath.Join(dir, "ssh")
-	Expect(os.WriteFile(path, []byte(script), 0o755)).To(Succeed())
+		srcPath := filepath.Join(dir, "main.go")
+		if err := os.WriteFile(srcPath, []byte(src), 0o600); err != nil {
+			errFakeSSH = err
+			return
+		}
+		bin := testhelper.Executable(dir, "ssh")
+		goBin := fakeSSHHostGoBin
+		if goBin == "" {
+			goBin = "go"
+		}
+		cmd := exec.Command(goBin, "build", "-o", bin, srcPath)
+		cmd.Env = fakeSSHHostEnv
+		if out, err := cmd.CombinedOutput(); err != nil {
+			errFakeSSH = fmt.Errorf("build fake ssh: %w: %s", err, strings.TrimSpace(string(out)))
+			return
+		}
+		fakeSSHBin = bin
+	})
+	return fakeSSHBin, errFakeSSH
+}
+
+// fakeSSH prepares an ssh stand-in executable that records its arguments and
+// plays the remote DevEx: --version, install --dry-run --format json, and install.
+func fakeSSH(dir string) string {
+	bin, err := ensureFakeSSH()
+	Expect(err).NotTo(HaveOccurred())
 	Expect(os.WriteFile(filepath.Join(dir, "plan.json"), []byte(plan), 0o600)).To(Succeed())
-	return path
+	return bin
 }
 
 var _ = Describe("Remote runs", func() {
@@ -55,9 +154,6 @@ var _ = Describe("Remote runs", func() {
 	)
 
 	BeforeEach(func() {
-		if _, err := exec.LookPath("sh"); err != nil {
-			Skip("sh is required")
-		}
 		ctx = context.Background()
 		dir = GinkgoT().TempDir()
 		GinkgoT().Setenv("FAKE_DIR", dir)
@@ -174,6 +270,9 @@ var _ = Describe("Remote runs", func() {
 	})
 
 	It("runs against a disposable sshd", Label("sshd"), func(ctx SpecContext) {
+		if runtime.GOOS == "windows" {
+			Skip("disposable POSIX sshd fixture requires Unix")
+		}
 		sshd, err := exec.LookPath("sshd")
 		if err != nil {
 			if _, statErr := os.Stat("/usr/sbin/sshd"); statErr != nil {

@@ -4,18 +4,12 @@ const queryRaw = vi.hoisted(() => vi.fn());
 
 vi.mock("@/generated/prisma/client", () => ({
 	PrismaClient: class {
-		$extends() {
-			return { $queryRaw: queryRaw };
-		}
+		$queryRaw = queryRaw;
 	},
 }));
 
 // vitest.setup.ts mocks lib/prisma globally; this suite tests the real module.
 vi.unmock("@/lib/prisma");
-
-vi.mock("@prisma/extension-accelerate", () => ({
-	withAccelerate: () => ({}),
-}));
 
 import { checkDatabaseHealth, poolManager } from "@/lib/prisma";
 

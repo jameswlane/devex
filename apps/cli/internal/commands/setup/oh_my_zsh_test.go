@@ -8,6 +8,8 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/setupundo"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	managed "github.com/jameswlane/devex/packages/plugin-sdk/shellrc"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -50,6 +52,7 @@ var _ = Describe("Opt-in Oh My Zsh setup", func() {
 
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_DATA_DIR", "")
 		GinkgoT().Setenv("XDG_DATA_HOME", "")
 		calls = nil
@@ -83,7 +86,7 @@ var _ = Describe("Opt-in Oh My Zsh setup", func() {
 		content := readOhMyZshTestFile(zshrc)
 		Expect(strings.Count(content, managed.Start)).To(Equal(1))
 		Expect(content).To(HavePrefix(original))
-		Expect(strings.Index(content, `source "$HOME/.local/share/devex/defaults/zsh/rc"`)).To(BeNumerically("<", strings.Index(content, `source "$ZSH/oh-my-zsh.sh"`)))
+		Expect(strings.Index(content, zshSourceEntry(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh", "rc"), home))).To(BeNumerically("<", strings.Index(content, `source "$ZSH/oh-my-zsh.sh"`)))
 		Expect(content).To(ContainSubstring(`export ZSH="$HOME/.oh-my-zsh"`))
 		Expect(content).To(ContainSubstring("ZSH_THEME='robbyrussell'"))
 		Expect(content).To(ContainSubstring("plugins=(git)"))
@@ -92,7 +95,7 @@ var _ = Describe("Opt-in Oh My Zsh setup", func() {
 		Expect(backups).To(HaveLen(1))
 		Expect(readOhMyZshTestFile(backups[0])).To(Equal(original))
 		for _, name := range []string{"rc", "shell", "aliases", "init"} {
-			Expect(filepath.Join(home, ".local", "share", "devex", "defaults", "zsh", name)).To(BeAnExistingFile())
+			Expect(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh", name)).To(BeAnExistingFile())
 		}
 		Expect(model.systemUndo.changes).To(HaveLen(5))
 	})
@@ -102,7 +105,7 @@ var _ = Describe("Opt-in Oh My Zsh setup", func() {
 		Expect(os.MkdirAll(framework, 0o700)).To(Succeed())
 		frameworkFile := filepath.Join(framework, "oh-my-zsh.sh")
 		Expect(os.WriteFile(frameworkFile, []byte("user framework\n"), 0o600)).To(Succeed())
-		defaultFile := filepath.Join(home, ".local", "share", "devex", "defaults", "zsh", "aliases")
+		defaultFile := filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh", "aliases")
 		Expect(os.MkdirAll(filepath.Dir(defaultFile), 0o700)).To(Succeed())
 		Expect(os.WriteFile(defaultFile, []byte("user aliases\n"), 0o600)).To(Succeed())
 		model := newOhMyZshTestModel(home, "zsh", true)
@@ -200,7 +203,7 @@ var _ = Describe("Opt-in Oh My Zsh setup", func() {
 		Expect(view).To(ContainSubstring("Install Oh My Zsh in " + filepath.Join(home, ".oh-my-zsh")))
 		Expect(view).To(ContainSubstring(ohMyZshRevision))
 		Expect(view).To(ContainSubstring("git fetch --depth 1"))
-		Expect(view).To(ContainSubstring(filepath.Join(home, ".local", "share", "devex", "defaults", "zsh", "rc")))
+		Expect(view).To(ContainSubstring(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh", "rc")))
 		Expect(view).To(ContainSubstring("Merge into the DevEx block in " + filepath.Join(home, ".zshrc")))
 		Expect(view).To(ContainSubstring("plugins=(git)"))
 		Expect(view).To(ContainSubstring(".zshrc.devex-bak-*"))
@@ -242,7 +245,7 @@ var _ = Describe("Opt-in Oh My Zsh setup", func() {
 		Expect(readOhMyZshTestFile(zshrc)).To(Equal(original + "alias later='keep me'\n"))
 		Expect(filepath.Join(home, ".oh-my-zsh")).NotTo(BeADirectory())
 		for _, name := range []string{"rc", "shell", "aliases", "init"} {
-			Expect(filepath.Join(home, ".local", "share", "devex", "defaults", "zsh", name)).NotTo(BeAnExistingFile())
+			Expect(filepath.Join(devexpaths.ForHome(home).Data, "defaults", "zsh", name)).NotTo(BeAnExistingFile())
 		}
 	})
 })

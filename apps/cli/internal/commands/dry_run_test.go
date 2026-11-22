@@ -4,20 +4,85 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 )
+
+var (
+	dryRunHostTempDir string
+	dryRunHostGoBin   string
+	dryRunHostEnv     []string
+
+	dryRunFakeOnce sync.Once
+	dryRunFakeBin  string
+	errDryRunFake  error
+)
+
+func init() {
+	dryRunHostTempDir = os.TempDir()
+	dryRunHostGoBin, _ = exec.LookPath("go")
+	dryRunHostEnv = append([]string(nil), os.Environ()...)
+}
+
+func ensureDryRunFakeCommand() (string, error) {
+	dryRunFakeOnce.Do(func() {
+		dir, err := os.MkdirTemp(dryRunHostTempDir, "devex-dryrun-fake-*")
+		if err != nil {
+			errDryRunFake = err
+			return
+		}
+		src := `package main
+import ("fmt"; "os"; "strings")
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "is-active" {
+		os.Exit(1)
+	}
+	f, err := os.OpenFile(os.Getenv("DEVEX_TEST_COMMAND_RECORD"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err == nil {
+		name := strings.TrimSuffix(os.Args[0], ".exe")
+		_, _ = fmt.Fprintf(f, "%s %s\n", name, strings.Join(os.Args[1:], " "))
+		_ = f.Close()
+	}
+	os.Exit(91)
+}
+`
+		srcPath := filepath.Join(dir, "main.go")
+		if err := os.WriteFile(srcPath, []byte(src), 0o600); err != nil {
+			errDryRunFake = err
+			return
+		}
+		bin := testhelper.Executable(dir, "fake-cmd")
+		goBin := dryRunHostGoBin
+		if goBin == "" {
+			goBin = "go"
+		}
+		cmd := exec.Command(goBin, "build", "-o", bin, srcPath)
+		cmd.Env = dryRunHostEnv
+		if out, err := cmd.CombinedOutput(); err != nil {
+			errDryRunFake = fmt.Errorf("build dry-run fake command: %w: %s", err, strings.TrimSpace(string(out)))
+			return
+		}
+		dryRunFakeBin = bin
+	})
+	return dryRunFakeBin, errDryRunFake
+}
 
 // The SDK command recorder is not yet available on this branch. These fakes
 // record repository mutations and external mutating commands independently.
@@ -72,7 +137,7 @@ var _ = Describe("Mutation-free command previews", func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_DRY_RUN", "")
 		GinkgoT().Setenv("DEVEX_CONFIG", "")
 		GinkgoT().Setenv("SUDO_USER", "")
@@ -81,9 +146,12 @@ var _ = Describe("Mutation-free command previews", func() {
 		record = filepath.Join(GinkgoT().TempDir(), "mutations")
 		GinkgoT().Setenv("DEVEX_TEST_COMMAND_RECORD", record)
 		bin := GinkgoT().TempDir()
-		script := "#!/bin/sh\ncase \"$1\" in is-active) exit 1 ;; esac\nprintf '%s %s\\n' \"$0\" \"$*\" >> \"$DEVEX_TEST_COMMAND_RECORD\"\nexit 91\n"
+		fakeBin, fakeErr := ensureDryRunFakeCommand()
+		Expect(fakeErr).NotTo(HaveOccurred())
+		fakeBytes, fakeErr := os.ReadFile(fakeBin)
+		Expect(fakeErr).NotTo(HaveOccurred())
 		for _, name := range []string{"sudo", "apt", "dnf", "pacman", "zypper", "snap", "flatpak", "systemctl", "cp", "tar", "gtk-update-icon-cache"} {
-			Expect(os.WriteFile(filepath.Join(bin, name), []byte(script), 0o700)).To(Succeed())
+			Expect(os.WriteFile(testhelper.Executable(bin, name), fakeBytes, 0o700)).To(Succeed())
 		}
 		GinkgoT().Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		Expect(os.MkdirAll(filepath.Join(home, ".devex"), 0o700)).To(Succeed())
@@ -192,7 +260,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("previews rollback before confirmation, package installation, file restoration and service restart", func() {
-		backup := filepath.Join(home, ".devex", "backups", "nginx_20261030_120000")
+		backup := filepath.Join(devexpaths.ForHome(home).Backups(), "nginx_20261030_120000")
 		Expect(os.MkdirAll(backup, 0o700)).To(Succeed())
 		settings.Terminal.Utilities = append(settings.Terminal.Utilities, types.CrossPlatformApp{
 			Name: "nginx", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "nginx"},
@@ -215,7 +283,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("rejects unsupported rollback methods without mutation", func() {
-		Expect(os.MkdirAll(filepath.Join(home, ".devex", "backups", "unsupported_20261030_120000"), 0o700)).To(Succeed())
+		Expect(os.MkdirAll(filepath.Join(devexpaths.ForHome(home).Backups(), "unsupported_20261030_120000"), 0o700)).To(Succeed())
 		settings.Terminal.Utilities = append(settings.Terminal.Utilities, types.CrossPlatformApp{
 			Name: "unsupported", AllPlatforms: types.OSConfig{InstallMethod: "unknown"},
 		})
@@ -225,7 +293,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("leaves existing plugin binaries untouched and does not run them during root preview initialization", func() {
-		pluginDir := filepath.Join(home, ".devex", "plugins")
+		pluginDir := devexpaths.ForHome(home).Plugins()
 		Expect(os.MkdirAll(pluginDir, 0o700)).To(Succeed())
 		plugin := filepath.Join(pluginDir, "devex-package-manager-apt")
 		Expect(os.WriteFile(plugin, []byte("#!/bin/sh\nprintf plugin >> \"$DEVEX_TEST_COMMAND_RECORD\"\nexit 91\n"), 0o700)).To(Succeed())
@@ -236,7 +304,7 @@ var _ = Describe("Mutation-free command previews", func() {
 
 	It("skips bootstrap before a non-install command even in a fresh home", func() {
 		freshHome := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", freshHome)
+		testhelper.SetProfileEnv(GinkgoT(), freshHome)
 		before := snapshotPreviewHome(freshHome)
 		root := commands.NewRootCmd("test", mocks.NewMockRepository(), config.CrossPlatformSettings{})
 		root.SetArgs([]string{"rollback", "--dry-run", "--list"})
@@ -287,7 +355,7 @@ var _ = Describe("Mutation-free command previews", func() {
 	})
 
 	It("still attempts rollback execution when preview is explicitly disabled", func() {
-		Expect(os.MkdirAll(filepath.Join(home, ".devex", "backups", "preview-app_20261030_120000"), 0o700)).To(Succeed())
+		Expect(os.MkdirAll(filepath.Join(devexpaths.ForHome(home).Backups(), "preview-app_20261030_120000"), 0o700)).To(Succeed())
 		Expect(execute("rollback", "--dry-run=false", "--offline", "--force", "--app", "preview-app")).To(MatchError(ContainSubstring("failed to reinstall application")))
 		data, err := os.ReadFile(record)
 		Expect(err).NotTo(HaveOccurred())

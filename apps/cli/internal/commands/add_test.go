@@ -9,6 +9,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("Add Command", func() {
@@ -25,7 +26,7 @@ var _ = Describe("Add Command", func() {
 		var err error
 		tempDir, err = os.MkdirTemp("", "devex-add-test")
 		Expect(err).ToNot(HaveOccurred())
-		GinkgoT().Setenv("HOME", tempDir)
+		testhelper.SetProfileEnv(GinkgoT(), tempDir)
 
 		// Create a basic settings with temp directory
 		settings = &config.CrossPlatformSettings{

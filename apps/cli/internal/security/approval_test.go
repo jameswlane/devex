@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -22,7 +23,7 @@ var _ = Describe("Organization plan approval", func() {
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
 		teamDir = filepath.Join(home, "team")
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
 		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
 		original := SystemOrgPolicyPath

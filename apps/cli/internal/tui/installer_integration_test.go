@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -12,7 +14,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -199,6 +203,9 @@ func (m *MockCommandExecutor) ExecuteCommand(ctx context.Context, command string
 	}
 
 	// Return a fast, silent command that respects context cancellation
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "cmd", "/c", "exit", "0"), nil
+	}
 	// true exits immediately with success (/bin/true on Linux, /usr/bin/true on macOS)
 	cmd := exec.CommandContext(ctx, "true")
 	return cmd, nil
@@ -613,6 +620,9 @@ func TestStreamingInstaller_ConcurrentInstallations(t *testing.T) {
 func TestStreamingInstaller_LargeNumberOfApps(t *testing.T) {
 	// The fixtures model Linux catalog entries.
 	defer types.PinCatalogOSForTesting("linux")()
+	previousDB := viper.GetString(state.DBPathConfigKey)
+	viper.Set(state.DBPathConfigKey, filepath.Join(t.TempDir(), "state.db"))
+	t.Cleanup(func() { viper.Set(state.DBPathConfigKey, previousDB) })
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
 	mockExecutor := NewMockCommandExecutor()
@@ -641,8 +651,14 @@ func TestStreamingInstaller_LargeNumberOfApps(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	// Shouldn't take too long for echo commands
-	assert.Less(t, duration, 30*time.Second)
+	// Shouldn't take too long for echo commands. Windows NTFS flushes each
+	// per-app SQLite audit transaction synchronously, so give shared Windows
+	// CI runners extra headroom.
+	maxDuration := 30 * time.Second
+	if runtime.GOOS == "windows" {
+		maxDuration = 90 * time.Second
+	}
+	assert.Less(t, duration, maxDuration)
 
 	// Verify all apps were installed
 	installedApps, err := mockRepo.GetApps()

@@ -11,6 +11,7 @@ import (
 
 	shipconfig "github.com/jameswlane/devex/apps/cli/config"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("Shipped configuration refresh at startup", func() {
@@ -19,6 +20,7 @@ var _ = Describe("Shipped configuration refresh at startup", func() {
 
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		configDir = (&config.CrossPlatformSettings{HomeDir: home}).GetConfigDir()
 		Expect(config.WriteDefaultConfig(configDir)).To(Succeed())
 		target = filepath.Join(configDir, filepath.FromSlash(relPath))

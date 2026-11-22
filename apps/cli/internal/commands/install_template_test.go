@@ -12,6 +12,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/spf13/viper"
 )
@@ -198,7 +199,7 @@ lifecycle:
           - devex-postgres
 `))
 
-	t.Setenv("HOME", homeDir)
+	testhelper.SetProfileEnv(t, homeDir)
 	t.Setenv(state.DBPathEnvVar, dbPath)
 	viper.Reset()
 	t.Cleanup(viper.Reset)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -318,9 +319,14 @@ configure_ssh: false`,
 
 		Context("when creating missing config files", func() {
 			It("should create files if they don't exist", func() {
-				// Set EDITOR to a command that just touches the file and exits
-				os.Setenv("EDITOR", "touch")
-				defer os.Unsetenv("EDITOR")
+				// Set EDITOR to a command that exits cleanly without interactive input
+				editor := "touch"
+				if runtime.GOOS == "windows" {
+					noopEditor := filepath.Join(GinkgoT().TempDir(), "noop-editor.cmd")
+					Expect(os.WriteFile(noopEditor, []byte("@exit /b 0\r\n"), 0o700)).To(Succeed())
+					editor = noopEditor
+				}
+				GinkgoT().Setenv("EDITOR", editor)
 
 				cmd := commands.NewConfigCmd(mockRepo, *settings)
 				cmd.SetArgs([]string{"edit", "applications"})

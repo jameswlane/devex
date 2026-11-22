@@ -16,4 +16,5 @@ func TestCache(t *testing.T) {
 // Set up test logging suppression for all tests in this suite
 var _ = BeforeEach(func() {
 	testhelper.SuppressLogs()
+	testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 })

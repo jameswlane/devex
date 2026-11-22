@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -20,8 +23,89 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
+
+var (
+	fakeSSHHostTempDir string
+	fakeSSHHostGoBin   string
+	fakeSSHHostEnv     []string
+
+	fakeSSHOnce sync.Once
+	fakeSSHBin  string
+	errFakeSSH  error
+)
+
+func init() {
+	fakeSSHHostTempDir = os.TempDir()
+	fakeSSHHostGoBin, _ = exec.LookPath("go")
+	fakeSSHHostEnv = append([]string(nil), os.Environ()...)
+}
+
+func ensureFakeSSHBinary() (string, error) {
+	fakeSSHOnce.Do(func() {
+		dir, err := os.MkdirTemp(fakeSSHHostTempDir, "devex-fake-ssh-*")
+		if err != nil {
+			errFakeSSH = err
+			return
+		}
+		src := `package main
+import ("fmt"; "os"; "path/filepath"; "strconv"; "strings")
+func main() {
+	dir := os.Getenv("FAKE_DIR")
+	_ = os.WriteFile(filepath.Join(dir, "args"), []byte(strings.Join(os.Args[1:], "\n")+"\n"), 0o600)
+	remote := ""
+	if len(os.Args) > 1 {
+		remote = os.Args[len(os.Args)-1]
+	}
+	if f, err := os.OpenFile(filepath.Join(dir, "calls"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+		_, _ = f.WriteString(remote + "\n")
+		_ = f.Close()
+	}
+	switch {
+	case strings.Contains(remote, "--version"):
+		fmt.Println("devex version 9.9.9")
+	case strings.Contains(remote, "--dry-run"):
+		data, _ := os.ReadFile(filepath.Join(dir, "plan.json"))
+		_, _ = os.Stdout.Write(data)
+	case strings.Contains(remote, "--expect-plan"):
+		if _, err := os.Stat(filepath.Join(dir, "changed")); err == nil {
+			fmt.Fprintln(os.Stderr, "Error: the installation plan changed after it was confirmed (confirmed a, now b)")
+			os.Exit(1)
+		}
+		fmt.Println("installed git")
+		if raw := os.Getenv("FAKE_EXIT"); raw != "" {
+			if code, err := strconv.Atoi(raw); err == nil {
+				os.Exit(code)
+			}
+		}
+	case strings.Contains(remote, "install"):
+		fmt.Fprintln(os.Stderr, "unverified install")
+		os.Exit(9)
+	}
+}
+`
+		srcPath := filepath.Join(dir, "main.go")
+		if err := os.WriteFile(srcPath, []byte(src), 0o600); err != nil {
+			errFakeSSH = err
+			return
+		}
+		bin := testhelper.Executable(dir, "ssh")
+		goBin := fakeSSHHostGoBin
+		if goBin == "" {
+			goBin = "go"
+		}
+		cmd := exec.Command(goBin, "build", "-o", bin, srcPath)
+		cmd.Env = fakeSSHHostEnv
+		if out, err := cmd.CombinedOutput(); err != nil {
+			errFakeSSH = fmt.Errorf("build fake ssh: %w: %s", err, strings.TrimSpace(string(out)))
+			return
+		}
+		fakeSSHBin = bin
+	})
+	return fakeSSHBin, errFakeSSH
+}
 
 const remoteDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -35,10 +119,11 @@ var _ = Describe("Remote install command", func() {
 		output   bytes.Buffer
 	)
 	BeforeEach(func() {
+		DeferCleanup(types.PinCatalogOSForTesting("linux"))
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("CI", "true")
 		for _, key := range []string{"DEVEX_CONFIG", "DEVEX_DRY_RUN", "DEVEX_REMOTE_HOST", "DEVEX_REMOTE_PORT", "DEVEX_REMOTE_IDENTITY", "DEVEX_REMOTE_KNOWN_HOSTS", "DEVEX_REMOTE_DEVEX", "DEVEX_REMOTE_SSH"} {
 			GinkgoT().Setenv(key, "")
@@ -51,20 +136,9 @@ var _ = Describe("Remote install command", func() {
 		}}
 		dir = GinkgoT().TempDir()
 		GinkgoT().Setenv("FAKE_DIR", dir)
-		ssh = filepath.Join(dir, "ssh")
-		script := `#!/bin/sh
-printf '%s\n' "$@" > "$FAKE_DIR/args"
-remote=""
-for arg do remote="$arg"; done
-echo "$remote" >> "$FAKE_DIR/calls"
-case "$remote" in
-  *--version*) echo "devex version 9.9.9" ;;
-  *--dry-run*) cat "$FAKE_DIR/plan.json" ;;
-  *--expect-plan*) if [ -f "$FAKE_DIR/changed" ]; then echo "Error: the installation plan changed after it was confirmed (confirmed a, now b)" >&2; exit 1; fi; echo "installed git"; exit "${FAKE_EXIT:-0}" ;;
-  *install*) echo "unverified install" >&2; exit 9 ;;
-esac
-`
-		Expect(os.WriteFile(ssh, []byte(script), 0o755)).To(Succeed())
+		var sshErr error
+		ssh, sshErr = ensureFakeSSHBinary()
+		Expect(sshErr).NotTo(HaveOccurred())
 		Expect(os.WriteFile(filepath.Join(dir, "plan.json"), []byte(remotePlanJSON), 0o600)).To(Succeed())
 		output.Reset()
 	})
@@ -206,10 +280,11 @@ var _ = Describe("Install with a confirmed plan digest", func() {
 	git := types.CrossPlatformApp{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git", Dependencies: []string{"base"}}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "git", Dependencies: []string{"base"}}}
 	base := types.CrossPlatformApp{Name: "base", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "base", PostInstall: []types.InstallCommand{{Shell: "configure-base"}}}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "base", PostInstall: []types.InstallCommand{{Shell: "configure-base"}}}}
 	BeforeEach(func() {
+		DeferCleanup(types.PinCatalogOSForTesting("linux"))
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("CI", "true")
 		// Keep every configuration path inside the temporary home, and restore
 		// the registry variable that a confirmed install pins.
@@ -439,10 +514,11 @@ var _ = Describe("Install with a confirmed plan digest", func() {
 
 var _ = Describe("Confirmed installs with changed configuration files", func() {
 	BeforeEach(func() {
+		DeferCleanup(types.PinCatalogOSForTesting("linux"))
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_CONFIG_DIR", filepath.Join(home, "config"))
 		GinkgoT().Setenv("DEVEX_DATA_DIR", filepath.Join(home, "data"))
 		viper.Set(state.DBPathConfigKey, filepath.Join(GinkgoT().TempDir(), "state.db"))

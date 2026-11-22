@@ -14,6 +14,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -33,7 +34,7 @@ var _ = Describe("Install hook scope guard", func() {
 		})
 		utils.CommandExec = utils.OSCommandExecutor{}
 		home = GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 	})
 
 	run := func(script string) (string, error) {

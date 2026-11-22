@@ -1947,11 +1947,11 @@ func (si *StreamingInstaller) applySelectedTheme(ctx context.Context, appName st
 // createDirectoryForFile creates the parent directory for a file path
 func (si *StreamingInstaller) createDirectoryForFile(ctx context.Context, filePath string) error {
 	dir := filepath.Dir(filePath)
-	if dir == "." || dir == "/" {
+	if dir == "." || dir == "/" || dir == string(filepath.Separator) || dir == filepath.VolumeName(dir)+string(filepath.Separator) {
 		return nil
 	}
 
-	cmd := fmt.Sprintf("mkdir -p '%s'", dir)
+	cmd := fmt.Sprintf("mkdir -p '%s'", filepath.ToSlash(dir))
 	return si.executeCommandStream(ctx, cmd)
 }
 

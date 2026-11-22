@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,7 +22,7 @@ func TestAudit(t *testing.T) { RegisterFailHandler(Fail); RunSpecs(t, "Installat
 
 var _ = Describe("Installation audit persistence", func() {
 	BeforeEach(func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 		GinkgoT().Setenv("DEVEX_STATE_DIR", "")
 		GinkgoT().Setenv("SUDO_USER", "")
@@ -65,7 +67,9 @@ var _ = Describe("Installation audit persistence", func() {
 		Expect(err).NotTo(HaveOccurred())
 		info, err := os.Stat(path)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o600)))
+		if runtime.GOOS != "windows" {
+			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o600)))
+		}
 	})
 	It("redacts credentials in errors and metadata before writing any bytes", func() {
 		GinkgoT().Setenv("DEPLOY_TOKEN", "environment-secret")

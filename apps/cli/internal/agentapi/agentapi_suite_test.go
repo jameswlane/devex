@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -16,6 +17,7 @@ func TestAgentAPI(t *testing.T) {
 
 var _ = BeforeEach(func() {
 	home := GinkgoT().TempDir()
+	testhelper.SetProfileEnv(GinkgoT(), home)
 	GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", filepath.Join(home, "team"))
 	previous := security.SystemOrgPolicyPath
 	security.SystemOrgPolicyPath = filepath.Join(home, "system-policy.yaml")

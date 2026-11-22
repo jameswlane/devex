@@ -2,6 +2,7 @@ package performance_test
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/cache"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("PerformanceAnalyzer", func() {
@@ -23,6 +25,7 @@ var _ = Describe("PerformanceAnalyzer", func() {
 		var err error
 		tempDir, err = os.MkdirTemp("", "devex-performance-test-*")
 		Expect(err).NotTo(HaveOccurred())
+		testhelper.SetProfileEnv(GinkgoT(), tempDir)
 
 		settings = config.CrossPlatformSettings{
 			HomeDir: tempDir,
@@ -357,9 +360,13 @@ var _ = Describe("PerformanceAnalyzer", func() {
 	Describe("Edge Cases and Error Handling", func() {
 		Context("when cache is unavailable", func() {
 			It("should still provide warnings based on estimates", func() {
-				// Create analyzer with invalid cache path to simulate error
+				// Point the cache directory beneath a regular file so MkdirAll fails on every OS.
+				blocker := filepath.Join(GinkgoT().TempDir(), "not-a-dir")
+				Expect(os.WriteFile(blocker, []byte("x"), 0o600)).To(Succeed())
+				invalidCache := filepath.Join(blocker, "cache")
+				GinkgoT().Setenv("DEVEX_CACHE_DIR", invalidCache)
 				invalidSettings := config.CrossPlatformSettings{
-					HomeDir: "/invalid/path/that/does/not/exist",
+					HomeDir: filepath.Join(blocker, "home"),
 				}
 
 				// This should fail to create due to invalid path

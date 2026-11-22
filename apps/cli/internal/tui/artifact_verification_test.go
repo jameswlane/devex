@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,7 +21,7 @@ func (f artifactTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 var _ = Describe("Streaming download integrity", func() {
 	BeforeEach(func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		previous := http.DefaultTransport
 		http.DefaultTransport = artifactTransport(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("#!/bin/bash\nexit 91\n")), Request: req}, nil

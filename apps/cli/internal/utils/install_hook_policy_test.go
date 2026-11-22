@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/user"
+	"runtime"
 
 	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -35,6 +36,9 @@ var _ = Describe("Install hook command policy", func() {
 	)
 
 	DescribeTable("keeps the target username out of script text", func(username string) {
+		if runtime.GOOS == "windows" {
+			Skip("UnixSudoAdapter user-switching tests require Unix")
+		}
 		home := os.Getenv("HOME")
 		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver {
 			return sdk.PrivilegeResolver{

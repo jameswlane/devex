@@ -15,6 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -72,10 +73,12 @@ var _ = Describe("Docker application catalog", func() {
 			Expect(config.PostInstall[0].Shell).To(ContainSubstring("Log out and log back in"))
 			for _, hook := range append(config.PreInstall, config.PostInstall...) {
 				Expect(hook.Scope).To(Equal("system"))
-				command := exec.CommandContext(context.Background(), "bash", "-n")
-				command.Stdin = strings.NewReader(hook.Shell)
-				output, err := command.CombinedOutput()
-				Expect(err).NotTo(HaveOccurred(), "%s hook syntax: %s", distribution, output)
+				if runtime.GOOS != "windows" {
+					command := exec.CommandContext(context.Background(), "bash", "-n")
+					command.Stdin = strings.NewReader(hook.Shell)
+					output, err := command.CombinedOutput()
+					Expect(err).NotTo(HaveOccurred(), "%s hook syntax: %s", distribution, output)
+				}
 			}
 		},
 		Entry("Debian", "debian", "apt", "https://download.docker.com/linux/$docker_distro"),
@@ -133,6 +136,9 @@ var _ = Describe("Docker application catalog", func() {
 	)
 
 	DescribeTable("configures the parent apt repository and rejects unsupported systems before running apt", func(release, repository, codename string) {
+		if runtime.GOOS == "windows" {
+			Skip("Linux apt repository hook execution requires bash")
+		}
 		// Replace only the os-release read; stub all commands so no host changes occur.
 		script := strings.Replace(docker.Linux.PreInstall[0].Shell, ". /etc/os-release", release, 1)
 		script = strings.Replace(script, "> /etc/apt/sources.list.d/docker.list", "", 1)
@@ -181,7 +187,7 @@ dpkg() { echo amd64; }
 			return nil
 		}))
 		// Cleanup resolves the user home even for absolute config paths.
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 		// Pin Linux apt config independently of the host distribution.
 		configPath := filepath.Join(GinkgoT().TempDir(), "docker.conf")
 		Expect(os.WriteFile(configPath, []byte("docker config"), 0600)).To(Succeed())

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/setupundo"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/undo"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
@@ -16,7 +17,7 @@ import (
 var _ = Describe("Undo command partial failures", func() {
 	It("reports a preserved clone even when another setup change cannot be restored", func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		clone := filepath.Join(home, ".oh-my-zsh")
 		plugin := filepath.Join(clone, "custom", "plugins", "mine", "mine.plugin.zsh")
 		Expect(os.MkdirAll(filepath.Dir(plugin), 0o700)).To(Succeed())

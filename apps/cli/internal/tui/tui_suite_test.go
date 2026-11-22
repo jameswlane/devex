@@ -14,6 +14,7 @@ import (
 )
 
 func TestTui(t *testing.T) {
+	testhelper.ResolveTempDir()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Tui Suite")
 }
@@ -21,7 +22,7 @@ func TestTui(t *testing.T) {
 // Set up test logging suppression for all tests in this suite
 var _ = BeforeEach(func() {
 	testhelper.SuppressLogs()
-	GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+	testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
 	GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 	GinkgoT().Setenv("DEVEX_STATE_DIR", "")
 	GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", filepath.Join(GinkgoT().TempDir(), "team"))

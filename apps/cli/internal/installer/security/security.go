@@ -139,8 +139,8 @@ func (v *PathValidator) ValidateConfigPath(path string) error {
 		return fmt.Errorf("empty path not allowed")
 	}
 
-	// Clean the path
-	cleanPath := filepath.Clean(path)
+	// Clean the path and normalize separators so dangerous Unix paths are caught on all platforms
+	cleanPath := filepath.ToSlash(filepath.Clean(path))
 
 	// Check for dangerous paths
 	dangerousPaths := []string{

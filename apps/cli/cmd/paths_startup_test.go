@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -31,6 +32,7 @@ var _ = Describe("Startup migration recovery", func() {
 
 	It("warns with repair guidance and continues after a refusal for every command", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		dirs := devexpaths.ForHome(home)
 		Expect(os.MkdirAll(filepath.Join(home, ".devex"), 0700)).To(Succeed())
 		Expect(os.Symlink("dotfiles.yaml", filepath.Join(home, ".devex", "config.yaml"))).To(Succeed())
@@ -44,6 +46,7 @@ var _ = Describe("Startup migration recovery", func() {
 
 	It("allows inspection after I/O failures while operational commands return the error", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		// An overlong component produces an I/O error even when tests run as root.
 		dirs := devexpaths.ForHome(filepath.Join(home, strings.Repeat("x", 300)))
 		var output bytes.Buffer
@@ -54,6 +57,7 @@ var _ = Describe("Startup migration recovery", func() {
 
 	It("leaves safe legacy files in place during informational commands", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		legacy := filepath.Join(home, ".devex", "config.yaml")
 		Expect(os.MkdirAll(filepath.Dir(legacy), 0700)).To(Succeed())
 		Expect(os.WriteFile(legacy, []byte("config"), 0600)).To(Succeed())

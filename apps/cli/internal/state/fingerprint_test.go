@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -30,10 +31,14 @@ var _ = Describe("Installation fingerprint key", func() {
 		Expect(key).To(HaveLen(32))
 		info, err := os.Stat(keyPath)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o600)))
+		if runtime.GOOS != "windows" {
+			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o600)))
+		}
 		info, err = os.Stat(dir)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o700)))
+		if runtime.GOOS != "windows" {
+			Expect(info.Mode().Perm()).To(Equal(os.FileMode(0o700)))
+		}
 	})
 	It("invalidates existing fingerprints after a key reset", func() {
 		first, err := KeyedFingerprint([]byte("same plan"))

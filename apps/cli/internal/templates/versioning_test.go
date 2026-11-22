@@ -181,8 +181,9 @@ files:
 	})
 
 	It("finds the templates compiled into the binary from any working directory", func() {
+		workDir := GinkgoT().TempDir()
 		DeferCleanup(os.Chdir, mustGetwd())
-		Expect(os.Chdir(GinkgoT().TempDir())).To(Succeed())
+		Expect(os.Chdir(workDir)).To(Succeed())
 
 		tvm := templates.NewTemplateVersionManager(baseDir)
 		Expect(tvm.InitializeTemplateVersioning()).To(Succeed())

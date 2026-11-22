@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -1182,6 +1183,9 @@ func (m *MockCommandExecutor) ExecuteCommand(ctx context.Context, command string
 
 	// Return a mock command that will not actually execute
 	// This is safe for testing as we're not running real commands
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "cmd", "/c", "echo", "mock-execution"), nil
+	}
 	cmd := exec.CommandContext(ctx, "echo", "mock-execution")
 	return cmd, nil
 }

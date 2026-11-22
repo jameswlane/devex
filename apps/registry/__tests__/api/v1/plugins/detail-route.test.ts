@@ -7,7 +7,7 @@ import type {
 
 vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: vi.fn(), findFirst: vi.fn() },
+		plugin: { findMany: vi.fn() },
 		pluginVersion: { findMany: vi.fn() },
 	},
 }));
@@ -18,6 +18,7 @@ vi.mock("@/lib/error-handler", () => ({
 }));
 
 import { GET } from "@/app/api/v1/plugins/[id]/route";
+import { redis } from "@/lib/redis";
 
 type VersionSummary = Pick<
 	PluginVersion,
@@ -26,12 +27,7 @@ type VersionSummary = Pick<
 
 type MockPrisma = {
 	plugin: {
-		findUnique: Mock<
-			(args: { where: { name: string } }) => Promise<Plugin | null>
-		>;
-		findFirst: Mock<
-			(args: { where: { shortName: string } }) => Promise<Plugin | null>
-		>;
+		findMany: Mock<(args: unknown) => Promise<Plugin[]>>;
 	};
 	pluginVersion: {
 		findMany: Mock<
@@ -87,10 +83,10 @@ function params(id = plugin.name) {
 }
 
 describe("GET /api/v1/plugins/[id]", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.clearAllMocks();
-		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
+		await redis.disconnect();
+		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
 		mockPrisma.pluginVersion.findMany.mockResolvedValue([
 			{ version: "1.9.0", prerelease: false, publishedAt: now },
 			{ version: "1.10.0", prerelease: false, publishedAt: now },
@@ -171,8 +167,7 @@ describe("GET /api/v1/plugins/[id]", () => {
 	});
 
 	it("returns 404 for an unknown plugin without querying versions", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue(null);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
+		mockPrisma.plugin.findMany.mockResolvedValue([]);
 
 		const response = await GET(request("unknown"), params("unknown"));
 

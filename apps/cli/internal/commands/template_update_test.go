@@ -20,8 +20,9 @@ var _ = Describe("template update", func() {
 	BeforeEach(func() {
 		configDir = GinkgoT().TempDir()
 		GinkgoT().Setenv("DEVEX_CONFIG_DIR", configDir)
+		workDir := GinkgoT().TempDir()
 		DeferCleanup(os.Chdir, mustWorkingDir())
-		Expect(os.Chdir(GinkgoT().TempDir())).To(Succeed())
+		Expect(os.Chdir(workDir)).To(Succeed())
 	})
 
 	run := func(args ...string) (string, error) {

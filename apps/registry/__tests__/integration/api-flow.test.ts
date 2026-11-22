@@ -685,18 +685,17 @@ describe("API Integration Flow", () => {
 			);
 		});
 
-		it("should use Prisma Accelerate caching", async () => {
+		it("queries breakdowns without Accelerate cacheStrategy", async () => {
 			const req = createMockRequest("/api/v1/stats");
 			await statsGet(req);
 
 			const statsClient = ensurePrisma();
 
-			// Breakdowns use Accelerate cacheStrategy; totals come from the
+			// Accelerate is retired, so no cacheStrategy; totals come from the
 			// shared computeRegistryStats behind unstable_cache (#483).
 			expect(statsClient.application.groupBy).toHaveBeenCalledWith({
 				by: ["category"],
 				_count: { category: true },
-				cacheStrategy: { swr: 600, ttl: 300 },
 			});
 		});
 	});

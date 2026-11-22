@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"time"
 
@@ -417,8 +419,28 @@ var _ = Describe("Template Execution Runtime", func() {
 		binDir := GinkgoT().TempDir()
 		workDir := GinkgoT().TempDir()
 		record := filepath.Join(GinkgoT().TempDir(), "argv")
-		script := "#!/bin/sh\n{ pwd; echo \"$GREETING\"; for a in \"$@\"; do echo \"[$a]\"; done; } > " + record + "\n"
-		Expect(os.WriteFile(filepath.Join(binDir, "argv-recorder"), []byte(script), 0o755)).To(Succeed())
+		if runtime.GOOS == "windows" {
+			srcDir := GinkgoT().TempDir()
+			src := fmt.Sprintf(`package main
+import ("fmt"; "os"; "strings")
+func main() {
+	wd, _ := os.Getwd()
+	var b strings.Builder
+	b.WriteString(wd + "\n")
+	b.WriteString(os.Getenv("GREETING") + "\n")
+	for _, a := range os.Args[1:] { fmt.Fprintf(&b, "[%%s]\n", a) }
+	_ = os.WriteFile(%q, []byte(b.String()), 0o600)
+}
+`, record)
+			Expect(os.WriteFile(filepath.Join(srcDir, "main.go"), []byte(src), 0o600)).To(Succeed())
+			build := exec.CommandContext(context.Background(), "go", "build", "-o", filepath.Join(binDir, "argv-recorder.exe"), "main.go")
+			build.Dir = srcDir
+			out, err := build.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), string(out))
+		} else {
+			script := "#!/bin/sh\n{ pwd; echo \"$GREETING\"; for a in \"$@\"; do echo \"[$a]\"; done; } > " + record + "\n"
+			Expect(os.WriteFile(filepath.Join(binDir, "argv-recorder"), []byte(script), 0o755)).To(Succeed())
+		}
 		GinkgoT().Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 		plan.Steps[0].Type = templates.StepTypeShell
@@ -428,9 +450,9 @@ var _ = Describe("Template Execution Runtime", func() {
 			Env:        map[string]string{"GREETING": "hi"},
 			WorkingDir: workDir,
 		}
-		runtime := templateexec.NewExecutionRuntime(store, plugin)
+		execRuntime := templateexec.NewExecutionRuntime(store, plugin)
 
-		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
+		_, err := execRuntime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(plugin.calls).To(BeEmpty())
@@ -444,24 +466,31 @@ var _ = Describe("Template Execution Runtime", func() {
 
 	It("fails a shell step when its executable exits non-zero", func() {
 		plan.Steps[0].Type = templates.StepTypeShell
-		plan.Steps[0].Request = templates.ExecutionRequest{Command: "false"}
-		runtime := templateexec.NewExecutionRuntime(store, plugin)
+		if runtime.GOOS == "windows" {
+			plan.Steps[0].Request = templates.ExecutionRequest{Command: "cmd", Args: []string{"/c", "exit 1"}}
+		} else {
+			plan.Steps[0].Request = templates.ExecutionRequest{Command: "false"}
+		}
+		execRuntime := templateexec.NewExecutionRuntime(store, plugin)
 
-		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
+		_, err := execRuntime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
 
-		Expect(err).To(MatchError(ContainSubstring("false failed: exit status 1")))
+		Expect(err).To(MatchError(ContainSubstring("failed: exit status 1")))
 		Expect(store.operations["databases-install-1-001-postgres"].Status).To(Equal(state.OperationStatusFailed))
 	})
 
 	It("returns from a canceled shell step while a background child is still running", func() {
+		if runtime.GOOS == "windows" {
+			Skip("POSIX subshell background-child cancellation test requires sh and sleep")
+		}
 		plan.Steps[0].Type = templates.StepTypeShell
 		plan.Steps[0].Request = templates.ExecutionRequest{Command: "sh", Args: []string{"-c", "sleep 5 & sleep 5"}}
-		runtime := templateexec.NewExecutionRuntime(store, plugin)
+		execRuntime := templateexec.NewExecutionRuntime(store, plugin)
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
 		started := time.Now()
-		_, err := runtime.Execute(ctx, plan, templateexec.ExecuteOptions{})
+		_, err := execRuntime.Execute(ctx, plan, templateexec.ExecuteOptions{})
 
 		Expect(err).To(HaveOccurred())
 		Expect(time.Since(started)).To(BeNumerically("<", 3*time.Second))

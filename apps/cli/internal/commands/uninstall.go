@@ -684,6 +684,9 @@ func validateCleanupPath(path, homeDir string) (string, error) {
 	}
 
 	cleaned := filepath.Clean(path)
+	if filepath.Dir(cleaned) == cleaned {
+		return "", fmt.Errorf("refusing to remove filesystem root %q", cleaned)
+	}
 	for _, protected := range protectedCleanupPaths {
 		if cleaned == protected {
 			return "", fmt.Errorf("refusing to remove protected path %q", cleaned)

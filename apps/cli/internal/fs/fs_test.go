@@ -2,6 +2,7 @@ package fs_test
 
 import (
 	"os"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -131,7 +132,7 @@ var _ = Describe("fs package", func() {
 			var visited []string
 			err = fs.Walk("/tmp/test-dir", func(path string, info os.FileInfo, err error) error {
 				Expect(err).ToNot(HaveOccurred())
-				visited = append(visited, path)
+				visited = append(visited, filepath.ToSlash(path))
 				return nil
 			})
 			Expect(err).ToNot(HaveOccurred())

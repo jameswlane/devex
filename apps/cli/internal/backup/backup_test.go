@@ -13,6 +13,7 @@ import (
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("Backup manager", func() {
@@ -24,7 +25,7 @@ var _ = Describe("Backup manager", func() {
 
 	BeforeEach(func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		for _, key := range []string{
 			"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
 			"DEVEX_CONFIG_DIR", "DEVEX_DATA_DIR", "DEVEX_STATE_DIR", "DEVEX_CACHE_DIR",

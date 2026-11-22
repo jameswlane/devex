@@ -4,8 +4,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -21,7 +23,7 @@ var _ = Describe("Organization policy", func() {
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
 		teamDir = filepath.Join(home, "team")
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
 		SystemOrgPolicyPath = filepath.Join(home, "system", "policy.yaml")
 		DeferCleanup(func() { SystemOrgPolicyPath = "/etc/devex/policy.yaml" })
@@ -79,7 +81,7 @@ var _ = Describe("Organization policy", func() {
 
 	It("uses the default team directory beneath the DevEx config directory", func() {
 		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
-		path := filepath.Join(home, ".config", "devex", "team", "policy.yaml")
+		path := filepath.Join(devexpaths.ForHome(home).Config, "team", "policy.yaml")
 		writePolicy(path, "version: '1'\n")
 		policy, err := LoadOrgPolicy(home)
 		Expect(err).NotTo(HaveOccurred())

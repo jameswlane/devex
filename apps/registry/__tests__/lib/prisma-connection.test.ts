@@ -1,6 +1,9 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { prismaConnectionOptions } from "../../lib/prisma-connection";
+import {
+	prismaConnectionOptions,
+	resolveDatabaseUrl,
+} from "../../lib/prisma-connection";
 
 vi.mock("@prisma/adapter-pg", () => ({
 	PrismaPg: vi.fn(
@@ -10,22 +13,110 @@ vi.mock("@prisma/adapter-pg", () => ({
 	),
 }));
 
-const originalUrl = process.env.PRISMA_DATABASE_URL;
+const URL_VARS = [
+	"DATABASE_URL_POOLED",
+	"PRISMA_DATABASE_URL",
+	"DATABASE_URL",
+] as const;
+const original = Object.fromEntries(URL_VARS.map((k) => [k, process.env[k]]));
 beforeEach(() => {
-	delete process.env.PRISMA_DATABASE_URL;
+	for (const key of URL_VARS) delete process.env[key];
+	vi.mocked(PrismaPg).mockClear();
 });
 afterAll(() => {
-	if (originalUrl === undefined) delete process.env.PRISMA_DATABASE_URL;
-	else process.env.PRISMA_DATABASE_URL = originalUrl;
+	for (const key of URL_VARS) {
+		if (original[key] === undefined) delete process.env[key];
+		else process.env[key] = original[key];
+	}
+});
+
+describe("resolveDatabaseUrl", () => {
+	const pooled =
+		"postgres://u:p@pooled.db.prisma.io:5432/postgres?sslmode=require";
+	const direct = "postgres://u:p@db.prisma.io:5432/postgres?sslmode=require";
+	const accelerate = "prisma+postgres://accelerate.prisma-data.net/?api_key=x";
+
+	it("prefers the pooled URL Vercel sets", () => {
+		expect(
+			resolveDatabaseUrl({
+				DATABASE_URL_POOLED: pooled,
+				PRISMA_DATABASE_URL: direct,
+				DATABASE_URL: direct,
+			}),
+		).toBe(pooled);
+	});
+
+	it.each(["prisma://accelerate.example/?api_key=test", accelerate])(
+		"skips the Accelerate URL %s and falls back to DATABASE_URL",
+		(url) => {
+			expect(
+				resolveDatabaseUrl({ PRISMA_DATABASE_URL: url, DATABASE_URL: direct }),
+			).toBe(direct);
+		},
+	);
+
+	it("returns undefined when only an Accelerate URL is set", () => {
+		expect(resolveDatabaseUrl({ PRISMA_DATABASE_URL: accelerate })).toBe(
+			undefined,
+		);
+	});
 });
 
 describe("Prisma 7 connection options", () => {
+	it("never hands an Accelerate URL to Prisma", () => {
+		process.env.PRISMA_DATABASE_URL =
+			"prisma+postgres://accelerate.example/?api_key=test";
+		process.env.DATABASE_URL = "postgresql://localhost/registry";
+		const options = prismaConnectionOptions();
+		expect(options).not.toHaveProperty("accelerateUrl");
+		expect(PrismaPg).toHaveBeenCalledWith(
+			expect.objectContaining({
+				connectionString: "postgresql://localhost/registry",
+			}),
+			{ schema: "public" },
+		);
+	});
+
 	it.each([
-		"prisma://accelerate.example/?api_key=test",
-		"prisma+postgres://accelerate.example/?api_key=test",
-	])("keeps %s on Accelerate without a PostgreSQL adapter", (url) => {
-		expect(prismaConnectionOptions(url)).toEqual({ accelerateUrl: url });
-		expect(PrismaPg).not.toHaveBeenCalled();
+		"DATABASE_URL_POOLED",
+		"PRISMA_DATABASE_URL",
+		"DATABASE_URL",
+	] as const)(
+		"refuses to fall back to PG* defaults when only %s holds an Accelerate URL",
+		(key) => {
+			process.env[key] = "prisma+postgres://accelerate.example/?api_key=test";
+			expect(() => prismaConnectionOptions()).toThrow(/Accelerate URLs/);
+			expect(PrismaPg).not.toHaveBeenCalled();
+		},
+	);
+
+	it("drops statement_timeout for pooled hosts, which reject it at startup", () => {
+		const url =
+			"postgres://u:p@pooled.db.prisma.io:5432/postgres?sslmode=require&statement_timeout=10000";
+		prismaConnectionOptions(url);
+		expect(PrismaPg).toHaveBeenCalledWith(
+			expect.objectContaining({
+				connectionString:
+					"postgres://u:p@pooled.db.prisma.io:5432/postgres?sslmode=require",
+				statement_timeout: undefined,
+			}),
+			{ schema: "public" },
+		);
+	});
+
+	it.each([
+		[
+			"an upper-case pooled host",
+			"postgres://u:p@POOLED.DB.PRISMA.IO/postgres",
+		],
+		["the DATABASE_URL_POOLED host", "postgres://u:p@pgb.internal/postgres"],
+	])("treats %s as pooled", (_name, url) => {
+		process.env.DATABASE_URL_POOLED = "postgres://u:p@pgb.internal/postgres";
+		prismaConnectionOptions(url);
+		expect(PrismaPg).toHaveBeenCalledWith(
+			expect.objectContaining({ statement_timeout: undefined }),
+			{ schema: "public" },
+		);
 	});
 
 	it("keeps pool and schema settings when using PostgreSQL", () => {
@@ -33,7 +124,6 @@ describe("Prisma 7 connection options", () => {
 			"postgresql://localhost/registry?connection_limit=12&pool_timeout=7&statement_timeout=1500&schema=custom";
 		const options = prismaConnectionOptions(url);
 		expect(options.adapter).toBeDefined();
-		expect(options.accelerateUrl).toBeUndefined();
 		expect(PrismaPg).toHaveBeenCalledWith(
 			{
 				connectionString: url,
@@ -51,7 +141,7 @@ describe("Prisma 7 connection options", () => {
 		expect(PrismaPg).toHaveBeenCalledWith(
 			{
 				connectionString: undefined,
-				max: 20,
+				max: 5,
 				connectionTimeoutMillis: 5000,
 				idleTimeoutMillis: 10000,
 				statement_timeout: 10000,

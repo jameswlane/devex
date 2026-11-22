@@ -3,6 +3,7 @@ package executor_test
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/installer/executor"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 func TestExecutor(t *testing.T) {
@@ -21,7 +23,7 @@ func TestExecutor(t *testing.T) {
 
 var _ = BeforeEach(func() {
 	home := GinkgoT().TempDir()
-	GinkgoT().Setenv("HOME", home)
+	testhelper.SetProfileEnv(GinkgoT(), home)
 	GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", filepath.Join(home, "team"))
 	previous := security.SystemOrgPolicyPath
 	security.SystemOrgPolicyPath = filepath.Join(home, "system-policy.yaml")
@@ -172,7 +174,11 @@ var _ = Describe("Executor", func() {
 		})
 
 		It("should execute and return output", func() {
-			cmd, err := exec.Execute(ctx, "echo Hello World")
+			command := "echo Hello World"
+			if runtime.GOOS == "windows" {
+				command = "cmd /c echo Hello World"
+			}
+			cmd, err := exec.Execute(ctx, command)
 			Expect(err).ToNot(HaveOccurred())
 
 			output, err := cmd.Output()
@@ -184,12 +190,19 @@ var _ = Describe("Executor", func() {
 			timeoutCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 			defer cancel()
 
-			cmd, err := exec.Execute(timeoutCtx, "sleep 5")
+			command := "sleep 5"
+			if runtime.GOOS == "windows" {
+				command = "ping -n 6 127.0.0.1"
+			}
+			cmd, err := exec.Execute(timeoutCtx, command)
 			Expect(err).ToNot(HaveOccurred())
 
 			err = cmd.Run()
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("signal: killed"))
+			Expect(timeoutCtx.Err()).To(Equal(context.DeadlineExceeded))
+			if runtime.GOOS != "windows" {
+				Expect(err.Error()).To(ContainSubstring("signal: killed"))
+			}
 		})
 	})
 })

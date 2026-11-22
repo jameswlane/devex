@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -114,7 +115,11 @@ var _ = Describe("Log Levels", func() {
 	})
 
 	It("writes file-only errors to the log file but not stderr in debug mode", func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		GinkgoT().Setenv("USERPROFILE", home)
+		GinkgoT().Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+		GinkgoT().Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 
 		originalStderr := os.Stderr
 		r, w, err := os.Pipe()
@@ -220,7 +225,11 @@ var _ = Describe("Runtime output policy", func() {
 		Expect(stderr).NotTo(ContainSubstring("suppressed-warning"))
 	})
 	It("mirrors resolved debug logs to stderr and stops mirroring when quiet is enabled", func() {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		GinkgoT().Setenv("USERPROFILE", home)
+		GinkgoT().Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+		GinkgoT().Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 		Expect(log.InitFileLogger(false)).To(Succeed())
 		defer log.Close()
 		stderr := capture(&os.Stderr, func() {
@@ -233,7 +242,11 @@ var _ = Describe("Runtime output policy", func() {
 		Expect(stderr).NotTo(ContainSubstring("quiet-info-marker"))
 	})
 	DescribeTable("filters file logging", func(level string, quiet bool, expected []string) {
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		GinkgoT().Setenv("USERPROFILE", home)
+		GinkgoT().Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+		GinkgoT().Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 		Expect(log.InitFileLogger(false)).To(Succeed())
 		log.Configure(level, quiet)
 		log.Debug("file-debug-marker")

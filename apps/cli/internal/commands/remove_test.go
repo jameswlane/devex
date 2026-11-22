@@ -11,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -29,7 +30,7 @@ var _ = Describe("Remove Command", func() {
 		var err error
 		tempDir, err = os.MkdirTemp("", "devex-remove-test")
 		Expect(err).ToNot(HaveOccurred())
-		GinkgoT().Setenv("HOME", tempDir)
+		testhelper.SetProfileEnv(GinkgoT(), tempDir)
 
 		settings = &config.CrossPlatformSettings{
 			HomeDir: tempDir,

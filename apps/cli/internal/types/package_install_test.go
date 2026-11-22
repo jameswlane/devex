@@ -3,6 +3,7 @@ package types_test
 import (
 	"context"
 	"os/exec"
+	"runtime"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
@@ -29,6 +30,9 @@ all_platforms:
 		Expect(legacy.PackageQueryCommand()).To(Equal("snap install 'nvim' 'ghostty'"))
 	})
 	It("renders literal structured arguments safely for the streaming installer", func() {
+		if runtime.GOOS == "windows" {
+			Skip("POSIX sh argument quoting test requires sh")
+		}
 		literal := `track with spaces;$(printf injected)'"`
 		config := types.OSConfig{InstallMethod: "snap", Packages: []string{"nvim"}, Options: []string{"--channel", literal}}
 		arguments, err := config.ShellPackageArguments()

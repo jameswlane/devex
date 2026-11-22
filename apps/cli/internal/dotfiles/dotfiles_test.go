@@ -3,11 +3,13 @@ package dotfiles_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/dotfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("Dotfiles", func() {
@@ -23,7 +25,12 @@ var _ = Describe("Dotfiles", func() {
 		Entry("https", "https://github.com/me/dotfiles", true),
 		Entry("ssh URL with a user", "ssh://git@github.com/me/dotfiles.git", true),
 		Entry("scp-like", "git@github.com:me/dotfiles.git", true),
-		Entry("absolute path", "/srv/dotfiles", true),
+		Entry("absolute path", func() string {
+			if runtime.GOOS == "windows" {
+				return `C:\srv\dotfiles`
+			}
+			return "/srv/dotfiles"
+		}(), true),
 		Entry("empty", "", false),
 		Entry("option injection", "--upload-pack=touch /tmp/x", false),
 		Entry("https token", "https://me:ghp_secret@github.com/me/dotfiles", false),
@@ -60,7 +67,7 @@ var _ = Describe("Dotfiles", func() {
 
 		BeforeEach(func() {
 			home = GinkgoT().TempDir()
-			GinkgoT().Setenv("HOME", home)
+			testhelper.SetProfileEnv(GinkgoT(), home)
 			for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "DEVEX_CONFIG_DIR", "DEVEX_DATA_DIR", "DEVEX_STATE_DIR", "DEVEX_CACHE_DIR"} {
 				GinkgoT().Setenv(key, "")
 			}
@@ -92,7 +99,12 @@ var _ = Describe("Dotfiles", func() {
 			Entry("missing source", "files:\n  - source: nope\n    destination: ~/.x\n", "nope"),
 			Entry("destination outside home", "files:\n  - source: zsh/.zshrc\n    destination: /etc/zshrc\n", "inside your home directory"),
 			Entry("destination traversal", "files:\n  - source: zsh/.zshrc\n    destination: ~/../other/.zshrc\n", "traversal"),
-			Entry("DevEx directory", "files:\n  - source: zsh/.zshrc\n    destination: ~/.local/share/devex/x\n", "DevEx's own directory"),
+			Entry("DevEx directory", func() string {
+				if runtime.GOOS == "windows" {
+					return "files:\n  - source: zsh/.zshrc\n    destination: ~/AppData/Local/DevEx/x\n"
+				}
+				return "files:\n  - source: zsh/.zshrc\n    destination: ~/.local/share/devex/x\n"
+			}(), "DevEx's own directory"),
 			Entry("duplicate destination", "files:\n  - source: zsh/.zshrc\n    destination: ~/.zshrc\n  - source: zsh/.zshrc\n    destination: ~/.zshrc\n", "listed twice"),
 			Entry("no files", "files: []\n", "lists no files"),
 		)
@@ -105,7 +117,7 @@ var _ = Describe("Dotfiles", func() {
 
 	It("records, reads and clears the sync state", func() {
 		home := GinkgoT().TempDir()
-		GinkgoT().Setenv("HOME", home)
+		testhelper.SetProfileEnv(GinkgoT(), home)
 		_, found, err := dotfiles.ReadState(home)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(found).To(BeFalse())
