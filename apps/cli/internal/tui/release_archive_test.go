@@ -21,6 +21,7 @@ var _ = Describe("Streaming release archive installs", func() {
 		Expect(validateDownloadURL(osConfig.DownloadURL)).To(HaveOccurred(), "the script allowlist rejects GitHub release URLs")
 		// Clearing the pin stops the archive installer before any download.
 		osConfig.Verification.SHA256 = ""
+		osConfig.Destination = GinkgoT().TempDir() // absolute on every OS
 
 		installer := &StreamingInstaller{ctx: context.Background(), config: DefaultInstallerConfig()}
 		err = installer.executeCurlPipeInstall(context.Background(), app, &osConfig)
