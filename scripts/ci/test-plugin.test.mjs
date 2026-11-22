@@ -163,11 +163,14 @@ function testPluginsJob() {
  * @returns {string}
  */
 function testPluginRun(job) {
-	// Stop at the step's own run key, not a later step's.
-	const match =
-		/- name: Test plugin [^\n]*\n(?:[ \t]+(?![ \t]|run:)[^\n]*\n)*?[ \t]+run: ([^\n]+)\n/.exec(
-			job,
-		);
+	// Slice the "Test plugin" step and stop at the next "- " step boundary so a
+	// later step's run key can never be captured.
+	const stepStart = job.search(/^ {6}- name: Test plugin /m);
+	assert.ok(stepStart >= 0, "CI workflow defines a Test plugin step");
+	const rest = job.slice(stepStart);
+	const nextStep = rest.slice(1).search(/\n {6}- /);
+	const step = nextStep === -1 ? rest : rest.slice(0, nextStep + 1);
+	const match = /^ {8}run: ([^\n]+)$/m.exec(step);
 	assert.ok(match, "Test plugin step has a single-line run key");
 	return match[1];
 }
@@ -181,6 +184,24 @@ describe("CI workflow", () => {
 		);
 		assert.doesNotMatch(job, /_test\.go/);
 		assert.doesNotMatch(job, /\|\| echo "Linting failed/);
+	});
+
+	it("does not capture a later step's run key when the Test plugin step lacks one", () => {
+		const syntheticJob = [
+			"  test-plugins:",
+			"    steps:",
+			"      - name: Test plugin example",
+			"        env:",
+			"          PLUGIN_NAME: example",
+			"      - name: Disabled fallback",
+			"        if: false",
+			'        run: bash scripts/ci/test-plugin.sh "$PLUGIN_NAME"',
+			"",
+		].join("\n");
+		assert.throws(
+			() => testPluginRun(syntheticJob),
+			/Test plugin step has a single-line run key/,
+		);
 	});
 
 	it("passes the matrix value through the environment, not run text", () => {
