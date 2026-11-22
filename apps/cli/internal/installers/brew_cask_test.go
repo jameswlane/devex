@@ -8,6 +8,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,6 +17,12 @@ import (
 
 var _ = Describe("Homebrew Cask dispatch", func() {
 	It("carries shipped Cask selections through the real Brew plugin to native argv", func() {
+		if sdk.NewPrivilegeResolver().Elevated {
+			// Brew runs user-scoped operations; an elevated process (such as
+			// GitHub Actions windows-latest) cannot de-elevate by security
+			// policy. Linux, macOS, and non-elevated Windows runs cover this.
+			Skip("the Brew plugin subprocess requires a non-elevated process for user-scope operations")
+		}
 		path := testhelper.Executable(GinkgoT().TempDir(), "brew-plugin")
 		build := exec.CommandContext(context.Background(), "go", "build", "-o", path, ".")
 		build.Dir = "../../../../packages/package-manager-brew"
