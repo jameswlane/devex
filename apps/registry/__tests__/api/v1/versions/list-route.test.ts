@@ -170,7 +170,6 @@ describe("GET /api/v1/plugins/[id]/versions", () => {
 		expect(response.status).toBe(200);
 		expect(mockPrisma.plugin.findMany).toHaveBeenCalledWith({
 			where: { OR: [{ name: "apt" }, { shortName: "apt" }] },
-			take: 2,
 		});
 	});
 

@@ -77,8 +77,9 @@ export async function findPluginByNameOrShortName(
 	const matches = await safeDatabase(
 		() =>
 			prisma.plugin.findMany({
+				// No take limit: shortName is not unique, and a limit could drop
+				// the exact name match behind two short-name rows.
 				where: { OR: [{ name: pluginName }, { shortName: pluginName }] },
-				take: 2,
 			}),
 		{
 			operation: "fetch-plugin-by-name-or-shortname",

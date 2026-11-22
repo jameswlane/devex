@@ -58,8 +58,25 @@ describe("findPluginByNameOrShortName", () => {
 					{ shortName: "package-manager-apt" },
 				],
 			},
-			take: 2,
 		});
+	});
+
+	it("keeps the exact name match when two other plugins share it as a short name", async () => {
+		const real = plugin({ latestVersion: "1.2.0" });
+		const otherA = plugin({
+			id: "a",
+			name: "a",
+			shortName: "package-manager-apt",
+		});
+		const otherB = plugin({
+			id: "b",
+			name: "b",
+			shortName: "package-manager-apt",
+		});
+		prisma.plugin.findMany.mockResolvedValue([otherA, otherB, real]);
+		await expect(
+			findPluginByNameOrShortName("package-manager-apt"),
+		).resolves.toBe(real);
 	});
 
 	it("falls back to the short name", async () => {
