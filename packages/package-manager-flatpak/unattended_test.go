@@ -22,6 +22,8 @@ var _ = Describe("Unattended Flatpak execution", func() {
 		Expect(plugin.Execute("remote-remove", []string{"example"})).To(Succeed())
 		Expect(recorder.Calls("flatpak")).To(Equal([]sdktest.Call{
 			{Args: []string{"list", "--app"}},
+			{Args: []string{"remote-list", "--system", "--columns=name"}},
+			{Args: []string{"remote-list", "--user", "--columns=name"}},
 			{Args: []string{"install", "--noninteractive", "--system", "-y", "org.example.App"}, ElevationRequested: true},
 			{Args: []string{"list", "--app"}},
 			{Args: []string{"uninstall", "--noninteractive", "-y", "org.example.App"}},

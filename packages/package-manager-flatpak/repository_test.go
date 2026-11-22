@@ -63,3 +63,38 @@ var _ = Describe("Flathub repository setup", func() {
 		}))
 	})
 })
+
+var _ = Describe("Flatpak install scope", func() {
+	BeforeEach(func() {
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "")
+		GinkgoT().Setenv("CI", "")
+	})
+
+	It("installs into the system installation with elevation when it has Flathub", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "flatpak")
+		recorder.Script("flatpak", []string{"remote-list", "--system", "--columns=name"}, sdktest.Response{Stdout: "flathub\n"})
+
+		Expect(main.NewFlatpakPlugin().Execute("install", []string{"org.example.App"})).To(Succeed())
+
+		Expect(recorder.Calls("flatpak")).To(Equal([]sdktest.Call{
+			{Args: []string{"list", "--app"}},
+			{Args: []string{"remote-list", "--system", "--columns=name"}},
+			{Args: []string{"install", "--system", "-y", "org.example.App"}, ElevationRequested: true},
+		}))
+	})
+
+	It("installs into the user installation without elevation when only it has Flathub", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "flatpak")
+		recorder.Script("flatpak", []string{"remote-list", "--system", "--columns=name"}, sdktest.Response{Stdout: "fedora\n"})
+		recorder.Script("flatpak", []string{"remote-list", "--user", "--columns=name"}, sdktest.Response{Stdout: "flathub\n"})
+
+		Expect(main.NewFlatpakPlugin().Execute("install", []string{"org.example.App"})).To(Succeed())
+
+		Expect(recorder.Calls("flatpak")).To(Equal([]sdktest.Call{
+			{Args: []string{"list", "--app"}},
+			{Args: []string{"remote-list", "--system", "--columns=name"}},
+			{Args: []string{"remote-list", "--user", "--columns=name"}},
+			{Args: []string{"install", "--user", "-y", "org.example.App"}},
+		}))
+	})
+})
