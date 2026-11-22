@@ -43,14 +43,11 @@ windows:
 linux:
   install_method: curlpipe
   installed_binary: lazygit
-  download_url: https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_*_Linux_x86_64.tar.gz
+  download_url: https://github.com/jesseduffield/lazygit/releases/download/v0.66.3/lazygit_0.66.3_linux_x86_64.tar.gz
   destination: /usr/local/bin
+  verification:
+    sha256: 0a23f429a95f0d09db298b3c291536d818de066aa5a85c255806f0490ff6656b
   official_support: true
-  pre_install:
-    - shell: >-
-        LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": *"v\K[^"]*') && curl -fLo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && tar xf lazygit.tar.gz lazygit
-  post_install:
-    - shell: sudo install lazygit -D -t /usr/local/bin/ && rm -f lazygit.tar.gz lazygit
   alternatives:
     - install_method: apt
       install_command: lazygit

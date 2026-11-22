@@ -118,18 +118,16 @@ windows:
 linux:
   install_method: curlpipe
   installed_binary: nvim
-  download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+  download_url: https://github.com/neovim/neovim/releases/download/v0.12.6/nvim-linux-x86_64.tar.gz
   destination: /opt
+  verification:
+    sha256: 474430d53e6264f6d6dd18db42d6dc9df3a1b56ca9e88a325bbf860e1a811d87
   official_support: true
   dependencies:
     - git
     - curl
     - fzf
-  pre_install:
-    - shell: curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
-    - shell: sudo rm -rf /opt/nvim
   post_install:
-    - shell: sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz && rm -f nvim-linux-x86_64.tar.gz
     - path: [/opt/nvim-linux-x86_64/bin]
   alternatives:
     - install_method: apt

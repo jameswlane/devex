@@ -43,6 +43,7 @@ type AppConfig struct {
 	DockerOptions      DockerOptions      `mapstructure:"docker_options" yaml:"docker_options"`
 	DownloadURL        string             `mapstructure:"download_url" yaml:"download_url"`
 	InstallDir         string             `mapstructure:"install_dir" yaml:"install_dir"`
+	InstalledBinary    string             `mapstructure:"installed_binary" yaml:"installed_binary,omitempty"`
 	Symlink            string             `mapstructure:"symlink" yaml:"symlink"`
 	ShellUpdates       []string           `mapstructure:"shell_updates" yaml:"shell_updates"`
 }
@@ -694,6 +695,7 @@ func (app *CrossPlatformApp) ToLegacyAppConfig() AppConfig {
 		DownloadURL:        osConfig.DownloadURL,
 		Verification:       osConfig.Verification,
 		InstallDir:         osConfig.Destination,
+		InstalledBinary:    osConfig.InstalledBinary,
 		SystemRequirements: osConfig.SystemRequirements,
 	}
 }
