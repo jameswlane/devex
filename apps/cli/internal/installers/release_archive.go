@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -156,7 +157,12 @@ func InstallReleaseArchive(ctx context.Context, app types.AppConfig) error {
 	if output, err := runSystemCommand(ctx, "mkdir", "-p", app.InstallDir); err != nil {
 		return fmt.Errorf("failed to create %s: %w: %s", app.InstallDir, err, strings.TrimSpace(output))
 	}
-	if output, err := runSystemCommand(ctx, "tar", "--no-same-owner", "--no-overwrite-dir", "-xf", archive, "-C", app.InstallDir); err != nil {
+	tarArgs := []string{"--no-same-owner", "-xf", archive, "-C", app.InstallDir}
+	if runtime.GOOS == "linux" {
+		// GNU tar only: keep the existing destination's mode and owner.
+		tarArgs = append([]string{"--no-overwrite-dir"}, tarArgs...)
+	}
+	if output, err := runSystemCommand(ctx, "tar", tarArgs...); err != nil {
 		return fmt.Errorf("failed to extract %s into %s: %w: %s", path.Base(parsed.Path), app.InstallDir, err, strings.TrimSpace(output))
 	}
 	return nil
