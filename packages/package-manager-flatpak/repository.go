@@ -14,37 +14,46 @@ func (f *FlatpakInstaller) handleAddFlathub(ctx context.Context, args []string) 
 
 	f.logger.Printf("Adding Flathub repository...\n")
 
-	// Check if Flathub is already added
-	output, err := sdk.ExecCommandOutputWithContext(ctx, "flatpak", "remote-list")
+	scopeFlag := "--system"
+	useSudo := true
+	for _, arg := range args {
+		if arg == "--user" {
+			scopeFlag = "--user"
+			useSudo = false
+			break
+		}
+	}
+
+	// Check if Flathub is already added in the target installation
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "flatpak", "remote-list", scopeFlag, "--columns=name")
 	if err != nil {
 		f.logger.Warning("Failed to check existing remotes: %v", err)
-	} else if strings.Contains(output, "flathub") {
+	} else if hasRemoteName(output, "flathub") {
 		f.logger.Success("Flathub repository already configured")
 		return nil
 	}
 
 	// Add Flathub remote
 	flathubURL := "https://dl.flathub.org/repo/flathub.flatpakrepo"
+	installArgs := []string{"remote-add", "--if-not-exists", scopeFlag, "flathub", flathubURL}
 
-	// Determine installation level (user vs system)
-	installArgs := []string{"remote-add", "--if-not-exists", "flathub", flathubURL}
-
-	// Check for explicit user/system flags
-	systemWide := false
-	for _, arg := range args {
-		if arg == "--system" {
-			systemWide = true
-			installArgs = []string{"remote-add", "--if-not-exists", "--system", "flathub", flathubURL}
-			break
-		}
-	}
-
-	if err := sdk.ExecCommandWithContext(ctx, systemWide, "flatpak", installArgs...); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, useSudo, "flatpak", installArgs...); err != nil {
 		return fmt.Errorf("failed to add Flathub repository: %w", err)
 	}
 
 	f.logger.Success("Flathub repository added successfully")
 	return nil
+}
+
+// hasRemoteName reports whether output from `flatpak remote-list --columns=name`
+// contains a line matching target exactly after trimming whitespace.
+func hasRemoteName(output, target string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // handleRemoteAdd adds a new remote repository

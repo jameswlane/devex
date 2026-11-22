@@ -139,13 +139,13 @@ func (f *FlatpakInstaller) handleInstall(ctx context.Context, args []string) err
 		// Build install command
 		var installCmd []string
 		if remote != "" {
-			installCmd = []string{"install", "-y", remote, appID}
+			installCmd = []string{"install", "--system", "-y", remote, appID}
 		} else {
-			installCmd = []string{"install", "-y", appID}
+			installCmd = []string{"install", "--system", "-y", appID}
 		}
 
 		f.logger.Printf("Installing %s...\n", appID)
-		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", unattendedFlatpakArgs(installCmd)...); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, true, "flatpak", unattendedFlatpakArgs(installCmd)...); err != nil {
 			return fmt.Errorf("failed to install %s: %w", appID, err)
 		}
 	}
