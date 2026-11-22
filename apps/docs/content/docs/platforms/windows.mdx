@@ -93,10 +93,12 @@ packages by exact winget identifier (`winget install --id <id> --exact`).
 `devex upgrade` upgrades only the selected packages.
 
 DevEx does not elevate on Windows. Run it from a regular terminal for the
-default and `--scope=user` installs; winget then shows a UAC prompt for any
-installer that needs administrator rights, and a declined prompt is reported as
-an authorization error. For `--scope=machine`, run DevEx from a terminal
-opened with **Run as administrator**; this is also the form to use unattended.
+default and `--scope=user` installs; in interactive sessions, winget shows a
+UAC prompt for any installer that needs administrator rights, and a declined
+prompt is reported as an authorization error. For `--scope=machine`, run DevEx
+from a terminal opened with **Run as administrator**. In unattended mode
+(`DEVEX_UNATTENDED=1` or `CI=true`), pass an explicit `--scope=user` or
+`--scope=machine` so winget never blocks on a UAC prompt.
 
 ```yaml
 # applications/development/ripgrep.yaml

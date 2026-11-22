@@ -58,7 +58,7 @@ func (r request) scopeArgs() []string {
 	return []string{"--scope", r.scope}
 }
 
-// privilege is system scope only for an explicit machine-scope change. Without
+// privilege is system scope only for an explicit machine-scope request. Without
 // a scope winget runs as the current user and asks Windows to elevate any
 // installer that needs it, so a declined prompt is reported by explain.
 func (r request) privilege() sdk.OperationScope {

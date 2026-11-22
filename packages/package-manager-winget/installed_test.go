@@ -31,6 +31,16 @@ var _ = Describe("winget installed-package queries", func() {
 		Expect(plugin.Execute("is-installed", []string{"Git.Git"})).To(Succeed())
 	})
 
+	It("queries machine-scope packages at system scope", func() {
+		machineQuery := argv([]string{"list", "--id", "Docker.DockerDesktop", "--exact", "--scope", "machine"}, agree)
+		recorder.Script("winget", machineQuery, sdktest.Response{ExitCode: exitNotFound})
+		err := plugin.Execute("is-installed", []string{"--scope=machine", "Docker.DockerDesktop"})
+		var absent *sdk.NotInstalledError
+		Expect(errors.As(err, &absent)).To(BeTrue(), "expected NotInstalledError, got %v", err)
+		Expect(absent.Packages).To(Equal([]string{"Docker.DockerDesktop"}))
+		Expect(recorder.Calls("winget")).To(Equal([]sdktest.Call{{Args: machineQuery, ElevationRequested: true}}))
+	})
+
 	It("reports winget's no-installed-package answer with the SDK status", func() {
 		recorder.Script("winget", query("sharkdp.bat"), sdktest.Response{ExitCode: exitNotFound, Stdout: "No installed package found matching input criteria.\n"})
 		err := plugin.Execute("is-installed", []string{"sharkdp.bat"})

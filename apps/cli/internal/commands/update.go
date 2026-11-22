@@ -16,7 +16,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
-	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -165,7 +164,7 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 			grouped[c.InstallMethod] = nil
 			continue
 		}
-		packages, err := installers.CatalogPackageArguments(c.InstallMethod, c.InstallCommand)
+		packages, err := maintenancePackages(c)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", app.Name, err))
 			continue
@@ -207,6 +206,22 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 		plan = append(plan, packageMaintenanceOperation{manager: manager, args: args})
 	}
 	return plan, failures
+}
+
+// maintenancePackages resolves identifiers the way installation does, from
+// install_command or from packages and options, so an upgrade targets the
+// packages that were installed. Zypper keeps its --type selection, which the
+// identifier check refuses rather than upgrading a different kind of package.
+// Other options, such as a winget --scope, only affect installation.
+func maintenancePackages(c types.OSConfig) ([]string, error) {
+	request, err := types.ResolvePackageInstall(c.InstallMethod, c.InstallCommand, c.Packages, c.Options)
+	if err != nil {
+		return nil, err
+	}
+	if c.InstallMethod == "zypper" {
+		return append(request.Options, request.Packages...), nil
+	}
+	return request.Packages, nil
 }
 
 // maintenanceNativeCommands documents the audited plugin contracts.

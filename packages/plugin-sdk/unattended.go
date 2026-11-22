@@ -24,9 +24,19 @@ func WithUnattended(ctx context.Context) context.Context {
 	return context.WithValue(ctx, unattendedContextKey{}, true)
 }
 
+// IsUnattended reports whether ctx or the process environment requests
+// unattended execution without user prompts.
+func IsUnattended(ctx context.Context) bool {
+	return unattendedContext(ctx)
+}
+
 func unattendedContext(ctx context.Context) bool {
-	enabled, _ := ctx.Value(unattendedContextKey{}).(bool)
-	return enabled || Unattended()
+	if ctx != nil {
+		if enabled, _ := ctx.Value(unattendedContextKey{}).(bool); enabled {
+			return true
+		}
+	}
+	return Unattended()
 }
 
 // unattendedInput returns the stdin an unattended operation may read. It closes

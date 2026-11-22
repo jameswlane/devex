@@ -1,6 +1,6 @@
 # DevEx Windows Package Manager (winget) Plugin
 
-[![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
+[![License](https://img.shields.io/github/license/jameswlane/devex)](../../LICENSE)
 
 Installs, checks, upgrades, and removes Windows packages for DevEx through
 [winget](https://learn.microsoft.com/windows/package-manager/winget/), the
@@ -17,11 +17,14 @@ identifier. This plugin is experimental and runs only on Windows.
 - **A terminal that matches the scope.** DevEx does not elevate or de-elevate
   on Windows:
   - Without `--scope`, or with `--scope=user`, run DevEx from a **regular**
-    (non-elevated) terminal. winget then asks Windows to elevate any installer
-    that needs it, which shows a UAC prompt.
+    (non-elevated) terminal. In interactive sessions, winget asks Windows to
+    elevate any installer that needs it, which shows a UAC prompt.
   - With `--scope=machine`, run DevEx from a terminal opened with **Run as
-    administrator**. No UAC prompt appears, so this is the form to use for
-    unattended installs.
+    administrator**. No UAC prompt appears.
+  - In unattended mode (`DEVEX_UNATTENDED=1` or `CI=true`), `install`, `remove`,
+    and `upgrade` require an explicit `--scope=user` (regular terminal) or
+    `--scope=machine` (Administrator terminal) so winget never blocks on a UAC
+    prompt.
 
 When winget is missing, every operation fails with
 `winget is not installed or not on PATH; install or update App Installer from the Microsoft Store (https://aka.ms/getwinget), then open a new terminal and retry`.
@@ -58,7 +61,7 @@ names the package and keeps winget's exit status.
 | Command | Native command | Privilege |
 | --- | --- | --- |
 | `install` | `winget install --id <id> --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity --no-upgrade [--scope <scope>]` | user; system with `--scope=machine` |
-| `is-installed` | `winget list --id <id> --exact [--scope <scope>] --accept-source-agreements --disable-interactivity`, once for each identifier; reports missing packages with the SDK's not-installed status | user |
+| `is-installed` | `winget list --id <id> --exact [--scope <scope>] --accept-source-agreements --disable-interactivity`, once for each identifier; reports missing packages with the SDK's not-installed status | user; system with `--scope=machine` |
 | `remove` | `winget uninstall --id <id> --exact --silent --accept-source-agreements --disable-interactivity [--scope <scope>]` | user; system with `--scope=machine` |
 | `update` | `winget source update --disable-interactivity`: refreshes source metadata, changes no packages | user |
 | `upgrade` | `winget upgrade --id <id> --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity [--scope <scope>]`; only the given packages, never every outdated package | user; system with `--scope=machine` |
@@ -83,9 +86,8 @@ starts with `-` are rejected before winget runs.
 
 `--scope=user` or `--scope=machine` (also `--scope user`) may appear once,
 anywhere in the arguments, and applies to every identifier in the call. For
-`install`, `remove`, and `upgrade`, `--scope=machine` runs at system scope and
-needs an elevated terminal. For `is-installed` it only filters the query and
-always runs at user scope.
+`install`, `is-installed`, `remove`, and `upgrade`, `--scope=machine` runs at
+system scope and needs an elevated terminal.
 
 ### Results and exit codes
 
@@ -138,17 +140,17 @@ windows:
   uninstall_command: Docker.DockerDesktop
 ```
 
-The scope applies to installation only. Checks, upgrades, and removals use the
-identifier alone, and winget finds the package in either scope; a
-machine-scope uninstaller then raises its own UAC prompt.
+The CLI keeps `--scope` for installation, installed-state checks, and removal so
+a machine-scope package is checked and removed at the same system scope that
+installed it.
 
 ## Tests
 
-The command contracts (`go test ./...` on Linux or macOS) replace winget with
-recorder fakes from the SDK and pin each operation's exact argv, privilege
-scope, input validation, cancellation, and result-code handling. Fakes are
-shell scripts, so on Windows `go test ./...` runs only the exit-status specs
-and the smoke test below.
+The command contracts run on Linux and macOS (using SDK recorder fakes) and
+natively on Windows (using a compiled fake `winget.exe` and the Windows
+privilege adapter, without `/bin/sh`). They pin each operation's exact argv,
+privilege scope, input validation, cancellation, unattended guard, and
+result-code handling.
 
 ## Windows smoke test
 
@@ -176,4 +178,4 @@ regular terminal and choose **No** at the UAC prompt.
 
 ## License
 
-Licensed under the [Apache-2.0 License](../../../LICENSE).
+Licensed under the [Apache-2.0 License](../../LICENSE).

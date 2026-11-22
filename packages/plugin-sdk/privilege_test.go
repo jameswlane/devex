@@ -194,4 +194,19 @@ var _ = Describe("Operation privilege contract", func() {
 	It("leaves legacy command metadata unspecified", func() {
 		Expect(sdk.PluginOperationPrivilege(sdk.PluginInfo{Commands: []sdk.PluginCommand{{Name: "install"}}}, []string{"install"})).To(BeNil())
 	})
+	It("selects flag-specific launch privileges before falling back to the command default", func() {
+		userScope := &sdk.OperationPrivilege{Scope: sdk.ScopeUser}
+		systemScope := &sdk.OperationPrivilege{Scope: sdk.ScopeSystem}
+		info := sdk.PluginInfo{Commands: []sdk.PluginCommand{{
+			Name:           "install",
+			Privilege:      userScope,
+			FlagPrivileges: map[string]*sdk.OperationPrivilege{"--scope=machine": systemScope},
+		}}}
+		Expect(sdk.PluginOperationPrivilege(info, []string{"install", "Git.Git"})).To(Equal(userScope))
+		Expect(sdk.PluginOperationPrivilege(info, []string{"install", "--scope=user", "Git.Git"})).To(Equal(userScope))
+		Expect(sdk.PluginOperationPrivilege(info, []string{"install", "--scope=machine", "Docker.DockerDesktop"})).To(Equal(systemScope))
+		Expect(sdk.PluginOperationPrivilege(info, []string{"install", "--scope", "machine", "Docker.DockerDesktop"})).To(Equal(systemScope))
+		Expect(sdk.PluginOperationPrivilege(info, []string{"install", "--", "--scope=machine"})).To(Equal(userScope))
+		Expect(sdk.IsUnattended(sdk.WithUnattended(context.Background()))).To(BeTrue())
+	})
 })

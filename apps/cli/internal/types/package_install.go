@@ -252,8 +252,9 @@ func (a AppConfig) PackageQueryCommand() string {
 			}
 		}
 	}
-	if a.InstallMethod == "zypper" {
-		// Keep the package or pattern selection; it names what to query.
+	if a.InstallMethod == "zypper" || a.InstallMethod == "winget" {
+		// Keep zypper's package or pattern selection, which names what to
+		// query, and winget's scope, which checks at the scope that installed.
 		if request, err := ResolvePackageInstall(a.InstallMethod, "", a.Packages, a.Options); err == nil {
 			args = append(append([]string{}, request.Options...), args...)
 		}
@@ -266,10 +267,11 @@ func (a AppConfig) PackageQueryCommand() string {
 
 // WithKindSelector appends the app's typed kind selection to a legacy command
 // string that does not select a kind itself, so query and removal act on the
-// same kind that installation chose: Homebrew's --cask or --formula, or
-// Zypper's --type. Appending keeps "brew uninstall NAME" forms parseable.
+// same kind that installation chose: Homebrew's --cask or --formula, Zypper's
+// --type, or winget's --scope. Appending keeps "brew uninstall NAME" forms
+// parseable.
 func (a AppConfig) WithKindSelector(command string) string {
-	if (a.InstallMethod != "brew" && a.InstallMethod != "zypper") || strings.TrimSpace(command) == "" {
+	if (a.InstallMethod != "brew" && a.InstallMethod != "zypper" && a.InstallMethod != "winget") || strings.TrimSpace(command) == "" {
 		return command
 	}
 	tokens, err := splitPackageCommand(command)
@@ -301,6 +303,10 @@ func kindSelector(method string, tokens []string) string {
 			selector = token
 		case method == "zypper" && (token == "-t" || token == "--type") && i+1 < len(tokens):
 			selector = "--type=" + tokens[i+1]
+		case method == "winget" && strings.HasPrefix(token, "--scope="):
+			selector = token
+		case method == "winget" && token == "--scope" && i+1 < len(tokens):
+			selector = "--scope=" + tokens[i+1]
 		}
 	}
 	return selector

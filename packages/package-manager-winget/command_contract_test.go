@@ -100,7 +100,7 @@ var contracts = []operationContract{
 	{name: "is-installed", command: "is-installed", args: []string{"Git.Git"}, nativeArgv: [][]string{
 		argv([]string{"list", "--id", "Git.Git", "--exact"}, agree),
 	}},
-	{name: "machine-scope is-installed", command: "is-installed", args: []string{"--scope=machine", "Git.Git"}, nativeArgv: [][]string{
+	{name: "machine-scope is-installed", command: "is-installed", args: []string{"--scope=machine", "Git.Git"}, elevated: true, nativeArgv: [][]string{
 		argv([]string{"list", "--id", "Git.Git", "--exact", "--scope", "machine"}, agree),
 	}},
 }
@@ -135,10 +135,18 @@ var _ = Describe("winget command contracts", func() {
 		Expect(names).To(ConsistOf(sdktest.CommandNames(plugin.Info())))
 	})
 
-	It("advertises user scope for every command; only --scope=machine raises a change to system scope", func() {
-		for _, command := range plugin.Info().Commands {
+	It("advertises user scope by default and system scope for --scope=machine before plugin launch", func() {
+		info := plugin.Info()
+		scoped := map[string]bool{"install": true, "is-installed": true, "remove": true, "upgrade": true}
+		for _, command := range info.Commands {
 			Expect(command.Privilege).NotTo(BeNil(), command.Name)
 			Expect(command.Privilege.Scope).To(Equal(sdk.ScopeUser), command.Name)
+			if scoped[command.Name] {
+				Expect(sdk.PluginOperationPrivilege(info, []string{command.Name, "Git.Git"}).Scope).To(Equal(sdk.ScopeUser), command.Name)
+				Expect(sdk.PluginOperationPrivilege(info, []string{command.Name, "--scope=user", "Git.Git"}).Scope).To(Equal(sdk.ScopeUser), command.Name)
+				Expect(sdk.PluginOperationPrivilege(info, []string{command.Name, "--scope=machine", "Git.Git"}).Scope).To(Equal(sdk.ScopeSystem), command.Name)
+				Expect(sdk.PluginOperationPrivilege(info, []string{command.Name, "--scope", "machine", "Git.Git"}).Scope).To(Equal(sdk.ScopeSystem), command.Name)
+			}
 		}
 	})
 

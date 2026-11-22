@@ -285,6 +285,35 @@ jobs:
           # Pass the matrix value as data, never as script text.
           PLUGIN_NAME: ${{ matrix.plugin }}
         run: bash scripts/ci/test-plugin.sh "$PLUGIN_NAME"
+  test-winget-windows:
+    name: Test Plugins (package-manager-winget, Windows)
+    runs-on: windows-latest
+    needs: detect-changes
+    if: (needs.detect-changes.outputs.plugins == 'true' || needs.detect-changes.outputs.sdk == 'true') && contains(needs.detect-changes.outputs.plugin-matrix, '"package-manager-winget"')
+    defaults:
+      run:
+        working-directory: packages/package-manager-winget
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: packages/package-manager-winget/go.mod
+          cache-dependency-path: packages/package-manager-winget/go.sum
+      - name: Build and probe winget plugin
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go build -v -o devex-plugin-package-manager-winget.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\devex-plugin-package-manager-winget.exe --plugin-info
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test winget plugin on Windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go test -v ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   test-js:
     name: Test JS
     runs-on: ubuntu-latest

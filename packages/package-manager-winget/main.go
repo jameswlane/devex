@@ -26,9 +26,13 @@ type WingetPlugin struct {
 
 // NewWingetPlugin creates a new winget plugin.
 func NewWingetPlugin() *WingetPlugin {
-	// install, remove and upgrade run as the current, non-elevated user unless
-	// --scope=machine asks for system scope; see privilegeFor.
+	// Commands default to user scope; --scope=machine overrides the launch
+	// privilege to system scope before the SDK launches the plugin, and every
+	// winget call also passes the requested scope to sdk.RunOperation.
 	user := &sdk.OperationPrivilege{Scope: sdk.ScopeUser}
+	machinePrivilege := map[string]*sdk.OperationPrivilege{
+		"--scope=machine": {Scope: sdk.ScopeSystem},
+	}
 	info := sdk.PluginInfo{
 		Name:        "package-manager-winget",
 		Version:     version,
@@ -38,25 +42,28 @@ func NewWingetPlugin() *WingetPlugin {
 		Tags:        []string{"winget", "windows", "package-manager"},
 		Commands: []sdk.PluginCommand{
 			{
-				Name:        "install",
-				Description: "Install packages by winget package identifier",
-				Usage:       "Install packages (winget install --id <id> --exact --no-upgrade ...); --scope=machine needs an elevated terminal",
-				Flags:       map[string]string{"scope": "user or machine; machine runs at system scope"},
-				Privilege:   user,
+				Name:           "install",
+				Description:    "Install packages by winget package identifier",
+				Usage:          "Install packages (winget install --id <id> --exact --no-upgrade ...); --scope=machine needs an elevated terminal",
+				Flags:          map[string]string{"scope": "user or machine; machine runs at system scope"},
+				Privilege:      user,
+				FlagPrivileges: machinePrivilege,
 			},
 			{
-				Name:        "is-installed",
-				Description: "Check whether every package is installed",
-				Usage:       "Check installed packages by identifier (winget list --id <id> --exact)",
-				Flags:       map[string]string{"scope": "user or machine installed-package filter"},
-				Privilege:   user,
+				Name:           "is-installed",
+				Description:    "Check whether every package is installed",
+				Usage:          "Check installed packages by identifier (winget list --id <id> --exact); --scope=machine needs an elevated terminal",
+				Flags:          map[string]string{"scope": "user or machine; machine runs at system scope"},
+				Privilege:      user,
+				FlagPrivileges: machinePrivilege,
 			},
 			{
-				Name:        "remove",
-				Description: "Uninstall packages by winget package identifier",
-				Usage:       "Uninstall packages (winget uninstall --id <id> --exact ...); --scope=machine needs an elevated terminal",
-				Flags:       map[string]string{"scope": "user or machine; machine runs at system scope"},
-				Privilege:   user,
+				Name:           "remove",
+				Description:    "Uninstall packages by winget package identifier",
+				Usage:          "Uninstall packages (winget uninstall --id <id> --exact ...); --scope=machine needs an elevated terminal",
+				Flags:          map[string]string{"scope": "user or machine; machine runs at system scope"},
+				Privilege:      user,
+				FlagPrivileges: machinePrivilege,
 			},
 			{
 				Name:        "update",
@@ -65,11 +72,12 @@ func NewWingetPlugin() *WingetPlugin {
 				Privilege:   user,
 			},
 			{
-				Name:        "upgrade",
-				Description: "Upgrade selected packages",
-				Usage:       "Upgrade only the given packages (winget upgrade --id <id> --exact ...); --scope=machine needs an elevated terminal",
-				Flags:       map[string]string{"scope": "user or machine; machine runs at system scope"},
-				Privilege:   user,
+				Name:           "upgrade",
+				Description:    "Upgrade selected packages",
+				Usage:          "Upgrade only the given packages (winget upgrade --id <id> --exact ...); --scope=machine needs an elevated terminal",
+				Flags:          map[string]string{"scope": "user or machine; machine runs at system scope"},
+				Privilege:      user,
+				FlagPrivileges: machinePrivilege,
 			},
 			{
 				Name:        "search",
@@ -136,6 +144,12 @@ func (p *WingetPlugin) handleChange(ctx context.Context, command string, args []
 	}
 	if !p.IsAvailable() {
 		return fmt.Errorf("%s", errMissingWinget)
+	}
+	if sdk.IsUnattended(ctx) && request.scope == "" {
+		return sdk.NewAuthorizationRequiredError(
+			fmt.Sprintf("unattended winget %s requires an explicit --scope so winget never raises a UAC prompt; pass --scope=user for user-scope installers or run from an elevated terminal with --scope=machine", command),
+			nil,
+		)
 	}
 	verb := nativeVerb[command]
 	for _, id := range request.ids {

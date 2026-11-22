@@ -908,3 +908,46 @@ test("per-deployment VERCEL_URL does not bust Next.js build cache hashes", () =>
 		}).hash,
 	);
 });
+
+test("go-task dev-build keeps -race on windows/amd64 and omits it on windows/arm64", async () => {
+	const { resolveGoTask } = await import("./go-task.mjs");
+	assert.deepEqual(
+		resolveGoTask("dev-build", ["devex-plugin-package-manager-winget", "."], {
+			env: {},
+			platform: "win32",
+			arch: "x64",
+		}),
+		{
+			command: "go",
+			args: [
+				"build",
+				"-race",
+				"-o",
+				"devex-plugin-package-manager-winget",
+				".",
+			],
+		},
+	);
+	assert.deepEqual(
+		resolveGoTask("dev-build", ["devex-plugin-package-manager-winget", "."], {
+			env: {},
+			platform: "win32",
+			arch: "arm64",
+		}),
+		{
+			command: "go",
+			args: ["build", "-o", "devex-plugin-package-manager-winget", "."],
+		},
+	);
+	assert.deepEqual(
+		resolveGoTask("dev-build", ["devex-plugin-package-manager-winget", "."], {
+			env: { GOOS: "windows", GOARCH: "arm64" },
+			platform: "win32",
+			arch: "x64",
+		}),
+		{
+			command: "go",
+			args: ["build", "-o", "devex-plugin-package-manager-winget", "."],
+		},
+	);
+});

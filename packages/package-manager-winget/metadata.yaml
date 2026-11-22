@@ -4,7 +4,7 @@ type: package-manager
 description: Windows Package Manager (winget) installer for Windows 10 and 11
 version: 0.1.0
 author: DevEx Team
-license: MIT
+license: Apache-2.0
 # Repository Information
 repository: https://github.com/jameswlane/devex
 directory: packages/package-manager-winget

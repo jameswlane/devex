@@ -148,6 +148,29 @@ exit 1
 		Expect(run("upgrade", "Git", "--dry-run")).To(Succeed())
 		Expect(out.String()).To(ContainSubstring(`Native invocation: winget upgrade "Git.Git"`))
 	})
+	It("upgrades the packages a structured definition installs", func() {
+		structured := app("Docker", "winget", "")
+		structured.AllPlatforms.Packages = []string{"Docker.DockerDesktop"}
+		structured.AllPlatforms.Options = []string{"--scope=machine"}
+		legacy := app("Git", "winget", "Git.Git --scope machine")
+		settings.Terminal.Utilities = []types.CrossPlatformApp{structured, legacy}
+		Expect(run("upgrade", "Docker", "Git", "--dry-run")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "Docker.DockerDesktop" "Git.Git"` + "\n"))
+	})
+	It("refuses a structured Zypper pattern upgrade instead of upgrading a package", func() {
+		pattern := app("Devel", "zypper", "")
+		pattern.AllPlatforms.Packages = []string{"devel_basis"}
+		pattern.AllPlatforms.Options = []string{"--type=pattern"}
+		settings.Terminal.Utilities = []types.CrossPlatformApp{pattern}
+		Expect(run("upgrade", "Devel", "--dry-run")).To(MatchError(ContainSubstring("unsafe package identifier")))
+		Expect(out.String()).NotTo(ContainSubstring("Plugin invocation"))
+	})
+	It("rejects a definition that mixes packages and install_command", func() {
+		mixed := app("Git", "apt", "git")
+		mixed.AllPlatforms.Packages = []string{"git"}
+		settings.Terminal.Utilities = []types.CrossPlatformApp{mixed}
+		Expect(run("upgrade", "Git", "--dry-run")).To(MatchError(ContainSubstring("use packages or install_command, not both")))
+	})
 	It("reports unsupported managers without broadening package scope", func() {
 		settings.Terminal.Utilities = append(settings.Terminal.Utilities, app("World", "emerge", "world"))
 		Expect(run("upgrade")).To(MatchError(ContainSubstring("does not support safe upgrade")))

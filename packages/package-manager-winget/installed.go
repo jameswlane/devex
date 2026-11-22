@@ -22,8 +22,9 @@ func (p *WingetPlugin) handleIsInstalled(ctx context.Context, args []string) err
 	for _, id := range req.ids {
 		argv := append([]string{"list", "--id", id, "--exact"}, req.scopeArgs()...)
 		argv = append(argv, sourceAgreement...)
-		// A scope only filters the query, so it always runs at user scope.
-		err := p.run(ctx, sdk.ScopeUser, argv...)
+		// Query at the scope that installed the package: --scope=machine runs at
+		// system scope from an elevated terminal, like the install it checks.
+		err := p.run(ctx, req.privilege(), argv...)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

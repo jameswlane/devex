@@ -6,7 +6,7 @@
 	"main": "main.go",
 	"scripts": {
 		"build": "node ../../scripts/turbo/go-task.mjs go build -o devex-plugin-package-manager-winget .",
-		"dev": "node ../../scripts/turbo/go-task.mjs go build -race -o devex-plugin-package-manager-winget .",
+		"dev": "node ../../scripts/turbo/go-task.mjs dev-build devex-plugin-package-manager-winget .",
 		"test": "node ../../scripts/turbo/go-task.mjs go test ./...",
 		"lint": "node ../../scripts/turbo/go-task.mjs golangci-lint run --allow-parallel-runners",
 		"download": "node ../../scripts/turbo/go-task.mjs go mod download",
