@@ -1,7 +1,6 @@
 import { CacheTags, revalidateCacheTags } from "./cache-revalidation";
 import { invalidateCdnTags, pluginCacheTags } from "./cdn-cache";
 import { logger } from "./logger";
-import { prisma } from "./prisma";
 import { redis } from "./redis";
 import { transformationService } from "./transformation-service";
 
@@ -10,7 +9,6 @@ import { transformationService } from "./transformation-service";
  *
  * This service provides a unified approach to invalidating caches across all layers:
  * - Redis caches (query results, transformations)
- * - Prisma Accelerate caches (database queries)
  * - Vercel CDN caches (API responses)
  *
  * Implements cache tagging and dependency tracking for efficient invalidation.
@@ -127,7 +125,8 @@ export interface InvalidationOptions {
 	// Whether to invalidate CDN caches
 	invalidateCDN?: boolean;
 
-	// Whether to invalidate database query caches (Prisma Accelerate)
+	// Accepted for API compatibility. There is no database query cache since
+	// the move off Prisma Accelerate, so this does nothing.
 	invalidateDatabase?: boolean;
 
 	// Custom patterns to invalidate
@@ -140,16 +139,6 @@ export interface InvalidationOptions {
 // Redis namespaces that hold derived cache data. Pattern deletion is limited to
 // these so "clear all" never wipes rate limits, nonces, audit logs or counters.
 export const CACHE_NAMESPACES = ["query:", "transform:", "registry:"] as const;
-
-// Prisma Accelerate tags set by RegistryService cache strategies.
-const ACCELERATE_TAGS: Record<string, string[]> = {
-	application: ["registry", "search", "stats", "popular"],
-	plugin: ["registry", "search", "stats", "popular"],
-	config: ["registry", "search", "stats", "popular"],
-	stack: ["registry", "search", "stats", "popular"],
-	stats: ["stats", "popular"],
-};
-const ACCELERATE_TAGS_PER_CALL = 5;
 
 // Next.js data-cache tags (unstable_cache) affected by each resource.
 const NEXT_LIST_TAGS: Record<string, string> = {
@@ -249,9 +238,6 @@ export class CacheInvalidationService {
 			this.invalidateRedisPatterns(patterns),
 			this.invalidateTransformationCache(options.resource),
 			this.invalidateNextDataCache(options),
-			options.invalidateDatabase
-				? this.invalidateDatabaseCache(options)
-				: Promise.resolve(),
 		]);
 		const failures = origin
 			.filter((r): r is PromiseRejectedResult => r.status === "rejected")
@@ -409,29 +395,6 @@ export class CacheInvalidationService {
 		await revalidateCacheTags(tags);
 	}
 
-	/**
-	 * Invalidate Prisma Accelerate query caches by tag.
-	 */
-	private async invalidateDatabaseCache(
-		options: InvalidationOptions,
-	): Promise<void> {
-		if (!usesAccelerate()) return;
-
-		if (options.resource === "all") {
-			await prisma.$accelerate.invalidateAll();
-			logger.debug("Accelerate cache fully invalidated");
-			return;
-		}
-
-		const tags = accelerateTags(options);
-		for (let i = 0; i < tags.length; i += ACCELERATE_TAGS_PER_CALL) {
-			await prisma.$accelerate.invalidate({
-				tags: tags.slice(i, i + ACCELERATE_TAGS_PER_CALL),
-			});
-		}
-		logger.debug("Accelerate cache tags invalidated", { tags });
-	}
-
 	/** Invalidate Vercel CDN responses independently of Next.js data caches. */
 	private async invalidateCDNCache(
 		options: InvalidationOptions,
@@ -509,26 +472,6 @@ export class CacheInvalidationService {
 
 		logger.info("All caches cleared successfully");
 	}
-}
-
-function usesAccelerate(): boolean {
-	const url = process.env.PRISMA_DATABASE_URL;
-	return (
-		!!url &&
-		(url.startsWith("prisma://") || url.startsWith("prisma+postgres://"))
-	);
-}
-
-function accelerateTags(options: InvalidationOptions): string[] {
-	const tags = new Set<string>(
-		options.resource ? (ACCELERATE_TAGS[options.resource] ?? []) : [],
-	);
-	for (const tag of options.tags ?? []) {
-		if (Object.values(ACCELERATE_TAGS).some((known) => known.includes(tag))) {
-			tags.add(tag);
-		}
-	}
-	return [...tags];
 }
 
 function nextDataCacheTags(options: InvalidationOptions): string[] {

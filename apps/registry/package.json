@@ -23,7 +23,6 @@
 		"@octokit/rest": "^22.0.1",
 		"@prisma/adapter-pg": "^7.10.1",
 		"@prisma/client": "^7.10.1",
-		"@prisma/extension-accelerate": "^3.0.1",
 		"@tailwindcss/postcss": "^4.3.5",
 		"@upstash/redis": "^1.41.0",
 		"@vercel/analytics": "^2.0.1",

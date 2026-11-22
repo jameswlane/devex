@@ -17,23 +17,6 @@ import type {
 
 // Registry service with optimized queries and caching
 export class RegistryService {
-	// Cache strategy configurations
-	private static readonly CACHE_STRATEGIES = {
-		// Registry data changes infrequently, cache for 5 minutes
-		registry: { swr: 300, ttl: 300, tags: ["registry"] },
-		// Stats update more frequently, shorter cache
-		stats: { swr: 60, ttl: 60, tags: ["stats"] },
-		// Search results can be cached briefly
-		search: { swr: 30, ttl: 30, tags: ["search"] },
-	};
-
-	// Helper to add cache strategy - Accelerate is enabled on Prisma Cloud
-	private getCacheStrategy(
-		strategy: keyof typeof RegistryService.CACHE_STRATEGIES,
-	) {
-		return { cacheStrategy: RegistryService.CACHE_STRATEGIES[strategy] };
-	}
-
 	// Get paginated registry data with optimized queries
 	async getPaginatedRegistry(params: {
 		page: number;
@@ -102,7 +85,6 @@ export class RegistryService {
 											downloadCount: true,
 											lastDownload: true,
 										},
-										...this.getCacheStrategy("registry"),
 									})
 								: [],
 							resource === "all" || resource === "applications"
@@ -126,7 +108,6 @@ export class RegistryService {
 											// Use optimized JSON platform support
 											platforms: true,
 										},
-										...this.getCacheStrategy("registry"),
 									})
 								: [],
 							resource === "all" || resource === "configs"
@@ -146,7 +127,6 @@ export class RegistryService {
 											downloadCount: true,
 											lastDownload: true,
 										},
-										...this.getCacheStrategy("registry"),
 									})
 								: [],
 							resource === "all" || resource === "stacks"
@@ -168,7 +148,6 @@ export class RegistryService {
 											downloadCount: true,
 											lastDownload: true,
 										},
-										...this.getCacheStrategy("registry"),
 									})
 								: [],
 						]),
@@ -244,7 +223,6 @@ export class RegistryService {
 									platforms: true,
 									downloadCount: true,
 								},
-								...this.getCacheStrategy("search"),
 							})
 						: [],
 					resource === "all" || resource === "applications"
@@ -271,7 +249,6 @@ export class RegistryService {
 									official: true,
 									tags: true,
 								},
-								...this.getCacheStrategy("search"),
 							})
 						: [],
 				]);
@@ -300,7 +277,6 @@ export class RegistryService {
 							downloadCount: true,
 							lastDownload: true,
 						},
-						...this.getCacheStrategy("registry"),
 					}),
 					tx.application.findMany({
 						take: limit,
@@ -311,7 +287,6 @@ export class RegistryService {
 							category: true,
 							official: true,
 						},
-						...this.getCacheStrategy("registry"),
 					}),
 					tx.config.findMany({
 						take: limit,
@@ -322,7 +297,6 @@ export class RegistryService {
 							category: true,
 							downloadCount: true,
 						},
-						...this.getCacheStrategy("registry"),
 					}),
 					tx.stack.findMany({
 						take: limit,
@@ -333,7 +307,6 @@ export class RegistryService {
 							category: true,
 							downloadCount: true,
 						},
-						...this.getCacheStrategy("registry"),
 					}),
 				]);
 

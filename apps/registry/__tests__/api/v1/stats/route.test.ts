@@ -237,11 +237,10 @@ describe("/api/v1/stats", () => {
 				_sum: { downloadCount: true },
 			});
 
-			// Breakdowns keep Accelerate caching
+			// Accelerate is retired: breakdowns are plain queries (no cacheStrategy)
 			expect(mockPrismaClient.application.groupBy).toHaveBeenCalledWith({
 				by: ["category"],
 				_count: { category: true },
-				cacheStrategy: { swr: 600, ttl: 300 },
 			});
 		});
 
