@@ -7,6 +7,8 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -19,10 +21,20 @@ var _ = Describe("Setup plugin lifecycle", func() {
 		DeferCleanup(func() { installers.InitializeWithPluginBootstrap(nil) })
 		viper.Set("offline", true)
 		testhelper.SetProfileEnv(GinkgoT(), GinkgoT().TempDir())
+		// Keep the isolated profile env authoritative even on elevated runners
+		// (such as GitHub Actions Windows hosts or sudo) so ResolveUser does
+		// not fall back to the real host account's HomeDir.
+		originalResolver := sdk.NewPrivilegeResolver
+		resolver := originalResolver()
+		resolver.Elevated = false
+		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
+		DeferCleanup(func() { sdk.NewPrivilegeResolver = originalResolver })
 	})
 
 	It("reuses the plugin stage bootstrap for later stages without initializing again", func() {
-		Expect(os.MkdirAll(filepath.Join(os.Getenv("HOME"), ".devex", "plugins"), 0750)).To(Succeed())
+		// Use the resolved plugin directory: on Windows it lives under
+		// %LOCALAPPDATA%\DevEx rather than the legacy ~/.devex location.
+		Expect(os.MkdirAll(devexpaths.ForHome(os.Getenv("HOME")).Plugins(), 0750)).To(Succeed())
 		model := &SetupModel{}
 		first, err := model.initializePlugins(context.Background())
 		Expect(err).NotTo(HaveOccurred())
