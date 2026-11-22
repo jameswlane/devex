@@ -3,15 +3,20 @@
 package platform
 
 import (
+	"context"
 	"fmt"
 
 	"golang.org/x/sys/windows"
 )
 
-func detectNativeWindowsVersion() (string, error) {
-	v := windows.RtlGetVersion()
-	if v == nil {
-		return "", fmt.Errorf("RtlGetVersion returned nil")
+func (d *Detector) detectWindowsVersionContext(parent context.Context, platform *Platform) error {
+	if err := parent.Err(); err != nil {
+		return err
 	}
-	return fmt.Sprintf("%d.%d.%d", v.MajorVersion, v.MinorVersion, v.BuildNumber), nil
+	if v := windows.RtlGetVersion(); v != nil {
+		platform.Version = fmt.Sprintf("%d.%d.%d", v.MajorVersion, v.MinorVersion, v.BuildNumber)
+		platform.Distribution = "windows"
+		return nil
+	}
+	return d.detectWindowsVersionViaShell(parent, platform)
 }

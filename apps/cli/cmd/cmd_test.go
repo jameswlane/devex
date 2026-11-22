@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	_ "modernc.org/sqlite"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -142,15 +143,24 @@ func goBuildEnv(env []string) []string {
 	return append(slices.Clone(env), "APPDATA="+os.Getenv("APPDATA"), "LOCALAPPDATA="+os.Getenv("LOCALAPPDATA"))
 }
 
-var _ = Describe("CLI startup regression coverage", func() {
-	It("keeps inspection commands usable with a linked legacy config and previews tracked applications", func(ctx SpecContext) {
-		home := GinkgoT().TempDir()
-		goBin, env := isolatedGoRunEnv(home)
-		binary := testhelper.Executable(GinkgoT().TempDir(), "devex")
+var _ = Describe("CLI startup regression coverage", Ordered, func() {
+	var binary string
+
+	BeforeAll(func(ctx SpecContext) {
+		goBin, env := isolatedGoRunEnv(GinkgoT().TempDir())
+		binary = testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
 		build.Env = goBuildEnv(env)
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
+	})
+
+	It("keeps inspection commands usable with a linked legacy config", func(ctx SpecContext) {
+		if sdk.NewPrivilegeResolver().Elevated {
+			Skip("elevated processes ignore HOME/USERPROFILE overrides by security policy; legacy migration refusal is covered in-process")
+		}
+		home := GinkgoT().TempDir()
+		_, env := isolatedGoRunEnv(home)
 		// Set a legacy link that migration refuses before touching any source.
 		Expect(os.MkdirAll(filepath.Join(home, ".devex"), 0700)).To(Succeed())
 		Expect(os.Symlink("dotfiles.yaml", filepath.Join(home, ".devex", "config.yaml"))).To(Succeed())
@@ -164,6 +174,11 @@ var _ = Describe("CLI startup regression coverage", func() {
 			Expect(output).NotTo(BeEmpty())
 			Expect(stderr.String()).To(And(ContainSubstring("Warning: legacy migration skipped"), ContainSubstring("devex paths")))
 		}
+	})
+
+	It("previews tracked applications without mutating the datastore", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		_, env := isolatedGoRunEnv(home)
 		state := filepath.Join(home, ".local", "state", "devex")
 		if runtime.GOOS == "windows" {
 			state = filepath.Join(home, "AppData", "Local", "DevEx")
@@ -182,7 +197,7 @@ var _ = Describe("CLI startup regression coverage", func() {
 		Expect(err).NotTo(HaveOccurred())
 		for _, args := range [][]string{{"uninstall", "--all", "--dry-run"}, {"uninstall", "--app", "tracked-editor", "--dry-run"}} {
 			cmd := exec.CommandContext(ctx, binary, args...)
-			cmd.Env = append(env, "DEVEX_OFFLINE=true", "DEVEX_DISABLE_UPDATE_CHECK=true")
+			cmd.Env = append(env, "DEVEX_OFFLINE=true", "DEVEX_DISABLE_UPDATE_CHECK=true", "DEVEX_STATE_DIR="+state)
 			output, err := cmd.CombinedOutput()
 			Expect(err).NotTo(HaveOccurred(), string(output))
 			Expect(string(output)).To(And(ContainSubstring("tracked-editor"), ContainSubstring("tracked-package")))

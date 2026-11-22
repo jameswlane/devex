@@ -2,8 +2,11 @@
 
 package platform
 
-import "fmt"
+import "context"
 
-func detectNativeWindowsVersion() (string, error) {
-	return "", fmt.Errorf("native Windows version detection is unavailable on this platform")
+func (d *Detector) detectWindowsVersionContext(parent context.Context, platform *Platform) error {
+	if err := parent.Err(); err != nil {
+		return err
+	}
+	return d.detectWindowsVersionViaShell(parent, platform)
 }

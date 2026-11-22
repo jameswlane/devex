@@ -17,12 +17,25 @@ var _ = Describe("Validation startup", func() {
 		build := exec.CommandContext(GinkgoT().Context(), "go", "build", "-o", binary, ".")
 		Expect(build.Run()).To(Succeed())
 		home := GinkgoT().TempDir()
-		configDir := filepath.Join(home, ".local/share/devex/config/applications")
+		dataDir := filepath.Join(home, "data")
+		stateDir := filepath.Join(home, "state")
+		configRoot := filepath.Join(home, "config")
+		cacheDir := filepath.Join(home, "cache")
+		configDir := filepath.Join(dataDir, "config", "applications")
 		Expect(os.MkdirAll(configDir, 0750)).To(Succeed())
 		path := filepath.Join(configDir, "bad.yaml")
 		Expect(os.WriteFile(path, []byte("name: broken\nlinux:\n  install_method: aptt\n  install_command: broken\n"), 0600)).To(Succeed())
 		cmd := exec.CommandContext(GinkgoT().Context(), binary, "config", "validate", "--strict", "--format", "json")
-		cmd.Env = append(append(os.Environ(), testhelper.ProfileEnv(home)...), "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_DATA_HOME="+filepath.Join(home, ".local/share"), "XDG_STATE_HOME="+filepath.Join(home, ".local/state"), "DEVEX_TEAM_CONFIG_DIR=")
+		cmd.Env = append(append(os.Environ(), testhelper.ProfileEnv(home)...),
+			"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
+			"XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
+			"XDG_STATE_HOME="+filepath.Join(home, ".local", "state"),
+			"DEVEX_CONFIG_DIR="+configRoot,
+			"DEVEX_DATA_DIR="+dataDir,
+			"DEVEX_STATE_DIR="+stateDir,
+			"DEVEX_CACHE_DIR="+cacheDir,
+			"DEVEX_TEAM_CONFIG_DIR=",
+		)
 		output, err := cmd.Output()
 		Expect(err).To(HaveOccurred())
 		var report struct {
@@ -32,7 +45,7 @@ var _ = Describe("Validation startup", func() {
 		Expect(json.Unmarshal(output, &report)).To(Succeed(), "%s", output)
 		Expect(report.Valid).To(BeFalse())
 		Expect(report.Errors).To(BeNumerically(">", 0))
-		Expect(filepath.Join(home, ".local/state")).NotTo(BeADirectory())
-		Expect(filepath.Join(home, ".config")).NotTo(BeADirectory())
+		Expect(stateDir).NotTo(BeADirectory())
+		Expect(configRoot).NotTo(BeADirectory())
 	})
 })

@@ -35,6 +35,12 @@ func toolText(result *mcp.CallToolResult) string {
 	return text
 }
 
+// processTestHostEnv captures the original process environment before the
+// suite-level BeforeEach isolates HOME/USERPROFILE, so `go build` reuses the
+// host's GOPATH/GOMODCACHE/GOCACHE instead of downloading read-only modules
+// into a Ginkgo TempDir.
+var processTestHostEnv = os.Environ()
+
 var _ = Describe("devex mcp serve process", Ordered, Label("process"), func() {
 	var binary string
 
@@ -45,6 +51,7 @@ var _ = Describe("devex mcp serve process", Ordered, Label("process"), func() {
 		}
 		binary = testhelper.Executable(GinkgoT().TempDir(), "devex")
 		build := exec.CommandContext(ctx, goBinary, "build", "-o", binary, "../../cmd")
+		build.Env = processTestHostEnv
 		output, err := build.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 	}, NodeTimeout(5*time.Minute))
