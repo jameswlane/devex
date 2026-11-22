@@ -3,8 +3,11 @@
 package sdk
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"os/user"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -51,5 +54,22 @@ var _ = Describe("Windows native privilege wiring", func() {
 			Expect(adapter.plan.Name).To(Equal(command))
 			Expect(adapter.plan.Args).To(Equal([]string{"literal argument"}))
 		}
+	})
+	It("migrates legacy files under an elevated Windows token without Unix UID/GID chown", func() {
+		originalResolver := NewPrivilegeResolver
+		DeferCleanup(func() { NewPrivilegeResolver = originalResolver })
+		NewPrivilegeResolver = func() PrivilegeResolver {
+			r := defaultPrivilegeResolver()
+			r.Elevated = true
+			return r
+		}
+		home := GinkgoT().TempDir()
+		legacy := filepath.Join(home, ".devex", "config.yaml")
+		Expect(os.MkdirAll(filepath.Dir(legacy), 0o700)).To(Succeed())
+		Expect(os.WriteFile(legacy, []byte("migrated"), 0o600)).To(Succeed())
+		dirs := ResolvePathsFor("windows", home, func(string) string { return "" })
+		var output bytes.Buffer
+		Expect(dirs.Migrate(context.Background(), false, &output)).To(Succeed())
+		Expect(os.ReadFile(filepath.Join(dirs.Config, "config.yaml"))).To(Equal([]byte("migrated")))
 	})
 })

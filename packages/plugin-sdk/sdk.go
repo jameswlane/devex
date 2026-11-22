@@ -1647,7 +1647,7 @@ func (em *ExecutableManager) InstallPlugin(sourcePath, pluginName string) error 
 
 	storage := &Downloader{pluginDir: em.pluginDir}
 	resolver := NewPrivilegeResolver()
-	if resolver.Elevated {
+	if resolver.Elevated && runtime.GOOS != "windows" {
 		identity, err := resolver.ResolveUser(nil)
 		if err != nil {
 			return err
