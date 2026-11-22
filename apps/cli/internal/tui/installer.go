@@ -1144,6 +1144,10 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 // executeCurlPipeInstall handles curl pipe installations with security validation
 // SECURITY: Now validates URLs against trusted domains before execution
 func (si *StreamingInstaller) executeCurlPipeInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	if installers.IsReleaseArchive(osConfig.DownloadURL) {
+		si.sendLog("INFO", fmt.Sprintf("Installing release archive %s", osConfig.DownloadURL))
+		return installers.InstallReleaseArchive(ctx, releaseArchiveConfig(app, osConfig))
+	}
 	// SECURITY: Validate URL before attempting download
 	if err := validateDownloadURL(osConfig.DownloadURL); err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("URL validation failed for %s: %v", app.Name, err))
@@ -1975,4 +1979,16 @@ func (si *StreamingInstaller) checkAndInstallDependencies(_ context.Context, _ t
 	// re-detect the platform and log three placeholder lines for every app; the
 	// hook stays so callers keep a single place to add real dependency checks.
 	return nil
+}
+
+// releaseArchiveConfig carries the fields a release archive install needs.
+func releaseArchiveConfig(app types.CrossPlatformApp, osConfig *types.OSConfig) types.AppConfig {
+	return types.AppConfig{
+		BaseConfig:      types.BaseConfig{Name: app.Name},
+		InstallMethod:   osConfig.InstallMethod,
+		DownloadURL:     osConfig.DownloadURL,
+		Verification:    osConfig.Verification,
+		InstallDir:      osConfig.Destination,
+		InstalledBinary: osConfig.InstalledBinary,
+	}
 }

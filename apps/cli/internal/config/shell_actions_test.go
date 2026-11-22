@@ -37,7 +37,8 @@ var _ = Describe("Catalog shell action validation", func() {
 			}
 			if app.Name == "Neovim" {
 				found++
-				Expect(app.Linux.PostInstall[1].Path).To(Equal([]string{"/opt/nvim-linux-x86_64/bin"}))
+				Expect(app.Linux.PostInstall).To(HaveLen(1))
+				Expect(app.Linux.PostInstall[0].Path).To(Equal([]string{"/opt/nvim-linux-x86_64/bin"}))
 			}
 		}
 		Expect(found).To(Equal(2))

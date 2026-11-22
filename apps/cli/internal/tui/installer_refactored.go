@@ -14,6 +14,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/installer/script"
 	"github.com/jameswlane/devex/apps/cli/internal/installer/security"
 	"github.com/jameswlane/devex/apps/cli/internal/installer/theme"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	securitypkg "github.com/jameswlane/devex/apps/cli/internal/security"
@@ -253,6 +254,10 @@ func (rsi *RefactoredStreamingInstaller) executeInstallCommand(ctx context.Conte
 
 // executeCurlPipeInstall handles curl pipe installations using script manager
 func (rsi *RefactoredStreamingInstaller) executeCurlPipeInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	if installers.IsReleaseArchive(osConfig.DownloadURL) {
+		rsi.sendLog("INFO", fmt.Sprintf("Installing release archive %s", osConfig.DownloadURL))
+		return installers.InstallReleaseArchive(ctx, releaseArchiveConfig(app, osConfig))
+	}
 	rsi.sendLog("INFO", fmt.Sprintf("Downloading and validating script for %s", app.Name))
 
 	// Download and validate script

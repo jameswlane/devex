@@ -248,6 +248,10 @@ func (p *PluginBasedInstaller) InstallPackages(ctx context.Context, command stri
 }
 
 func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {
+	if app.InstallMethod == "curlpipe" && IsReleaseArchive(app.DownloadURL) {
+		log.Info("Installing release archive", "app", app.Name, "url", app.DownloadURL)
+		return InstallReleaseArchive(ctx, app)
+	}
 	installer := GetInstaller(ctx, app.InstallMethod)
 	if installer == nil {
 		pluginName := "package-manager-" + app.InstallMethod
@@ -327,6 +331,7 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 		DownloadURL:        osConfig.DownloadURL,
 		Verification:       osConfig.Verification,
 		InstallDir:         osConfig.Destination,
+		InstalledBinary:    osConfig.InstalledBinary,
 	}
 
 	// Install the app directly

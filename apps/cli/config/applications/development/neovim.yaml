@@ -126,10 +126,8 @@ linux:
     - curl
     - fzf
   pre_install:
-    - shell: curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
-    - shell: sudo rm -rf /opt/nvim
+    - shell: sudo rm -rf /opt/nvim-linux-x86_64
   post_install:
-    - shell: sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz && rm -f nvim-linux-x86_64.tar.gz
     - path: [/opt/nvim-linux-x86_64/bin]
   alternatives:
     - install_method: apt

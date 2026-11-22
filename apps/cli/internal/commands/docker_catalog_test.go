@@ -13,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
@@ -117,7 +118,7 @@ var _ = Describe("Docker application catalog", func() {
 		}
 	}, Entry("bat", "bat"), Entry("fzf", "fzf"), Entry("ripgrep", "ripgrep"), Entry("eza", "eza"), Entry("fd-find", "fd-find"), Entry("zoxide", "zoxide"), Entry("tldr", "tldr"))
 
-	DescribeTable("preserves curlpipe primaries and their hooks on Ubuntu and Debian", func(name, distro, version string) {
+	DescribeTable("preserves curlpipe release-archive primaries on Ubuntu and Debian", func(name, distro, version string) {
 		data, err := os.ReadFile(filepath.Join("..", "..", "config", "applications", "development", name+".yaml"))
 		Expect(err).NotTo(HaveOccurred())
 		var app types.CrossPlatformApp
@@ -125,7 +126,9 @@ var _ = Describe("Docker application catalog", func() {
 		selected := app.LinuxConfigForPlatform(platform.DetectionResult{Distribution: distro, Version: version, Architecture: "amd64"})
 		Expect(selected.InstallMethod).To(Equal("curlpipe"))
 		Expect(selected).To(Equal(app.Linux))
-		Expect(selected.PostInstall).NotTo(BeEmpty())
+		Expect(installers.IsReleaseArchive(selected.DownloadURL)).To(BeTrue(), selected.DownloadURL)
+		Expect(selected.InstalledBinary).NotTo(BeEmpty())
+		Expect(selected.Destination).NotTo(BeEmpty())
 	},
 		Entry("neovim Ubuntu 22.04", "neovim", "ubuntu", "22.04"),
 		Entry("neovim Ubuntu 24.04", "neovim", "ubuntu", "24.04"),

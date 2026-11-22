@@ -102,6 +102,7 @@ func convertToAppConfig(app types.CrossPlatformApp) *types.AppConfig {
 		DownloadURL:      osConfig.DownloadURL,
 		Verification:     osConfig.Verification,
 		InstallDir:       osConfig.Destination,
+		InstalledBinary:  osConfig.InstalledBinary,
 	}
 }
 
