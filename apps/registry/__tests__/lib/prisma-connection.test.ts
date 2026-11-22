@@ -104,6 +104,21 @@ describe("Prisma 7 connection options", () => {
 		);
 	});
 
+	it.each([
+		[
+			"an upper-case pooled host",
+			"postgres://u:p@POOLED.DB.PRISMA.IO/postgres",
+		],
+		["the DATABASE_URL_POOLED host", "postgres://u:p@pgb.internal/postgres"],
+	])("treats %s as pooled", (_name, url) => {
+		process.env.DATABASE_URL_POOLED = "postgres://u:p@pgb.internal/postgres";
+		prismaConnectionOptions(url);
+		expect(PrismaPg).toHaveBeenCalledWith(
+			expect.objectContaining({ statement_timeout: undefined }),
+			{ schema: "public" },
+		);
+	});
+
 	it("keeps pool and schema settings when using PostgreSQL", () => {
 		const url =
 			"postgresql://localhost/registry?connection_limit=12&pool_timeout=7&statement_timeout=1500&schema=custom";

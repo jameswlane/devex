@@ -32,9 +32,10 @@ export function resolveDatabaseUrl(
  *
  * pg sends statement_timeout as a startup parameter, which the transaction-mode
  * PgBouncer behind Prisma Postgres pooled URLs (pooled.db.prisma.io) rejects, so
- * pooled URLs drop it and rely on the pooler's limits and Prisma's transaction
- * timeout. A client-side query_timeout is not used: it can report a timeout for
- * a write that still commits.
+ * pooled URLs drop it. Accepted trade-off of the Accelerate migration: pooled
+ * statements have no 10s server-side deadline, only the pooler's 10-minute
+ * limit (Accelerate never sent one either). A client-side query_timeout is not
+ * used: it can report a timeout for a write that still commits.
  */
 export function prismaConnectionOptions(
 	connectionString = resolveDatabaseUrl(),
@@ -75,6 +76,16 @@ export function prismaConnectionOptions(
 	};
 }
 
+/** Pooled when it is DATABASE_URL_POOLED's host or looks like a pooler host. */
 function isPooledHost(hostname: string): boolean {
-	return hostname.startsWith("pooled.") || hostname.includes("pooler");
+	const host = hostname.toLowerCase();
+	const pooledUrl = process.env.DATABASE_URL_POOLED;
+	if (pooledUrl && !isAccelerateUrl(pooledUrl)) {
+		try {
+			if (new URL(pooledUrl).hostname.toLowerCase() === host) return true;
+		} catch {
+			// An unparseable pooled URL fails later, when the pool connects.
+		}
+	}
+	return host.startsWith("pooled.") || host.includes("pooler");
 }
