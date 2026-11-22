@@ -7,7 +7,7 @@ import type {
 
 vi.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: vi.fn(), findFirst: vi.fn() },
+		plugin: { findMany: vi.fn() },
 		pluginVersion: { findMany: vi.fn() },
 	},
 }));
@@ -18,6 +18,7 @@ vi.mock("@/lib/error-handler", () => ({
 }));
 
 import { GET } from "@/app/api/v1/plugins/[id]/versions/route";
+import { redis } from "@/lib/redis";
 
 type VersionListItem = Pick<
 	PluginVersion,
@@ -26,12 +27,7 @@ type VersionListItem = Pick<
 
 type MockPrisma = {
 	plugin: {
-		findUnique: Mock<
-			(args: { where: { name: string } }) => Promise<Plugin | null>
-		>;
-		findFirst: Mock<
-			(args: { where: { shortName: string } }) => Promise<Plugin | null>
-		>;
+		findMany: Mock<(args: unknown) => Promise<Plugin[]>>;
 	};
 	pluginVersion: {
 		findMany: Mock<
@@ -99,10 +95,10 @@ function params(id = "package-manager-apt") {
 }
 
 describe("GET /api/v1/plugins/[id]/versions", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.clearAllMocks();
-		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
+		await redis.disconnect();
+		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
 		mockPrisma.pluginVersion.findMany.mockResolvedValue(
 			releases.map((release) => ({ ...release })),
 		);
@@ -167,20 +163,19 @@ describe("GET /api/v1/plugins/[id]/versions", () => {
 	});
 
 	it("resolves a plugin by shortName after a name miss", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue(null);
-		mockPrisma.plugin.findFirst.mockResolvedValue(plugin);
+		mockPrisma.plugin.findMany.mockResolvedValue([plugin]);
 
 		const response = await GET(request(), params("apt"));
 
 		expect(response.status).toBe(200);
-		expect(mockPrisma.plugin.findFirst).toHaveBeenCalledWith({
-			where: { shortName: "apt" },
+		expect(mockPrisma.plugin.findMany).toHaveBeenCalledWith({
+			where: { OR: [{ name: "apt" }, { shortName: "apt" }] },
+			take: 2,
 		});
 	});
 
 	it("returns 404 for an unknown plugin without querying versions", async () => {
-		mockPrisma.plugin.findUnique.mockResolvedValue(null);
-		mockPrisma.plugin.findFirst.mockResolvedValue(null);
+		mockPrisma.plugin.findMany.mockResolvedValue([]);
 
 		const response = await GET(request(), params("unknown"));
 

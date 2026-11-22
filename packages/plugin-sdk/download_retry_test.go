@@ -318,4 +318,71 @@ var _ = Describe("Plugin download retries", func() {
 		Expect(retries).To(Equal(2))
 		Expect(logger.warnings).To(HaveLen(1))
 	})
+
+	Describe("X-DevEx-CI request header", func() {
+		unsetEnv := func(key string) {
+			prev, existed := os.LookupEnv(key)
+			Expect(os.Unsetenv(key)).To(Succeed())
+			DeferCleanup(func() {
+				if existed {
+					_ = os.Setenv(key, prev)
+				} else {
+					_ = os.Unsetenv(key)
+				}
+			})
+		}
+
+		BeforeEach(func() {
+			unsetEnv("DEVEX_REGISTRY_CI")
+			unsetEnv("CI")
+		})
+
+		downloadAndCaptureHeader := func() (string, string) {
+			var metadataHeader, downloadHeader string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/v1/plugins/demo":
+					metadataHeader = r.Header.Get("X-DevEx-CI")
+					writeMetadata(w, checksum)
+				case "/api/v1/plugins/demo/download/" + platformKey:
+					downloadHeader = r.Header.Get("X-DevEx-CI")
+					_, _ = w.Write(payload)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			Expect(newDownloader(server.URL).DownloadPluginWithContext(context.Background(), "demo")).To(Succeed())
+			return metadataHeader, downloadHeader
+		}
+
+		DescribeTable("sends X-DevEx-CI: 1 when CI environment markers are set",
+			func(envKey, envValue string) {
+				GinkgoT().Setenv(envKey, envValue)
+				metadataHeader, downloadHeader := downloadAndCaptureHeader()
+				Expect(metadataHeader).To(Equal("1"))
+				Expect(downloadHeader).To(Equal("1"))
+			},
+			Entry("DEVEX_REGISTRY_CI=1", "DEVEX_REGISTRY_CI", "1"),
+			Entry("DEVEX_REGISTRY_CI=true", "DEVEX_REGISTRY_CI", "true"),
+			Entry("DEVEX_REGISTRY_CI=TRUE", "DEVEX_REGISTRY_CI", "TRUE"),
+			Entry("CI=true", "CI", "true"),
+			Entry("CI=TRUE", "CI", "TRUE"),
+		)
+
+		It("omits X-DevEx-CI when DEVEX_REGISTRY_CI and CI are unset", func() {
+			metadataHeader, downloadHeader := downloadAndCaptureHeader()
+			Expect(metadataHeader).To(BeEmpty())
+			Expect(downloadHeader).To(BeEmpty())
+		})
+
+		It("omits X-DevEx-CI when markers are false or 0", func() {
+			GinkgoT().Setenv("DEVEX_REGISTRY_CI", "0")
+			GinkgoT().Setenv("CI", "false")
+			metadataHeader, downloadHeader := downloadAndCaptureHeader()
+			Expect(metadataHeader).To(BeEmpty())
+			Expect(downloadHeader).To(BeEmpty())
+		})
+	})
 })
