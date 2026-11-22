@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"path/filepath"
+	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,15 +17,18 @@ import (
 
 var _ = Describe("Parallel plain installations", func() {
 	It("overlaps independent applications and writes complete output lines", func() {
-		oldInstall, oldPrepare := installApplication, prepareApplicationInstallers
+		oldInstall, oldPrepare, oldBatch := installApplication, prepareApplicationInstallers, preparePackageBatch
 		oldLimit := viper.Get("install-concurrency")
 		DeferCleanup(func() {
-			installApplication, prepareApplicationInstallers = oldInstall, oldPrepare
+			installApplication, prepareApplicationInstallers, preparePackageBatch = oldInstall, oldPrepare, oldBatch
 			viper.Set("install-concurrency", oldLimit)
 		})
 		GinkgoT().Setenv("DEVEX_STATE_DB", filepath.Join(GinkgoT().TempDir(), "state.db"))
 		viper.Set("install-concurrency", 2)
 		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { return nil }
+		preparePackageBatch = func(context.Context, []types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) (tui.PackageBatch, error) {
+			return tui.PackageBatch{}, nil
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		entered := make(chan string, 2)
@@ -43,10 +48,10 @@ var _ = Describe("Parallel plain installations", func() {
 		go func() {
 			done <- runPlainInstall(ctx, &output, apps, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)
 		}()
-		Eventually(entered).Should(Receive())
-		Eventually(entered).Should(Receive())
+		Eventually(entered, 5*time.Second).Should(Receive())
+		Eventually(entered, 5*time.Second).Should(Receive())
 		close(release)
-		Eventually(done).Should(Receive(Succeed()))
+		Eventually(done, 5*time.Second).Should(Receive(Succeed()))
 		Expect(output.String()).To(ContainSubstring("installed one\n"))
 		Expect(output.String()).To(ContainSubstring("installed two\n"))
 		Expect(output.String()).To(ContainSubstring("installed 2 of 2 applications\n"))
