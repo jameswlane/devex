@@ -105,8 +105,12 @@ var _ = Describe("Devcontainer generation", func() {
 			if _, err := exec.LookPath("docker"); err != nil {
 				Skip("docker is not installed")
 			}
-			if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
+			out, err := exec.CommandContext(ctx, "docker", "info", "--format", "{{.OSType}}").Output()
+			if err != nil {
 				Skip("docker is not running")
+			}
+			if strings.TrimSpace(string(out)) != "linux" {
+				Skip("docker daemon is not configured for Linux containers")
 			}
 		})
 		// cleanup runs docker with a fresh, bounded context: the spec's own
