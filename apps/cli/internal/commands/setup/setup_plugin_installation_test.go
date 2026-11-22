@@ -89,7 +89,7 @@ var _ = Describe("Plugin Installation", func() {
 
 				plugins := DetectRequiredPlugins(plat)
 
-				Expect(plugins).To(ContainElement("package-manager-homebrew"))
+				Expect(plugins).To(ContainElement("package-manager-brew"))
 				Expect(plugins).To(ContainElement("tool-shell"))
 				Expect(plugins).ToNot(ContainElement(ContainSubstring("desktop-")))
 			})
