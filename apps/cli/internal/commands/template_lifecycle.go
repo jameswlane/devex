@@ -69,6 +69,16 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 	if err != nil {
 		return err
 	}
+	if action == templates.LifecycleStatus && len(spec.Lifecycle[templates.LifecycleStatus]) == 0 {
+		// Templates without status steps (minimal, backend, full-stack) report
+		// the successful install run and whatever resources it recorded.
+		return displayRecordedTemplateResources(templateLifecycleResult{
+			SelectedRunID: selectedRun.ID,
+			TemplateID:    spec.ID,
+			Action:        action,
+			Resources:     resources,
+		}, opts.Format)
+	}
 	knownResources := knownResourcesByStep(resources)
 
 	planner := templates.TemplatePlanner{
@@ -566,6 +576,10 @@ func displayRecordedTemplateResources(result templateLifecycleResult, format str
 		fmt.Printf("Recorded resources for template %s\n", result.TemplateID)
 		if result.SelectedRunID != "" {
 			fmt.Printf("Selected install run: %s\n", result.SelectedRunID)
+		}
+		if len(result.Resources) == 0 {
+			fmt.Println("The install run succeeded and recorded no resources.")
+			return nil
 		}
 		return printTemplateResourceTable(result.Resources)
 	}

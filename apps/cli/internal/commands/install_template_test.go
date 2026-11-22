@@ -143,6 +143,77 @@ func (e *templateCommandFakePluginExecutor) ExecutePlugin(_ context.Context, plu
 	return nil
 }
 
+func TestTemplateStatusSucceedsForTemplateWithoutStatusStepsOrResources(t *testing.T) {
+	tempDir := t.TempDir()
+	homeDir := filepath.Join(tempDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	dbPath := filepath.Join(tempDir, "state.db")
+	templatePath := filepath.Join(tempDir, "template.yaml")
+	writeTestFile(t, templatePath, []byte(`
+schema_version: devex.template/v1
+id: install-only
+name: Install Only
+version: 1.0.0
+lifecycle:
+  install:
+    - id: vim
+      plugin:
+        name: package-manager-apt
+        command: install
+        args:
+          - vim
+`))
+
+	testhelper.SetProfileEnv(t, homeDir)
+	t.Setenv(state.DBPathEnvVar, dbPath)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	if err := viper.BindEnv(state.DBPathConfigKey, state.DBPathEnvVar); err != nil {
+		t.Fatalf("BindEnv() error = %v", err)
+	}
+
+	templateResolverTestMu.Lock()
+	t.Cleanup(templateResolverTestMu.Unlock)
+	fakePlugin := &templateCommandFakePluginExecutor{}
+	oldInstallResolver := templateInstallPluginExecutorResolver
+	oldLifecycleResolver := templatePluginExecutorResolver
+	templateInstallPluginExecutorResolver = func(_ pluginBootstrapProvider, _ bool) (templateexec.PluginExecutor, error) {
+		return fakePlugin, nil
+	}
+	templatePluginExecutorResolver = func(_ pluginBootstrapProvider) (templateexec.PluginExecutor, error) {
+		return fakePlugin, nil
+	}
+	t.Cleanup(func() {
+		templateInstallPluginExecutorResolver = oldInstallResolver
+		templatePluginExecutorResolver = oldLifecycleResolver
+	})
+
+	if err := executeTemplateInstall(context.Background(), templatePath, templateInstallOptions{NonInteractive: true}, config.CrossPlatformSettings{}, nil); err != nil {
+		t.Fatalf("executeTemplateInstall() error = %v", err)
+	}
+	installRun := latestTemplateRun(t, dbPath, "install-only", templates.LifecycleInstall)
+	callsAfterInstall := len(fakePlugin.calls)
+
+	statusOutput := captureStdout(t, func() {
+		err := executeTemplateLifecycle(context.Background(), templatePath, templates.LifecycleStatus, templateLifecycleOptions{
+			NonInteractive: true,
+			Format:         "table",
+			Run:            "latest",
+		}, config.CrossPlatformSettings{}, nil)
+		if err != nil {
+			t.Fatalf("executeTemplateLifecycle() status error = %v", err)
+		}
+	})
+	if !bytes.Contains([]byte(statusOutput), []byte(installRun.ID)) || !bytes.Contains([]byte(statusOutput), []byte("recorded no resources")) {
+		t.Fatalf("status output = %q, want install run %s with no resources", statusOutput, installRun.ID)
+	}
+	if len(fakePlugin.calls) != callsAfterInstall {
+		t.Fatalf("status plugin calls = %#v, want none", fakePlugin.calls[callsAfterInstall:])
+	}
+}
+
 func TestTemplateLifecycleCommandsUseTempStateAndRecordedResources(t *testing.T) {
 	tempDir := t.TempDir()
 	homeDir := filepath.Join(tempDir, "home")
