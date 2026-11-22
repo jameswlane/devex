@@ -157,8 +157,8 @@ var _ = Describe("CacheManager", func() {
 				Expect(err).NotTo(HaveOccurred())
 				firstUsed := entry1.LastUsed
 
-				// Wait a bit and get again
-				time.Sleep(10 * time.Millisecond)
+				// Wait for the wall clock to advance (Windows VM clocks can tick in ~15ms steps).
+				waitWallClockAfter(firstUsed)
 
 				entry2, err := cacheManager.GetCacheEntry(testKey)
 				Expect(err).NotTo(HaveOccurred())
@@ -170,7 +170,7 @@ var _ = Describe("CacheManager", func() {
 		Context("when entry has TTL", func() {
 			It("should remove expired entries", func() {
 				// Create entry with very short TTL
-				_, err := cacheManager.SetCacheEntry(
+				created, err := cacheManager.SetCacheEntry(
 					testKey,
 					cache.CacheTypeDownload,
 					testFile,
@@ -180,7 +180,7 @@ var _ = Describe("CacheManager", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// Wait for expiration
-				time.Sleep(10 * time.Millisecond)
+				waitWallClockAfter(created.CreatedAt.Add(created.TTL))
 
 				// Entry should be automatically removed
 				entry, err := cacheManager.GetCacheEntry(testKey)
@@ -286,11 +286,15 @@ var _ = Describe("CacheManager", func() {
 
 		Context("when sorting entries", func() {
 			It("should sort by last used time (most recent first)", func() {
+				// Wait for the wall clock to advance past BeforeEach insertions
+				// so download1's LastUsed is strictly newer than untouched entries.
+				waitWallClockAfter(time.Now())
+
 				// Access entries in specific order to set last used times
-				_, err := cacheManager.GetCacheEntry("download1")
+				download1, err := cacheManager.GetCacheEntry("download1")
 				Expect(err).NotTo(HaveOccurred())
 
-				time.Sleep(10 * time.Millisecond)
+				waitWallClockAfter(download1.LastUsed)
 
 				_, err = cacheManager.GetCacheEntry("metadata1")
 				Expect(err).NotTo(HaveOccurred())
@@ -483,11 +487,11 @@ var _ = Describe("CacheManager", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// Create entry with short TTL
-				_, err = cacheManager.SetCacheEntry("ttl-entry", cache.CacheTypeDownload, testFile, nil, 1*time.Millisecond)
+				created, err := cacheManager.SetCacheEntry("ttl-entry", cache.CacheTypeDownload, testFile, nil, 1*time.Millisecond)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Wait for expiration
-				time.Sleep(10 * time.Millisecond)
+				waitWallClockAfter(created.CreatedAt.Add(created.TTL))
 
 				// Run cleanup
 				config := cache.DefaultCacheConfig
@@ -518,3 +522,12 @@ var _ = Describe("CacheManager", func() {
 		})
 	})
 })
+
+// waitWallClockAfter blocks until the wall-clock time (matching JSON-marshaled
+// timestamps without monotonic readings) is strictly after target.
+func waitWallClockAfter(target time.Time) {
+	deadline := target.Round(0)
+	for !time.Now().Round(0).After(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+}
