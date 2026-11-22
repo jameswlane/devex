@@ -136,22 +136,36 @@ func (f *FlatpakInstaller) handleInstall(ctx context.Context, args []string) err
 			continue
 		}
 
-		// Build install command
-		var installCmd []string
+		// Install into the installation that holds the remotes, as add-flathub set up.
+		scopeFlag, useSudo := f.installScope(ctx)
+		installCmd := []string{"install", scopeFlag, "-y", appID}
 		if remote != "" {
-			installCmd = []string{"install", "-y", remote, appID}
-		} else {
-			installCmd = []string{"install", "-y", appID}
+			installCmd = []string{"install", scopeFlag, "-y", remote, appID}
 		}
 
 		f.logger.Printf("Installing %s...\n", appID)
-		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", unattendedFlatpakArgs(installCmd)...); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, useSudo, "flatpak", unattendedFlatpakArgs(installCmd)...); err != nil {
 			return fmt.Errorf("failed to install %s: %w", appID, err)
 		}
 	}
 
 	f.logger.Success("Successfully installed applications")
 	return nil
+}
+
+// installScope picks the installation for installs: the one add-flathub set up.
+// That is the system installation, elevated, unless only the user installation
+// has Flathub (add-flathub --user).
+func (f *FlatpakInstaller) installScope(ctx context.Context) (string, bool) {
+	system, err := sdk.ExecCommandOutputWithContext(ctx, "flatpak", "remote-list", "--system", "--columns=name")
+	if err != nil || hasRemoteName(system, "flathub") {
+		return "--system", true
+	}
+	user, err := sdk.ExecCommandOutputWithContext(ctx, "flatpak", "remote-list", "--user", "--columns=name")
+	if err == nil && hasRemoteName(user, "flathub") {
+		return "--user", false
+	}
+	return "--system", true
 }
 
 // handleRemove removes Flatpak applications
