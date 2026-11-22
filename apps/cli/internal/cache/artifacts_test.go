@@ -111,8 +111,9 @@ var _ = Describe("Installation caching", func() {
 	})
 	It("expires stale artifacts", func() {
 		Expect(fetch()).To(Succeed())
-		_, err := manager.SetCacheEntry(cache.ArtifactKey(source, metadata.SHA256), cache.CacheTypeDownload, destination, nil, time.Nanosecond)
+		created, err := manager.SetCacheEntry(cache.ArtifactKey(source, metadata.SHA256), cache.CacheTypeDownload, destination, nil, time.Nanosecond)
 		Expect(err).NotTo(HaveOccurred())
+		waitWallClockAfter(created.CreatedAt.Add(created.TTL))
 		Expect(fetch()).To(Succeed())
 		Expect(calls).To(Equal(2))
 	})
