@@ -171,6 +171,20 @@ exit 1
 		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "--scope=machine" "Docker.DockerDesktop"` + "\n"))
 		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "--scope=user" "jqlang.jq"` + "\n"))
 	})
+	It("rejects conflicting winget scopes and accepts repeated identical scopes", func() {
+		conflicting := app("Docker", "winget", "")
+		conflicting.AllPlatforms.Packages = []string{"Docker.DockerDesktop"}
+		conflicting.AllPlatforms.Options = []string{"--scope=user", "--scope=machine"}
+		repeated := app("JQ", "winget", "")
+		repeated.AllPlatforms.Packages = []string{"jqlang.jq"}
+		repeated.AllPlatforms.Options = []string{"--scope=user", "--scope", "user"}
+		settings.Terminal.Utilities = []types.CrossPlatformApp{conflicting, repeated}
+		Expect(run("upgrade", "Docker", "--dry-run")).To(MatchError(ContainSubstring(`conflicting --scope values "user" and "machine"`)))
+		Expect(out.String()).NotTo(ContainSubstring("Plugin invocation"))
+		out.Reset()
+		Expect(run("upgrade", "JQ", "--dry-run")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-winget "upgrade" "--scope=user" "jqlang.jq"` + "\n"))
+	})
 	It("refuses a structured Zypper pattern upgrade instead of upgrading a package", func() {
 		pattern := app("Devel", "zypper", "")
 		pattern.AllPlatforms.Packages = []string{"devel_basis"}

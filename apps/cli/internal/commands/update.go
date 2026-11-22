@@ -242,6 +242,9 @@ func maintenancePackages(c types.OSConfig) ([]string, string, error) {
 		var extra []string
 		for _, opt := range request.Options {
 			if strings.HasPrefix(opt, "--scope=") {
+				if scope != "" && scope != opt {
+					return nil, "", fmt.Errorf("conflicting --scope values %q and %q", strings.TrimPrefix(scope, "--scope="), strings.TrimPrefix(opt, "--scope="))
+				}
 				scope = opt
 			} else {
 				extra = append(extra, opt)
