@@ -26,6 +26,15 @@ cloud-init status --wait >/dev/null 2>&1 || true
 systemctl disable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
 printf '%s\n' 'Acquire::Retries "5";' 'DPkg::Lock::Timeout "600";' >/etc/apt/apt.conf.d/80-devex-vm
 
+# A systemd upgrade during the install re-executes systemd and restarts
+# systemd-networkd. The new daemon no longer sees netplan's generated config,
+# leaves the NIC unmanaged without its DHCP address, and the guest loses SSH.
+# A config of our own in /etc keeps the NIC on DHCP across that restart.
+if systemctl is-active --quiet systemd-networkd; then
+	printf '[Match]\nType=ether\n\n[Network]\nDHCP=yes\nKeepConfiguration=yes\n' >/etc/systemd/network/10-devex-vm.network
+	networkctl reload
+fi
+
 # curl, git and unzip are the CLI's startup dependencies; fontconfig verifies fonts.
 packages=(curl git unzip fontconfig python3)
 case "$DESKTOP:$ID" in
