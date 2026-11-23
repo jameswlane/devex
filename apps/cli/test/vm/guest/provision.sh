@@ -29,10 +29,10 @@ printf '%s\n' 'Acquire::Retries "5";' 'DPkg::Lock::Timeout "600";' >/etc/apt/apt
 # A systemd upgrade during the install re-executes systemd and restarts
 # systemd-networkd. The new daemon no longer sees netplan's generated config,
 # leaves the NIC unmanaged without its DHCP address, and the guest loses SSH.
-# A config of our own in /etc keeps the NIC on DHCP across that restart.
+# A config of our own in /etc keeps the NIC on DHCP after that restart. It is
+# not reloaded now, because reconfiguring the live link interrupts downloads.
 if systemctl is-active --quiet systemd-networkd; then
-	printf '[Match]\nType=ether\n\n[Network]\nDHCP=yes\nKeepConfiguration=yes\n' >/etc/systemd/network/10-devex-vm.network
-	networkctl reload
+	printf '[Match]\nType=ether\n\n[Network]\nDHCP=yes\n' >/etc/systemd/network/10-devex-vm.network
 fi
 
 # curl, git and unzip are the CLI's startup dependencies; fontconfig verifies fonts.
