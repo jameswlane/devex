@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
@@ -30,6 +31,7 @@ var _ = Describe("Registered plugin commands", func() {
 	var registry *httptest.Server
 	var payload []byte
 	var checksum string
+	var registryVersion string
 	var requests []string
 	var stdout, stderr bytes.Buffer
 	var execute, executeRoot func(context.Context, ...string) error
@@ -68,9 +70,10 @@ var _ = Describe("Registered plugin commands", func() {
 		payload = script("recorder", "2.0.0")
 		checksum = fmt.Sprintf("%x", sha256.Sum256(payload))
 		requests = nil
+		registryVersion = "2.0.0"
 		registry = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requests = append(requests, r.URL.Path)
-			metadata := sdk.PluginMetadata{PluginInfo: sdk.PluginInfo{Name: "recorder", Version: "2.0.0", Description: "recorder plugin"}, Binaries: map[string]sdk.PlatformBinary{runtime.GOOS + "-" + runtime.GOARCH: {URL: registry.URL + "/binary", Checksum: checksum, Size: int64(len(payload))}}}
+			metadata := sdk.PluginMetadata{PluginInfo: sdk.PluginInfo{Name: "recorder", Version: registryVersion, Description: "recorder plugin"}, Binaries: map[string]sdk.PlatformBinary{runtime.GOOS + "-" + runtime.GOARCH: {URL: registry.URL + "/binary", Checksum: checksum, Size: int64(len(payload))}}}
 			switch r.URL.Path {
 			case "/api/v1/registry":
 				_ = json.NewEncoder(w).Encode(sdk.PluginRegistry{Plugins: map[string]sdk.PluginMetadata{"recorder": metadata}})
@@ -319,5 +322,69 @@ var _ = Describe("Registered plugin commands", func() {
 		Expect(execute(context.Background(), "update", "recorder", "--all")).To(HaveOccurred())
 		Expect(execute(context.Background(), "update", "recorder", "missing")).To(HaveOccurred())
 		Expect(requests).To(BeEmpty())
+	})
+	Describe("EnsurePluginVersionWithContext", func() {
+		var pb *bootstrap.PluginBootstrap
+		BeforeEach(func() {
+			var err error
+			pb, err = bootstrap.NewPluginBootstrap(false)
+			Expect(err).NotTo(HaveOccurred())
+		})
+		It("updates an installed plugin that is older than the required version", func() {
+			install("recorder", "1.0.0")
+			plugin, err := pb.EnsurePluginVersionWithContext(context.Background(), "recorder", "2.0.0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plugin.Version).To(Equal("2.0.0"))
+			data, err := os.ReadFile(filepath.Join(dir, "devex-plugin-recorder"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(data).To(Equal(payload))
+		})
+		It("uses a plugin that already meets the required version without contacting the registry", func() {
+			install("recorder", "2.1.0")
+			plugin, err := pb.EnsurePluginVersionWithContext(context.Background(), "recorder", "2.0.0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plugin.Version).To(Equal("2.1.0"))
+			Expect(requests).To(BeEmpty())
+		})
+		It("accepts a locally built plugin whose version is not semantic", func() {
+			install("recorder", "dev")
+			_, err := pb.EnsurePluginVersionWithContext(context.Background(), "recorder", "2.0.0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(requests).To(BeEmpty())
+		})
+		It("keeps the installed plugin and names the fix when the registry has nothing new enough", func() {
+			original := script("recorder", "1.0.0")
+			install("recorder", "1.0.0")
+			_, err := pb.EnsurePluginVersionWithContext(context.Background(), "recorder", "3.0.0")
+			Expect(err).To(MatchError(ContainSubstring("plugin recorder 1.0.0 is older than the required 3.0.0")))
+			Expect(err).To(MatchError(ContainSubstring("registry's latest release is \"2.0.0\"")))
+			data, err := os.ReadFile(filepath.Join(dir, "devex-plugin-recorder"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(data).To(Equal(original))
+			Expect(requests).NotTo(ContainElement(ContainSubstring("/binary")))
+			Expect(requests).NotTo(ContainElement(ContainSubstring("/download/")))
+		})
+		It("does not download a registry release whose version cannot be compared", func() {
+			install("recorder", "1.0.0")
+			registryVersion = "unknown"
+			_, err := pb.EnsurePluginVersionWithContext(context.Background(), "recorder", "2.0.0")
+			Expect(err).To(MatchError(ContainSubstring(`registry's latest release is "unknown"`)))
+			Expect(requests).NotTo(ContainElement(ContainSubstring("/download/")))
+		})
+		It("does not download an update under --offline and names the fix", func() {
+			install("recorder", "1.0.0")
+			viper.Set("offline", true)
+			_, err := pb.EnsurePluginVersionWithContext(context.Background(), "recorder", "2.0.0")
+			Expect(err).To(MatchError(ContainSubstring("plugin recorder 1.0.0 is older than the required 2.0.0")))
+			Expect(err).To(MatchError(ContainSubstring("devex plugin update recorder")))
+			Expect(requests).To(BeEmpty())
+		})
+		It("does not download an update under --skip-plugin-download and names the fix", func() {
+			install("recorder", "1.0.0")
+			viper.Set("skip-plugin-download", true)
+			_, err := pb.EnsurePluginVersionWithContext(context.Background(), "recorder", "2.0.0")
+			Expect(err).To(MatchError(ContainSubstring("devex plugin update recorder")))
+			Expect(requests).To(BeEmpty())
+		})
 	})
 })

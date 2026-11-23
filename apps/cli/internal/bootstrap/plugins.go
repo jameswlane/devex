@@ -357,6 +357,64 @@ func (b *PluginBootstrap) EnsurePluginWithContext(ctx context.Context, pluginNam
 	return plugin, nil
 }
 
+// EnsurePluginVersionWithContext returns an installed plugin at minVersion or
+// newer. An older installed plugin is updated from the registry; when that is
+// impossible or the registry has nothing new enough, the error names the fix.
+// An empty minVersion only ensures the plugin is installed. Installed versions
+// that are not semantic versions (local "dev" builds) are accepted as-is.
+func (b *PluginBootstrap) EnsurePluginVersionWithContext(ctx context.Context, pluginName, minVersion string) (sdk.PluginMetadata, error) {
+	plugin, err := b.EnsurePluginWithContext(ctx, pluginName)
+	if err != nil || minVersion == "" {
+		return plugin, err
+	}
+	required, err := semver.NewVersion(minVersion)
+	if err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("invalid minimum version %q for plugin %s: %w", minVersion, pluginName, err)
+	}
+	if pluginSatisfies(plugin, required) {
+		return plugin, nil
+	}
+	installedVersion := plugin.Version
+	if viper.GetBool("offline") {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s %s is older than the required %s and downloads are disabled by --offline; run 'devex plugin update %s' while online, then retry", pluginName, installedVersion, minVersion, pluginName)
+	}
+	if b.skipDownload || viper.GetBool("skip-plugin-download") || b.downloader == nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s %s is older than the required %s; run 'devex plugin update %s', then retry", pluginName, installedVersion, minVersion, pluginName)
+	}
+	// Check the registry release first so an update that would not satisfy the
+	// requirement never replaces the installed plugin.
+	latest, err := b.downloader.FetchPluginMetadata(ctx, pluginName)
+	if err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("check registry for plugin %s %s or newer (retry with 'devex plugin update %s'): %w", pluginName, minVersion, pluginName, err)
+	}
+	if latestVersion, err := semver.NewVersion(latest.Version); err != nil || latestVersion.LessThan(required) {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s %s is older than the required %s, and the registry's latest release is %q; upgrade DevEx or use a template that supports this plugin version", pluginName, installedVersion, minVersion, latest.Version)
+	}
+	log.Info("Updating plugin to meet template requirement", "plugin", pluginName, "installed", installedVersion, "required", minVersion)
+	if err := b.downloader.DownloadValidatedPluginWithContext(ctx, pluginName); err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("update plugin %s from %s to at least %s (retry with 'devex plugin update %s'): %w", pluginName, installedVersion, minVersion, pluginName, err)
+	}
+	if err := b.manager.DiscoverPluginsWithContext(ctx); err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("rediscover updated plugin %s: %w", pluginName, err)
+	}
+	plugin, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]
+	if !installed {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s was updated but could not be discovered; run 'devex plugin info %s' to diagnose the installation", pluginName, pluginName)
+	}
+	if !pluginSatisfies(plugin, required) {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s %s is older than the required %s, and the registry has no newer release; upgrade DevEx or use a template that supports this plugin version", pluginName, plugin.Version, minVersion)
+	}
+	return plugin, nil
+}
+
+func pluginSatisfies(plugin sdk.PluginMetadata, required *semver.Version) bool {
+	installed, err := semver.NewVersion(plugin.Version)
+	if err != nil {
+		return true
+	}
+	return !installed.LessThan(required)
+}
+
 // IsPluginAvailable checks if a plugin is available for installation
 func (b *PluginBootstrap) IsPluginAvailable(ctx context.Context, pluginName string) bool {
 	if err := validatePluginName(pluginName); err != nil {

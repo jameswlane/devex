@@ -124,6 +124,8 @@ var _ = Describe("Shipped lifecycle templates", func() {
 				for _, step := range plan.Steps {
 					if action == templates.LifecycleMaintain && step.Request.Plugin == "package-manager-mise" {
 						Expect(step.Request.Command).To(Equal("update"), "maintain step %s must upgrade mise tools instead of re-running install", step.ID)
+						// Older mise plugins ignore update's arguments and upgrade every tool (#596).
+						Expect(step.Request.MinPluginVersion).To(Equal("0.2.9"), "maintain step %s must require a mise plugin that honors update arguments", step.ID)
 					}
 					for _, arg := range step.Request.Args {
 						Expect(arg).NotTo(ContainSubstring("<nil>"), "%s step %s has an unresolved value", action, step.ID)

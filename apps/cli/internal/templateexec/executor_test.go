@@ -43,6 +43,7 @@ func (e *recordingPluginExecutor) ExecutePlugin(ctx context.Context, pluginName 
 		opts: templateexec.PluginExecOptions{
 			Env:        maps.Clone(opts.Env),
 			WorkingDir: opts.WorkingDir,
+			MinVersion: opts.MinVersion,
 		},
 	})
 	if e.delay > 0 {
@@ -616,10 +617,11 @@ func main() {
 		Expect(resource.Metadata["password"]).To(Equal("[REDACTED]"))
 	})
 
-	It("passes plugin step env and working_dir to the plugin executor", func() {
+	It("passes plugin step env, working_dir and min_version to the plugin executor", func() {
 		workDir := GinkgoT().TempDir()
 		plan.Steps[0].Request.Env = map[string]string{"VIRTUAL_ENV": "/tmp/venv"}
 		plan.Steps[0].Request.WorkingDir = workDir
+		plan.Steps[0].Request.MinPluginVersion = "0.2.9"
 		runtime := templateexec.NewExecutionRuntime(store, plugin)
 
 		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
@@ -628,6 +630,7 @@ func main() {
 		Expect(plugin.calls).To(HaveLen(1))
 		Expect(plugin.calls[0].opts.Env).To(Equal(map[string]string{"VIRTUAL_ENV": "/tmp/venv"}))
 		Expect(plugin.calls[0].opts.WorkingDir).To(Equal(workDir))
+		Expect(plugin.calls[0].opts.MinVersion).To(Equal("0.2.9"))
 	})
 
 	It("does not write sensitive plaintext to the bbolt state file", func() {

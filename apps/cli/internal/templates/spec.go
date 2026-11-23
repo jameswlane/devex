@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -106,6 +107,9 @@ type TemplatePluginAction struct {
 	Env        map[string]string `yaml:"env,omitempty"`
 	WorkingDir string            `yaml:"working_dir,omitempty"`
 	Metadata   map[string]any    `yaml:"metadata,omitempty"`
+	// MinVersion is the oldest plugin release that supports this step. DevEx
+	// updates an older installed plugin before running the step.
+	MinVersion string `yaml:"min_version,omitempty"`
 }
 
 type TemplateShellAction struct {
@@ -328,6 +332,11 @@ func validateTemplateStep(step TemplateStepSpec, seen map[string]bool) error {
 		}
 		if err := validateDockerLikeArgs(step.Plugin.Args); err != nil {
 			return err
+		}
+		if step.Plugin.MinVersion != "" {
+			if _, err := semver.StrictNewVersion(strings.TrimPrefix(step.Plugin.MinVersion, "v")); err != nil {
+				return fmt.Errorf("plugin min_version %q must be a semantic version such as 1.2.3: %w", step.Plugin.MinVersion, err)
+			}
 		}
 	}
 	if step.Shell != nil {

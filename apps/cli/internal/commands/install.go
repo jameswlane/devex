@@ -489,6 +489,11 @@ func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName s
 	if e.bootstrap == nil {
 		return fmt.Errorf("plugin bootstrap is required")
 	}
+	if opts.MinVersion != "" {
+		if _, err := e.bootstrap.EnsurePluginVersionWithContext(ctx, pluginName, opts.MinVersion); err != nil {
+			return err
+		}
+	}
 	return e.bootstrap.ExecutePluginWithOptions(ctx, pluginName, args, sdk.PluginRunOptions{
 		IO:  sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stderr, Stderr: os.Stderr},
 		Env: sortedEnvSlice(opts.Env),

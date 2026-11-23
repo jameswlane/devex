@@ -42,6 +42,8 @@ type ExecutionRequest struct {
 	Env        map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	WorkingDir string            `json:"working_dir,omitempty" yaml:"working_dir,omitempty"`
 	Metadata   map[string]any    `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	// MinPluginVersion is the oldest Plugin release the request supports.
+	MinPluginVersion string `json:"min_plugin_version,omitempty" yaml:"min_plugin_version,omitempty"`
 }
 
 type ExecutionPlan struct {
@@ -321,6 +323,8 @@ func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, e
 			Env:        interpolateStringMap(step.Plugin.Env, evalCtx),
 			WorkingDir: interpolateString(step.Plugin.WorkingDir, evalCtx),
 			Metadata:   interpolateAnyMap(step.Plugin.Metadata, evalCtx),
+
+			MinPluginVersion: step.Plugin.MinVersion,
 		}
 		if err := validatePlannedPluginRequest(result.Request); err != nil {
 			return result, err
@@ -642,6 +646,8 @@ func redactExecutionRequest(request ExecutionRequest, values []string) Execution
 		Env:        redactStringMap(request.Env, values),
 		WorkingDir: redactString(request.WorkingDir, values),
 		Metadata:   redactAnyMap(request.Metadata, values),
+
+		MinPluginVersion: request.MinPluginVersion,
 	}
 }
 
@@ -786,6 +792,8 @@ func cloneExecutionRequest(source ExecutionRequest) ExecutionRequest {
 		Env:        cloneStringMap(source.Env),
 		WorkingDir: source.WorkingDir,
 		Metadata:   cloneAnyMap(source.Metadata),
+
+		MinPluginVersion: source.MinPluginVersion,
 	}
 }
 

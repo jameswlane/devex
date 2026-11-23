@@ -64,6 +64,7 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: update
+        min_version: 0.2.9
         args:
           - "{{ resource.node.external_id }}"
   status:

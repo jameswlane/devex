@@ -219,6 +219,7 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: update
+        min_version: 0.2.9
         args:
           - "{{ resource.kubectl.external_id }}"
     - id: helm-update
@@ -227,6 +228,7 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: update
+        min_version: 0.2.9
         args:
           - "{{ resource.helm.external_id }}"
     - id: kind-update
@@ -235,6 +237,7 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: update
+        min_version: 0.2.9
         args:
           - "{{ resource.kind.external_id }}"
     - id: terraform-update
@@ -243,6 +246,7 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: update
+        min_version: 0.2.9
         args:
           - "{{ resource.terraform.external_id }}"
     - id: opentofu-update
@@ -251,6 +255,7 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: update
+        min_version: 0.2.9
         args:
           - "{{ resource.opentofu.external_id }}"
     - id: awscli-update
@@ -259,6 +264,7 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: update
+        min_version: 0.2.9
         args:
           - "{{ resource.awscli.external_id }}"
   status:
