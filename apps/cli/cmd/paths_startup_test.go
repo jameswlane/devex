@@ -14,12 +14,57 @@ import (
 
 var _ = Describe("Startup migration preview policy", func() {
 	It("honors environment and explicit true/false flags, stopping at the argument boundary", func() {
+		explicit := func(args []string) bool { dry, _ := explicitDryRun(args); return dry }
 		GinkgoT().Setenv("DEVEX_DRY_RUN", "true")
-		Expect(migrationDryRun(nil)).To(BeTrue())
-		Expect(migrationDryRun([]string{"--dry-run=false", "paths"})).To(BeFalse())
+		Expect(explicit(nil)).To(BeTrue())
+		Expect(explicit([]string{"--dry-run=false", "paths"})).To(BeFalse())
 		GinkgoT().Setenv("DEVEX_DRY_RUN", "")
-		Expect(migrationDryRun([]string{"paths", "--dry-run"})).To(BeTrue())
-		Expect(migrationDryRun([]string{"--", "--dry-run"})).To(BeFalse())
+		Expect(explicit([]string{"paths", "--dry-run"})).To(BeTrue())
+		Expect(explicit([]string{"--", "--dry-run"})).To(BeFalse())
+	})
+})
+
+var _ = Describe("Startup preview from the config file", func() {
+	var home, preview string
+
+	BeforeEach(func() {
+		home = GinkgoT().TempDir()
+		testhelper.SetProfileEnv(GinkgoT(), home)
+		GinkgoT().Setenv("DEVEX_DRY_RUN", "")
+		GinkgoT().Setenv("DEVEX_CONFIG", "")
+		GinkgoT().Chdir(home)
+		preview = filepath.Join(home, "preview.yaml")
+		Expect(os.WriteFile(preview, []byte("dry-run: true\n"), 0600)).To(Succeed())
+	})
+
+	It("treats dry-run in a --config file as a preview", func() {
+		Expect(startupDryRun([]string{"--config", preview, "install", "editor"})).To(BeTrue())
+		Expect(startupDryRun([]string{"--config=" + preview, "install", "editor"})).To(BeTrue())
+		Expect(startupDryRun([]string{"install", "editor"})).To(BeFalse())
+	})
+
+	It("reads the file named by DEVEX_CONFIG", func() {
+		GinkgoT().Setenv("DEVEX_CONFIG", preview)
+		Expect(startupDryRun([]string{"install", "editor"})).To(BeTrue())
+	})
+
+	It("reads config.yaml from the standard locations", func() {
+		Expect(os.WriteFile(filepath.Join(home, "config.yaml"), []byte("dry-run: true\n"), 0600)).To(Succeed())
+		Expect(startupDryRun([]string{"install", "editor"})).To(BeTrue())
+	})
+
+	It("lets the flag and the environment override the file", func() {
+		Expect(startupDryRun([]string{"--config", preview, "--dry-run=false", "install", "editor"})).To(BeFalse())
+		GinkgoT().Setenv("DEVEX_DRY_RUN", "false")
+		Expect(startupDryRun([]string{"--config", preview, "install", "editor"})).To(BeFalse())
+	})
+
+	It("does not take a flag value that looks like --dry-run for the flag", func() {
+		Expect(startupDryRun([]string{"--config", preview, "install", "--template", "--dry-run=false"})).To(BeTrue())
+	})
+
+	It("writes nothing first when the config file cannot be read", func() {
+		Expect(startupDryRun([]string{"--config", filepath.Join(home, "missing.yaml"), "install", "editor"})).To(BeTrue())
 	})
 })
 

@@ -301,10 +301,16 @@ func initializeConfig(cmd *cobra.Command) error {
 
 // loadCLIConfig keeps file loading separate from application resolution.
 func loadCLIConfig(cfgFile string) error {
+	return readCLIConfig(viper.GetViper(), cfgFile)
+}
+
+// readCLIConfig reads the CLI config file into v, from cfgFile or else from the
+// standard locations. A missing file in the standard locations is not an error.
+func readCLIConfig(v *viper.Viper, cfgFile string) error {
 	// 3. Configuration file paths (in order of precedence)
 	if cfgFile != "" {
 		// Use config file from the flag
-		viper.SetConfigFile(cfgFile)
+		v.SetConfigFile(cfgFile)
 	} else {
 		// Look for config in standard locations
 		home, err := devexHomeDir()
@@ -313,15 +319,15 @@ func loadCLIConfig(cfgFile string) error {
 		}
 
 		// Search config in home directory with name "config" (without extension)
-		viper.AddConfigPath(".")                                                                                                            // Current directory
-		viper.AddConfigPath(filepath.Dir(devexpaths.ForHome(home).ReadPath(filepath.Join(devexpaths.ForHome(home).Config, "config.yaml")))) // User override
-		viper.AddConfigPath(devexpaths.ForHome(home).Defaults())                                                                            // Default location
-		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
+		v.AddConfigPath(".")                                                                                                            // Current directory
+		v.AddConfigPath(filepath.Dir(devexpaths.ForHome(home).ReadPath(filepath.Join(devexpaths.ForHome(home).Config, "config.yaml")))) // User override
+		v.AddConfigPath(devexpaths.ForHome(home).Defaults())                                                                            // Default location
+		v.SetConfigName("config")
+		v.SetConfigType("yaml")
 	}
 
 	// 4. Read config file (ignore if not found)
-	if err := viper.ReadInConfig(); err != nil {
+	if err := v.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if !errors.As(err, &configFileNotFoundError) {
 			return err
@@ -329,10 +335,23 @@ func loadCLIConfig(cfgFile string) error {
 		// Config file not found is acceptable - we'll use defaults
 		log.Debug("Config file not found, using defaults")
 	} else {
-		log.Debug("Using config file", "path", viper.ConfigFileUsed())
+		log.Debug("Using config file", "path", v.ConfigFileUsed())
 	}
 
 	return nil
+}
+
+// ConfigFileDryRun reports whether the CLI config file that initializeConfig
+// would read sets dry-run, so startup can avoid writes before Cobra runs.
+// cfgFile is the --config value or "" for the standard locations. A file that
+// cannot be read counts as a preview: execution then fails on the same error,
+// and startup must not write state first.
+func ConfigFileDryRun(cfgFile string) bool {
+	v := viper.New()
+	if err := readCLIConfig(v, cfgFile); err != nil {
+		return true
+	}
+	return v.GetBool("dry-run")
 }
 
 // setConfigurationDefaults sets default values for configuration options

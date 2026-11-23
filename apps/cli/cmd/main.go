@@ -71,7 +71,7 @@ func main() {
 		}
 		return
 	}
-	dryRun := migrationDryRun(os.Args[1:]) || readCommand(os.Args[1:])
+	dryRun := startupDryRun(os.Args[1:]) || readCommand(os.Args[1:])
 	if err := migrateLegacy(ctx, dirs, dryRun, os.Args[1:], os.Stderr); err != nil {
 		handleError("migrating legacy files", err)
 		return
@@ -239,23 +239,58 @@ func initializeDatabase(ctx context.Context, homeDir string, dryRun bool) (types
 	return repository.NewRepository(sqlite), sqlite, nil
 }
 
-// migrationDryRun is evaluated before Cobra startup to keep migration/log/database
-// initialization side-effect free. Stop at --, just as flag parsing does.
-func migrationDryRun(args []string) bool {
-	dry, _ := strconv.ParseBool(os.Getenv("DEVEX_DRY_RUN"))
-	for _, arg := range args {
-		if arg == "--" {
-			break
+// startupDryRun decides before Cobra startup whether migration, logging and
+// database initialization must stay side-effect free. It follows the
+// precedence of initializeConfig: the --dry-run flag, then DEVEX_DRY_RUN, then
+// the config file.
+func startupDryRun(args []string) bool {
+	if dry, set := explicitDryRun(args); set {
+		return dry
+	}
+	return commands.ConfigFileDryRun(startupConfigFile(args))
+}
+
+// explicitDryRun reads --dry-run as Cobra parses it, so a flag value such as
+// --template --dry-run=false is not taken for the flag, and falls back to
+// DEVEX_DRY_RUN. Unresolved command lines are scanned up to --. set is false
+// when neither is given.
+func explicitDryRun(args []string) (dry, set bool) {
+	if route := resolveStartupRoute(args); route.resolved {
+		if route.flagSet("dry-run") {
+			return route.flagTrue("dry-run"), true
 		}
-		if arg == "--dry-run" {
-			dry = true
+	} else {
+		for _, arg := range args {
+			if arg == "--" {
+				break
+			}
+			if arg == "--dry-run" {
+				dry, set = true, true
+			}
+			if strings.HasPrefix(arg, "--dry-run=") {
+				dry, _ = strconv.ParseBool(strings.TrimPrefix(arg, "--dry-run="))
+				set = true
+			}
 		}
-		if strings.HasPrefix(arg, "--dry-run=") {
-			value := strings.TrimPrefix(arg, "--dry-run=")
-			dry, _ = strconv.ParseBool(value)
+		if set {
+			return dry, true
 		}
 	}
-	return dry
+	if value, ok := os.LookupEnv("DEVEX_DRY_RUN"); ok && value != "" {
+		dry, _ = strconv.ParseBool(value)
+		return dry, true
+	}
+	return false, false
+}
+
+// startupConfigFile returns the config file initializeConfig will read: the
+// --config flag, then DEVEX_CONFIG, else "" for the standard locations.
+func startupConfigFile(args []string) string {
+	route := resolveStartupRoute(args)
+	if route.flagSet("config") {
+		return route.flagValue("config")
+	}
+	return os.Getenv("DEVEX_CONFIG")
 }
 
 // Informational commands validate migration without moving any files, keeping
