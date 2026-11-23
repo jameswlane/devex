@@ -30,6 +30,8 @@ type StepExecutor interface {
 type PluginExecOptions struct {
 	Env        map[string]string
 	WorkingDir string
+	// MinVersion is the oldest plugin release the step supports.
+	MinVersion string
 }
 
 type PluginExecutor interface {
@@ -429,6 +431,7 @@ func (e PluginStepExecutor) ExecuteStep(ctx context.Context, step templates.Plan
 	opts := PluginExecOptions{
 		Env:        maps.Clone(step.Request.Env),
 		WorkingDir: step.Request.WorkingDir,
+		MinVersion: step.Request.MinPluginVersion,
 	}
 	if err := e.PluginExecutor.ExecutePlugin(ctx, step.Request.Plugin, args, opts); err != nil {
 		return nil, err

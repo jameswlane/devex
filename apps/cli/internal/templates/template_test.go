@@ -223,6 +223,34 @@ lifecycle:
 			Expect(err.Error()).To(ContainSubstring("unsupported template schema version"))
 		})
 
+		DescribeTable("validates a plugin step's min_version",
+			func(minVersion string, valid bool) {
+				spec := templates.TemplateSpec{
+					SchemaVersion: templates.TemplateSchemaVersion,
+					ID:            "versioned",
+					Name:          "Versioned",
+					Version:       "1.0.0",
+					Lifecycle: map[templates.LifecycleAction][]templates.TemplateStepSpec{
+						templates.LifecycleMaintain: {{
+							ID:     "update",
+							Plugin: &templates.TemplatePluginAction{Name: "package-manager-mise", Command: "update", MinVersion: minVersion},
+						}},
+					},
+				}
+				err := templateManager.ValidateTemplateSpec(spec)
+				if valid {
+					Expect(err).NotTo(HaveOccurred())
+					return
+				}
+				Expect(err).To(MatchError(ContainSubstring("min_version")))
+			},
+			Entry("a release version", "0.2.9", true),
+			Entry("a v-prefixed version", "v0.2.9", true),
+			Entry("a partial version", "0.2", false),
+			Entry("a version range", ">=0.2.9", false),
+			Entry("text", "latest", false),
+		)
+
 		It("should reject specs with duplicate step IDs", func() {
 			spec := templates.TemplateSpec{
 				SchemaVersion: templates.TemplateSchemaVersion,

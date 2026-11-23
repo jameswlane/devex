@@ -192,6 +192,8 @@ plugin:
 
 At execution time the command is passed as the first plugin argument, followed by `args`. Prefer one argument per list item. Do not encode shell pipelines or multiple commands inside one string.
 
+Set `min_version` when a step depends on behavior that older plugin releases lack, for example `min_version: 0.2.9`. Before the step runs, DevEx checks the installed plugin. If it is older, DevEx downloads the latest verified release from the registry. The step fails with the command to run instead when `--offline` or `--skip-plugin-download` is set, or when the registry has nothing new enough. Locally built plugins whose version is not a semantic version, such as `dev`, are not checked.
+
 For Docker-style templates, use explicit flags such as `--name`, `--port`, `--env`, `--volume`, `--restart`, and `--detach`. Put the container command after a `--` argument, for example `- --` followed by `- mlflow` and `- server`. Arguments after `--` are passed to the container and are not checked as Docker flags.
 
 ## Sensitive Input Redaction
