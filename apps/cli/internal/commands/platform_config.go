@@ -28,7 +28,7 @@ var platformPluginMappings = []PlatformPluginMapping{
 	{OS: "linux", Distribution: "suse", RequiredPlugins: []string{"package-manager-zypper", "tool-shell"}},
 
 	// macOS
-	{OS: "darwin", RequiredPlugins: []string{"package-manager-homebrew", "tool-shell"}},
+	{OS: "darwin", RequiredPlugins: []string{"package-manager-brew", "tool-shell"}},
 
 	// Windows
 	{OS: "windows", RequiredPlugins: []string{"package-manager-winget", "tool-shell"}},
