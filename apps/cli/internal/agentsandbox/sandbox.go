@@ -247,14 +247,34 @@ func findAppArmorBwrapProfile(probe Probe, bwrapPath string) string {
 		if err != nil {
 			continue
 		}
-		content := string(data)
 		for _, target := range targets {
-			if strings.Contains(content, target) {
+			if profileAttaches(string(data), target) {
 				return path
 			}
 		}
 	}
 	return ""
+}
+
+// profileAttaches reports whether an AppArmor profile file has a
+// non-comment line with target as a whole (optionally quoted) field, as in
+// `profile bwrap /usr/bin/bwrap flags=(...) {`.
+func profileAttaches(content, target string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.Contains(line, `"`+target+`"`) {
+			return true
+		}
+		for _, field := range strings.Fields(line) {
+			if field == target {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func detectLinuxDistro(probe Probe) string {
@@ -327,7 +347,7 @@ func restrictedRemediation(probe Probe, bwrapPath, profile string, apparmorRestr
 			// likely installed but not loaded.
 			steps = append(steps,
 				fmt.Sprintf("An AppArmor profile for bwrap exists at %s but bwrap still fails; load it (preferred):\n", profile)+
-					"  sudo apparmor_parser -r "+profile,
+					"  sudo apparmor_parser -r "+shellQuote(profile),
 			)
 		case bwrapPath == defaultBwrapBinaryPath && extraErr == nil:
 			steps = append(steps,
@@ -365,9 +385,28 @@ func restrictedRemediation(probe Probe, bwrapPath, profile string, apparmorRestr
 // name so it never replaces an existing bwrap profile, and it is a single line
 // so it can be pasted as is (an indented heredoc terminator would not end it).
 func minimalBwrapProfileCommand(bwrapPath string) string {
-	return "printf '%s\\n' 'abi <abi/4.0>,' 'include <tunables/global>' " +
-		"'profile devex-bwrap " + bwrapPath + " flags=(unconfined) {' '  userns,' '  include if exists <local/devex-bwrap>' '}' " +
-		"| sudo tee " + pathAppArmorDevexBwrap + " >/dev/null && sudo apparmor_parser -r " + pathAppArmorDevexBwrap
+	// The attachment is a quoted AppArmor path, so spaces stay literal; every
+	// printf argument is shell-quoted, so apostrophes cannot end the quoting.
+	attachment := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(bwrapPath) + `"`
+	lines := []string{
+		"abi <abi/4.0>,",
+		"include <tunables/global>",
+		"profile devex-bwrap " + attachment + " flags=(unconfined) {",
+		"  userns,",
+		"  include if exists <local/devex-bwrap>",
+		"}",
+	}
+	quoted := make([]string, len(lines))
+	for i, line := range lines {
+		quoted[i] = shellQuote(line)
+	}
+	return "printf '%s\\n' " + strings.Join(quoted, " ") +
+		" | sudo tee " + pathAppArmorDevexBwrap + " >/dev/null && sudo apparmor_parser -r " + pathAppArmorDevexBwrap
+}
+
+// shellQuote quotes value as one POSIX shell word.
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 // bwrapProbeTimeout bounds the sandbox start check; `true` exits immediately.

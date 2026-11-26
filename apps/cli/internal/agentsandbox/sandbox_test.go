@@ -124,7 +124,7 @@ var _ = Describe("Agent sandbox prerequisite check", func() {
 		Expect(report.Remediation[0]).To(And(
 			ContainSubstring("sudo tee /etc/apparmor.d/devex-bwrap"),
 			ContainSubstring("abi <abi/4.0>,"),
-			ContainSubstring("profile devex-bwrap /usr/bin/bwrap flags=(unconfined)"),
+			ContainSubstring("profile devex-bwrap \"/usr/bin/bwrap\" flags=(unconfined)"),
 			ContainSubstring("sudo apparmor_parser -r /etc/apparmor.d/devex-bwrap"),
 		))
 		// The command is one pasteable line under its header (no heredoc).
@@ -150,7 +150,7 @@ var _ = Describe("Agent sandbox prerequisite check", func() {
 		report := agentsandbox.Check(context.Background(), fake.probe())
 
 		Expect(report.Status).To(Equal(agentsandbox.StatusRestricted))
-		Expect(report.Remediation[0]).To(ContainSubstring("sudo apparmor_parser -r /etc/apparmor.d/bwrap"))
+		Expect(report.Remediation[0]).To(ContainSubstring("sudo apparmor_parser -r '/etc/apparmor.d/bwrap'"))
 		Expect(strings.Join(report.Remediation, "\n")).NotTo(Or(ContainSubstring("tee"), ContainSubstring("cp ")))
 	})
 
@@ -171,9 +171,49 @@ var _ = Describe("Agent sandbox prerequisite check", func() {
 		report := agentsandbox.Check(context.Background(), fake.probe())
 
 		Expect(report.Status).To(Equal(agentsandbox.StatusRestricted))
-		Expect(report.Remediation[0]).To(ContainSubstring("profile devex-bwrap /usr/local/bin/bwrap flags=(unconfined)"))
+		Expect(report.Remediation[0]).To(ContainSubstring("profile devex-bwrap \"/usr/local/bin/bwrap\" flags=(unconfined)"))
 		Expect(report.Remediation[0]).NotTo(ContainSubstring("extra-profiles"))
 		Expect(report.AppArmorBwrapProfile).To(BeEmpty())
+	})
+
+	It("quotes a bwrap path with spaces and apostrophes in the generated profile command", func() {
+		bwrapPath := "/opt/it's tools/bwrap"
+		fake := &fakeProbeConfig{
+			goos:   "linux",
+			bins:   map[string]string{"bwrap": bwrapPath, "socat": "/usr/bin/socat"},
+			files:  map[string]string{"/proc/sys/kernel/apparmor_restrict_unprivileged_userns": "1\n"},
+			runOut: "bwrap: setting up uid map: Permission denied\n",
+			runErr: errors.New("exit status 1"),
+		}
+
+		report := agentsandbox.Check(context.Background(), fake.probe())
+		Expect(report.Status).To(Equal(agentsandbox.StatusRestricted))
+		command := strings.SplitN(report.Remediation[0], "\n", 2)[1]
+		printOnly, _, found := strings.Cut(strings.TrimSpace(command), " | sudo tee ")
+		Expect(found).To(BeTrue())
+
+		// Run only the printf part through a real shell to see the profile it writes.
+		out, err := exec.CommandContext(context.Background(), "sh", "-c", printOnly).Output()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(out)).To(ContainSubstring(`profile devex-bwrap "/opt/it's tools/bwrap" flags=(unconfined) {` + "\n"))
+	})
+
+	It("does not count a comment or a longer path as a profile for bwrap", func() {
+		fake := &fakeProbeConfig{
+			goos: "linux",
+			bins: map[string]string{"bwrap": "/usr/bin/bwrap", "socat": "/usr/bin/socat"},
+			files: map[string]string{
+				"/proc/sys/kernel/apparmor_restrict_unprivileged_userns": "1\n",
+				"/etc/apparmor.d/notes":                                  "# see /usr/bin/bwrap\nprofile other /usr/bin/bwrap2 {\n}\n",
+			},
+			runOut: "bwrap: setting up uid map: Permission denied\n",
+			runErr: errors.New("exit status 1"),
+		}
+
+		report := agentsandbox.Check(context.Background(), fake.probe())
+
+		Expect(report.AppArmorBwrapProfile).To(BeEmpty())
+		Expect(report.Remediation[0]).To(ContainSubstring("sudo tee /etc/apparmor.d/devex-bwrap"))
 	})
 
 	It("reports ok when unrestricted and bwrap works", func() {

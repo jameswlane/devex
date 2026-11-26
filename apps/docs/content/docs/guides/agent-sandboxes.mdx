@@ -55,11 +55,11 @@ sudo cp /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d
   sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 ```
 
-If that file is not present (a fresh Ubuntu 24.04 cloud image does not have it), or `bwrap` is not `/usr/bin/bwrap`, write a minimal profile for the detected `bwrap` in its own file, so no existing profile is replaced:
+If that file is not present (a fresh Ubuntu 24.04 cloud image does not have it), write a minimal profile in its own file, so no existing profile is replaced. This is the command for `/usr/bin/bwrap`; when `bwrap` lives elsewhere, run the command `devex agent sandbox` prints, which uses the detected path:
 
 ```sh
 printf '%s\n' 'abi <abi/4.0>,' 'include <tunables/global>' \
-  'profile devex-bwrap /usr/bin/bwrap flags=(unconfined) {' '  userns,' \
+  'profile devex-bwrap "/usr/bin/bwrap" flags=(unconfined) {' '  userns,' \
   '  include if exists <local/devex-bwrap>' '}' \
   | sudo tee /etc/apparmor.d/devex-bwrap >/dev/null && \
   sudo apparmor_parser -r /etc/apparmor.d/devex-bwrap
