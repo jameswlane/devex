@@ -12,11 +12,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentdoctor"
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/agentskills"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/spf13/cobra"
 )
+
+// AgentCmdDeps bundles injectable dependencies for the `agent` command tree.
+type AgentCmdDeps struct {
+	Settings        config.CrossPlatformSettings
+	PluginBootstrap pluginBootstrapProvider
+	SandboxProbe    agentsandbox.Probe
+	Executor        agentPluginExecutor
+	DoctorProbe     agentdoctor.Probe
+	LoginRunner     agentdoctor.LoginRunner
+}
 
 type agentSkillOptions struct {
 	agent      string
@@ -48,8 +59,27 @@ func NewAgentCmdWithSandboxProbe(sandboxProbe agentsandbox.Probe) *cobra.Command
 // NewAgentCmdWithDeps constructs the `agent` command with full dependency
 // injection for configuration, plugin bootstrap, sandbox probe, and plugin execution.
 func NewAgentCmdWithDeps(settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider, sandboxProbe agentsandbox.Probe, executor agentPluginExecutor) *cobra.Command {
+	doctorProbe := agentdoctor.DefaultProbe()
+	doctorProbe.SandboxProbe = sandboxProbe
+	return NewAgentCmdFromDeps(AgentCmdDeps{
+		Settings:        settings,
+		PluginBootstrap: getPluginBootstrap,
+		SandboxProbe:    sandboxProbe,
+		Executor:        executor,
+		DoctorProbe:     doctorProbe,
+		LoginRunner:     agentdoctor.DefaultLoginRunner(),
+	})
+}
+
+// NewAgentCmdFromDeps constructs the `agent` command from a full set of
+// injected dependencies, including the doctor probe and login runner.
+func NewAgentCmdFromDeps(deps AgentCmdDeps) *cobra.Command {
+	executor := deps.Executor
 	if executor == nil {
-		executor = bootstrapAgentPluginExecutor{getBootstrap: getPluginBootstrap}
+		executor = bootstrapAgentPluginExecutor{getBootstrap: deps.PluginBootstrap}
+	}
+	if deps.LoginRunner == nil {
+		deps.LoginRunner = agentdoctor.DefaultLoginRunner()
 	}
 	cmd := &cobra.Command{
 		Use:   "agent",
@@ -85,9 +115,11 @@ to remove so Kimi does not load DevEx twice. Differing content requires --overwr
 	install.Flags().BoolVar(&options.overwrite, "overwrite", false, "Replace differing content and retain a backup")
 	install.Flags().BoolVar(&options.dryRun, "dry-run", false, "Preview without writing files")
 	cmd.AddCommand(install)
-	cmd.AddCommand(newAgentSandboxCmd(sandboxProbe))
-	cmd.AddCommand(newAgentApplyCmd(settings, executor))
-	cmd.AddCommand(newAgentDiffCmd(settings, executor))
+	cmd.AddCommand(newAgentSandboxCmd(deps.SandboxProbe))
+	cmd.AddCommand(newAgentApplyCmd(deps.Settings, executor))
+	cmd.AddCommand(newAgentDiffCmd(deps.Settings, executor))
+	cmd.AddCommand(newAgentDoctorCmd(deps.DoctorProbe))
+	cmd.AddCommand(newAgentLoginCmd(deps.DoctorProbe, deps.LoginRunner))
 	return cmd
 }
 

@@ -53,7 +53,7 @@ func main() {
 	}
 	// Validation must remain usable with malformed settings and must not create
 	// databases, migrate files or initialize installation state before reporting.
-	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) || agentSandboxCommand(os.Args[1:]) {
+	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) || agentSandboxCommand(os.Args[1:]) || agentDoctorCommand(os.Args[1:]) || agentLoginCommand(os.Args[1:]) {
 		if presentationCommand(os.Args[1:]) {
 			if err := migrateLegacy(ctx, dirs, true, os.Args[1:], os.Stderr); err != nil {
 				handleError("checking legacy files", err)
@@ -329,6 +329,18 @@ func agentSandboxCommand(args []string) bool {
 	return resolveStartupRoute(args).agentSandbox()
 }
 
+// agentDoctorCommand identifies "devex agent doctor", which inspects installed
+// coding agents without bootstrapping databases or plugins.
+func agentDoctorCommand(args []string) bool {
+	return resolveStartupRoute(args).agentDoctor()
+}
+
+// agentLoginCommand identifies "devex agent login <agent>", which hands off
+// interactive authentication directly to the agent's own CLI.
+func agentLoginCommand(args []string) bool {
+	return resolveStartupRoute(args).agentLogin()
+}
+
 func readCommand(args []string) bool {
 	return resolveStartupRoute(args).read()
 }
@@ -500,6 +512,16 @@ func (r startupRoute) agentSandbox() bool {
 	return r.is("agent", "sandbox")
 }
 
+// agentDoctor identifies "devex agent doctor".
+func (r startupRoute) agentDoctor() bool {
+	return r.is("agent", "doctor")
+}
+
+// agentLogin identifies "devex agent login".
+func (r startupRoute) agentLogin() bool {
+	return r.is("agent", "login")
+}
+
 // configurationValidation identifies "devex config validate".
 func (r startupRoute) configurationValidation() bool {
 	return r.is("config", "validate")
@@ -540,7 +562,7 @@ func (r startupRoute) read() bool {
 	case "config":
 		return r.is("config", "effective") || r.is("config", "show")
 	case "agent":
-		return r.agentSkillInstall() || r.agentSandbox() || r.is("agent", "diff")
+		return r.agentSkillInstall() || r.agentSandbox() || r.is("agent", "diff") || r.agentDoctor() || r.agentLogin()
 	}
 	return false
 }

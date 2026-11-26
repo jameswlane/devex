@@ -1,0 +1,33 @@
+---
+title: Agent login handoff
+description: Hand off interactive authentication directly to a coding agent's own CLI without DevEx storing credentials.
+---
+
+`devex agent login <agent>` launches an installed coding agent's own interactive login command with your terminal attached. DevEx never prompts for, stores, or logs API keys or OAuth tokens.
+
+```sh
+devex agent login claude
+devex agent login codex
+devex agent login opencode
+```
+
+## Supported Agents
+
+| Agent ID | Handoff Command | Notes |
+| --- | --- | --- |
+| `claude` | `claude auth login` | Browser-based Anthropic OAuth login |
+| `codex` | `codex login` | ChatGPT OAuth or API-key login |
+| `copilot` | `copilot login` | GitHub OAuth / device-code flow |
+| `opencode` | `opencode auth login` | Interactive provider connection |
+| `goose` | `goose configure` | Interactive provider and credential setup |
+| `kimi` | `kimi login` | Moonshot device-code OAuth flow |
+| `gemini` | None | Start `gemini` and run `/auth`, or export `GEMINI_API_KEY` |
+| `aider` | None | Export provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.) or use `~/.aider.conf.yml` / `.env` |
+
+## Behavior
+
+- Validates the agent ID and verifies that the binary is installed on `PATH`.
+- Attaches `stdin`, `stdout`, and `stderr` directly to your terminal, inherits the current environment, and returns the agent command's exit status.
+- For agents without a standalone login subcommand (`aider`, `gemini`), exits with guidance pointing to the vendor's login flow or environment variables.
+
+See [Agent Credentials](/docs/guides/agent-credentials) for recommended credential practices and secret-manager integration.

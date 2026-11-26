@@ -1,0 +1,36 @@
+---
+title: Agent doctor
+description: Diagnose installed coding agents, PATH shadowing, login status, sandboxes, and MCP configs without handling secrets.
+---
+
+`devex agent doctor` inspects the coding agents cataloged by DevEx and reports installation health, `PATH` shadowing, authentication state, Node.js version compatibility, Linux sandbox prerequisites, and MCP configuration syntax in one place.
+
+```sh
+devex agent doctor
+devex agent doctor --format json
+devex agent doctor --agent claude --agent codex
+```
+
+## Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--format` | `table` | Output format: `table` or `json` |
+| `--agent` | all known agents | Filter to one or more agent IDs (`aider`, `claude`, `codex`, `copilot`, `gemini`, `goose`, `kimi`, `opencode`); repeatable or comma-separated |
+
+## What It Checks
+
+- **Installation & version**: Scans every entry in `PATH` directly (not only the first match) and runs each installed binary's version flag with a bounded timeout.
+- **Duplicate and shadowed installs**: Flags multiple binaries on `PATH` and identifies stale global npm installs (binaries resolving inside a `node_modules` tree) shadowing native installs, with actionable `npm uninstall -g <package>` or `PATH` ordering fixes.
+- **Authentication state**: Reports `logged_in`, `not_logged_in`, or `unknown` using only the exit code of the agent's status command (such as `claude auth status` or `codex login status`), credential file presence via `stat` (never reading the file), or whether documented API-key environment variable names are set.
+- **Node.js version**: Checks `node --version` for Node-based agents (and npm-installed binaries) and suggests `mise use -g node@<version>` when Node.js is missing or too old.
+- **Linux sandbox prerequisites**: For agents declaring `sandbox_prerequisites` in the DevEx catalog (`claude`, `codex`, `copilot`), runs the [`devex agent sandbox`](/docs/cli-reference/agent-sandbox) check at most once per doctor run and points to `devex agent sandbox` when remediation is needed.
+- **MCP configuration syntax**: Parses existing user-level MCP configuration files (JSON, TOML, or YAML) and reports `ok` or `invalid` with only the error line/column—never echoing file contents.
+
+## Secret Safety and Exit Status
+
+DevEx never reads credential files, never prints output from login-status commands, never echoes MCP file contents, and redacts any set API-key environment variable values as defense in depth before writing output.
+
+The command exits `0` whenever the diagnostic report is produced; detected setup problems are listed with actionable fixes and do not change the exit code. Passing an unsupported `--format` or unknown `--agent` ID exits non-zero.
+
+See [Agent Credentials](/docs/guides/agent-credentials) for supported ways to supply API keys and login sessions safely.
