@@ -350,8 +350,6 @@ func planClaude(spec AgentSpec, configDir, home string, env Env, prev AgentManag
 	}
 	if mcpSkipped {
 		nextState.MCPOwned = cloneMCPOwned(prev.MCPOwned)
-		nextState.MCPServers = slices.Clone(prev.MCPServers)
-		nextState.MCPConfigPath = prev.MCPConfigPath
 	} else {
 		nextState.MCPOwned = withMCPOwnedForPath(prev.MCPOwned, resolvedMCPPath, ownedMCP)
 	}

@@ -472,7 +472,7 @@ func loadAgentsConfigFile(path string) (AgentsConfig, bool, error) {
 		hasAgents  bool
 	)
 	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value == "agents" {
+		if strings.EqualFold(root.Content[i].Value, "agents") {
 			agentsNode = root.Content[i+1]
 			hasAgents = true
 		}

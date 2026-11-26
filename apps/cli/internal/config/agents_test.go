@@ -505,4 +505,18 @@ var _ = Describe("Agents configuration schema and validation", func() {
 		Expect(loaded.Agents.MCPServers[0].Env).To(HaveKeyWithValue("GITHUB_TOKEN", "${env:GITHUB_TOKEN}"))
 		Expect(loaded.Agents.MCPServers[0].Env).NotTo(HaveKey("github_token"))
 	})
+
+	It("lets a higher-tier dotfiles.yaml override agents with a capitalized Agents key", func() {
+		teamDir := settings.GetTeamConfigDir()
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(teamDir, "agents.yaml"), []byte("agents:\n  enabled: [claude]\n"), 0o600)).To(Succeed())
+
+		userDir := settings.GetUserConfigDir()
+		Expect(os.MkdirAll(userDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(userDir, "dotfiles.yaml"), []byte("Agents:\n  enabled: [codex]\n"), 0o600)).To(Succeed())
+
+		loaded, err := LoadCrossPlatformSettings(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.Agents.Enabled).To(Equal([]string{"codex"}))
+	})
 })

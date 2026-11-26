@@ -996,7 +996,7 @@ http_headers = { Cookie = "sid=codex", "Proxy-Authorization" = "Basic codex" }
 			Expect(SaveManagedState(statePath, ManagedState{
 				Version: 1,
 				Agents: map[string]AgentManagedState{
-					AgentCodex: {MCPServers: []string{"old_srv"}},
+					AgentCodex: {MCPOwned: map[string][]string{codexConfig: {"old_srv"}}},
 				},
 			})).To(Succeed())
 			Expect(os.WriteFile(codexConfig, []byte(fmt.Sprintf(`
@@ -1142,19 +1142,6 @@ http_headers = { Authorization = "Bearer %s" }
 			Expect(string(dataB)).To(ContainSubstring("[mcp_servers.shared]"))
 			Expect(string(dataB)).To(ContainSubstring(`command = "unrelated-b"`))
 
-			// Legacy state file with no mcp_config_path still matches the current path.
-			statePath := filepath.Join(envB.StateDir(home), "agents", "managed.json")
-			Expect(SaveManagedState(statePath, ManagedState{
-				Version: 1,
-				Agents: map[string]AgentManagedState{
-					AgentCodex: {MCPServers: []string{"shared"}},
-				},
-			})).To(Succeed())
-			_, err = runPlugin(envB, "apply", Spec{Agents: []AgentSpec{{Name: AgentCodex}}})
-			Expect(err).NotTo(HaveOccurred())
-			dataBAfter, err := os.ReadFile(dirBConfig)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(dataBAfter)).NotTo(ContainSubstring("[mcp_servers.shared]"))
 		})
 
 		It("persists partial ownership checkpoints when a later write or Claude MCP command fails within the same agent", func() {
@@ -1499,6 +1486,37 @@ http_headers = { Authorization = "Bearer %s" }
 				ContainSubstring("servers"),
 				ContainSubstring("opencode.json"),
 			)))
+		})
+
+		It("keeps a v2 OpenCode container stable when a managed server has a field-like name such as url", func() {
+			env := newTestEnv(home, nil, "opencode")
+			openCodeDir := filepath.Join(home, ".config", "opencode")
+			Expect(os.MkdirAll(openCodeDir, 0o700)).To(Succeed())
+			jsonPath := filepath.Join(openCodeDir, "opencode.json")
+			Expect(os.WriteFile(jsonPath, []byte("{\n  \"mcp\": {\n    \"servers\": {}\n  }\n}\n"), 0o600)).To(Succeed())
+			spec := Spec{Agents: []AgentSpec{{
+				Name:       AgentOpenCode,
+				MCPServers: []MCPServerSpec{{Name: "url", Transport: MCPTransportStdio, Command: "url-server"}},
+			}}}
+			readMCP := func() map[string]any {
+				raw, err := os.ReadFile(jsonPath)
+				Expect(err).NotTo(HaveOccurred())
+				var parsed map[string]any
+				Expect(json.Unmarshal(raw, &parsed)).To(Succeed())
+				return parsed["mcp"].(map[string]any)
+			}
+			for range 2 {
+				_, err := runPlugin(env, "apply", spec)
+				Expect(err).NotTo(HaveOccurred())
+				mcpObj := readMCP()
+				Expect(mcpObj).NotTo(HaveKey("url"))
+				Expect(mcpObj["servers"]).To(HaveKey("url"))
+			}
+			_, err := runPlugin(env, "apply", Spec{Agents: []AgentSpec{{Name: AgentOpenCode}}})
+			Expect(err).NotTo(HaveOccurred())
+			raw, err := os.ReadFile(jsonPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(raw)).NotTo(ContainSubstring(`"url"`))
 		})
 	})
 })

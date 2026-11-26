@@ -1379,15 +1379,6 @@ func mergeOpenCodeMCPServers(
 	)
 }
 
-func isOpenCodeServerDefKey(key string) bool {
-	switch key {
-	case "type", "command", "url", "environment", "headers", "enabled", "disabled":
-		return true
-	default:
-		return false
-	}
-}
-
 func openCodeV2ServersContainer(mcpObj *jsonObject) (*jsonObject, bool) {
 	if mcpObj == nil {
 		return nil, false
@@ -1400,8 +1391,10 @@ func openCodeV2ServersContainer(mcpObj *jsonObject) (*jsonObject, bool) {
 	if !isObj {
 		return nil, false
 	}
+	// A v2 container maps names to server objects; a legacy server named
+	// "servers" has scalar or array fields such as type and command.
 	for _, entry := range serversObj.Entries {
-		if isOpenCodeServerDefKey(entry.Key) {
+		if _, isServer := entry.Value.(*jsonObject); !isServer {
 			return nil, false
 		}
 	}
