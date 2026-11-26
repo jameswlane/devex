@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"runtime"
 	"strings"
 	"sync"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/scheduler"
 
 	"github.com/spf13/viper"
@@ -24,6 +27,12 @@ import (
 
 var installApplication = installers.InstallCrossPlatformApp
 var prepareApplicationInstallers = initializeApplicationInstallers
+
+// plainInstallSandboxProbe and plainInstallErrWriter are replaced in tests.
+var (
+	plainInstallSandboxProbe           = agentsandbox.DefaultProbe
+	plainInstallErrWriter    io.Writer = os.Stderr
+)
 
 // preparePackageBatch shares the TUI's batched package transactions; tests replace it.
 var preparePackageBatch = tui.PreparePackageBatch
@@ -227,7 +236,47 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 	if len(failures) > 0 {
 		return errors.Join(result, fmt.Errorf("failed to install applications: %s", strings.Join(failures, ", ")))
 	}
+	if result == nil && runtime.GOOS == "linux" {
+		if declared := declaredSandboxPrerequisites(apps); len(declared) > 0 {
+			reportPostInstallSandboxCheck(ctx, plainInstallErrWriter, declared)
+		}
+	}
 	return result
+}
+
+// declaredSandboxPrerequisites returns the lower-case names of the sandbox
+// prerequisites the installed applications declare for this platform.
+func declaredSandboxPrerequisites(apps []types.CrossPlatformApp) map[string]bool {
+	declared := map[string]bool{}
+	for _, app := range apps {
+		for _, name := range app.GetOSConfig().SandboxPrerequisites {
+			declared[strings.ToLower(strings.TrimSpace(name))] = true
+		}
+	}
+	return declared
+}
+
+func reportPostInstallSandboxCheck(ctx context.Context, errOut io.Writer, declared map[string]bool) {
+	if errOut == nil {
+		errOut = os.Stderr
+	}
+	probe := plainInstallSandboxProbe()
+	probe.SocatNotRequired = !declared["socat"]
+	report := agentsandbox.Check(ctx, probe)
+	if _, err := agentsandbox.SaveReport(report); err != nil {
+		log.Warn("Could not record agent sandbox check report", "error", err)
+	}
+	if report.Status == agentsandbox.StatusOK || report.Status == agentsandbox.StatusUnsupported {
+		return
+	}
+	fmt.Fprintf(errOut, "Warning: Linux agent sandbox check returned %s", report.Status)
+	if report.BwrapError != "" {
+		fmt.Fprintf(errOut, " (%s)", report.BwrapError)
+	}
+	fmt.Fprintln(errOut, ". Run `devex agent sandbox` for details.")
+	for i, step := range report.Remediation {
+		fmt.Fprintf(errOut, "  %d. %s\n", i+1, step)
+	}
 }
 
 func installConcurrency() int {

@@ -70,8 +70,20 @@ type PlannedApp struct {
 	UnknownEffects bool     `json:"unknown_effects"`
 }
 
-// SelectApplications is the shared CLI execution and planning selection policy.
+// SelectApplications is the shared CLI install execution and planning
+// selection policy: the requested applications plus the sandbox prerequisites
+// they declare for the current platform.
 func SelectApplications(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) ([]types.CrossPlatformApp, config.CrossPlatformSettings, error) {
+	apps, s, err := SelectRequestedApplications(ctx, s, r)
+	if err != nil {
+		return nil, s, err
+	}
+	return expandSandboxPrerequisites(apps, s), s, nil
+}
+
+// SelectRequestedApplications resolves only the requested applications, for
+// operations such as update and upgrade that must not add install prerequisites.
+func SelectRequestedApplications(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) ([]types.CrossPlatformApp, config.CrossPlatformSettings, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, s, err
 	}
@@ -101,6 +113,53 @@ func SelectApplications(ctx context.Context, s config.CrossPlatformSettings, r P
 		return nil, s, &Error{Category: "not_found", Message: "no applications matched the install request"}
 	}
 	return apps, s, nil
+}
+
+// expandSandboxPrerequisites puts the current-platform sandbox_prerequisites
+// of the selected apps first, in declaration order and deduplicated, followed by
+// the remaining apps in their selected order. Prerequisites are filtered to
+// catalog applications supported on this platform. The order depends only on
+// the set of selected apps' declarations, so resolving the expanded names again
+// (as MCP confirmation does) yields the same roots in the same order.
+func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) []types.CrossPlatformApp {
+	if len(apps) == 0 {
+		return apps
+	}
+	catalog := make(map[string]types.CrossPlatformApp)
+	for _, app := range settings.GetAllApps() {
+		catalog[normalizeInstallLookup(app.Name)] = app
+	}
+	var prerequisites []types.CrossPlatformApp
+	isPrerequisite := map[string]bool{}
+	for _, app := range apps {
+		appKey := normalizeInstallLookup(app.Name)
+		for _, name := range app.GetOSConfig().SandboxPrerequisites {
+			key := normalizeInstallLookup(name)
+			if key == "" || key == appKey || isPrerequisite[key] {
+				continue
+			}
+			prerequisite, ok := catalog[key]
+			if !ok || !prerequisite.IsSupported() {
+				continue
+			}
+			isPrerequisite[key] = true
+			prerequisites = append(prerequisites, prerequisite)
+		}
+	}
+	if len(prerequisites) == 0 {
+		return apps
+	}
+	expanded := append([]types.CrossPlatformApp(nil), prerequisites...)
+	emitted := map[string]bool{}
+	for _, app := range apps {
+		key := normalizeInstallLookup(app.Name)
+		if isPrerequisite[key] || emitted[key] {
+			continue
+		}
+		emitted[key] = true
+		expanded = append(expanded, app)
+	}
+	return expanded
 }
 
 // PlanInstall has no installer, executor, filesystem writer, or network dependency.

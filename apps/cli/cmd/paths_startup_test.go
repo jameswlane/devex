@@ -125,6 +125,8 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("JSON list is read-only", []string{"list", "available", "--format", "json"}, true),
 		Entry("platform is read-only", []string{"platform"}, true),
 		Entry("agent skill installation is read-only", []string{"agent", "install-skill", "--agent", "claude", "--scope", "user"}, true),
+		Entry("agent sandbox check is read-only", []string{"agent", "sandbox"}, true),
+		Entry("agent sandbox json check is read-only", []string{"agent", "sandbox", "--format", "json"}, true),
 		Entry("agent group alone is not read-only", []string{"agent"}, false),
 		Entry("mcp serve is read-only", []string{"mcp", "serve"}, true),
 		Entry("mcp serve with a flag is read-only", []string{"mcp", "serve", "--request-timeout", "5s"}, true),
@@ -196,6 +198,9 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("install-skill as an install argument", agentSkillInstallCommand, []string{"--install-concurrency", "4", "install", "agent", "install-skill"}, false),
 		Entry("after the argument terminator", agentSkillInstallCommand, []string{"install", "--", "agent", "install-skill"}, false),
 		Entry("agent install-skill --help=false still installs", agentSkillInstallCommand, []string{"agent", "install-skill", "--help=false"}, true),
+		Entry("agent sandbox", agentSandboxCommand, []string{"agent", "sandbox"}, true),
+		Entry("agent sandbox with format", agentSandboxCommand, []string{"--install-concurrency", "4", "agent", "sandbox", "--format", "json"}, true),
+		Entry("agent sandbox --help=false still checks", agentSandboxCommand, []string{"agent", "sandbox", "--help=false"}, true),
 		// Explicitly false booleans are set but false, as Cobra treats them:
 		// these commands execute, so they must not take the nil-repository
 		// early presentation path.

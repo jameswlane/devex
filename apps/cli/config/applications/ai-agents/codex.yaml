@@ -31,3 +31,7 @@ linux:
   official_support: true
   dependencies:
     - mise
+  # Linux sandbox uses bubblewrap + seccomp; docs instruct installing system
+  # bubblewrap on Linux/WSL2: https://developers.openai.com/codex/concepts/sandboxing
+  sandbox_prerequisites:
+    - Bubblewrap

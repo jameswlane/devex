@@ -3,6 +3,7 @@
 	"pages": [
 		"getting-started",
 		"security",
+		"agent-sandboxes",
 		"team-setup",
 		"customization",
 		"automation",

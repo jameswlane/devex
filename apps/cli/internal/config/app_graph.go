@@ -127,9 +127,12 @@ func platformConfigs(app types.CrossPlatformApp) map[string]types.OSConfig {
 // File in each error is the application name.
 func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationError) {
 	index := map[string]string{} // lower-case name or install command -> app name
+	byName := map[string]string{}
 	definitions := map[string]types.CrossPlatformApp{}
 	for _, app := range apps {
-		index[strings.ToLower(app.Name)] = app.Name
+		lower := strings.ToLower(strings.TrimSpace(app.Name))
+		index[lower] = app.Name
+		byName[lower] = app.Name
 		definitions[app.Name] = app
 	}
 	// A single-word install command is a package name, so a dependency on that
@@ -197,6 +200,29 @@ func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationE
 					}
 					errs = append(errs, ValidationError{File: app.Name, Field: fmt.Sprintf("%s.conflicts[%d]", platform, i), Message: fmt.Sprintf("application %q conflicts with %q; remove one application or choose a compatible catalog definition", app.Name, target)})
 				}
+			}
+
+			checkSandboxPrerequisites := func(prereqs []string, where string) {
+				for i, prereq := range prereqs {
+					location := fmt.Sprintf("%s.sandbox_prerequisites[%d]", where, i)
+					trimmed := strings.TrimSpace(prereq)
+					if trimmed == "" {
+						errs = append(errs, ValidationError{File: app.Name, Field: location, Message: "sandbox prerequisite name must not be empty"})
+						continue
+					}
+					target, ok := byName[strings.ToLower(trimmed)]
+					if !ok {
+						errs = append(errs, ValidationError{File: app.Name, Field: location, Message: fmt.Sprintf("unknown sandbox prerequisite %q: must name an application in the catalog", prereq)})
+						continue
+					}
+					if target == app.Name {
+						errs = append(errs, ValidationError{File: app.Name, Field: location, Message: fmt.Sprintf("application %q cannot list itself as a sandbox prerequisite", app.Name)})
+					}
+				}
+			}
+			checkSandboxPrerequisites(osConfig.SandboxPrerequisites, field)
+			for i, alternative := range osConfig.Alternatives {
+				checkSandboxPrerequisites(alternative.SandboxPrerequisites, fmt.Sprintf("%s.alternatives[%d]", field, i))
 			}
 
 			for _, dependency := range osConfig.Dependencies {

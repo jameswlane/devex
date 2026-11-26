@@ -1,0 +1,39 @@
+name: socat
+description: Multipurpose relay used by coding agent sandboxes for network proxying
+category: Dependency
+default: false
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: socat
+  uninstall_command: socat
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  alternatives:
+    - install_method: dnf
+      install_command: socat
+      uninstall_command: socat
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - os: centos
+        - os: rhel
+    - install_method: pacman
+      install_command: socat
+      uninstall_command: socat
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: socat
+      uninstall_command: socat
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+        - os: opensuse-tumbleweed
+        - os: opensuse-leap
+        - os: suse

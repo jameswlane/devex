@@ -29,3 +29,8 @@ linux:
   self_updating: true
   uninstall_command: rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"
   official_support: true
+  # Linux sandbox relies on bubblewrap for filesystem/process isolation and
+  # socat for network proxy routing: https://code.claude.com/docs/en/sandboxing
+  sandbox_prerequisites:
+    - Bubblewrap
+    - socat

@@ -132,6 +132,9 @@ func ValidateConfigDirs(ctx context.Context, settings CrossPlatformSettings, dir
 		if strings.Contains(e.Field, ".conflicts[") {
 			category = CategoryApplicationConflict
 		}
+		if strings.Contains(e.Field, ".sandbox_prerequisites[") {
+			category = CategorySchema
+		}
 		if path, ok := sources[strings.ToLower(e.File)]; ok {
 			e.File = path
 		}

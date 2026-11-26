@@ -1,0 +1,78 @@
+---
+title: Agent Sandboxes on Linux
+description: How DevEx installs and verifies Linux sandbox prerequisites for AI coding agents.
+---
+
+Coding agent harnesses run shell commands on your behalf. On Linux, several harnesses isolate those commands with `bubblewrap` (`bwrap`) and network relay helpers so an agent cannot modify files outside your workspace or reach unapproved hosts.
+
+DevEx installs each agent's documented sandbox prerequisites automatically and verifies that a bubblewrap sandbox can actually start.
+
+## Sandbox Modes by Agent
+
+| Agent | Linux sandbox mode | Installed by DevEx | Notes |
+| --- | --- | --- | --- |
+| **Claude Code** | Built-in Bash sandbox using `bubblewrap` + `socat` | `Bubblewrap`, `socat` | Enable with `/sandbox` or `sandbox.enabled: true`. See [Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing). |
+| **Codex CLI** | `bubblewrap` + `seccomp` (legacy Landlock fallback) | `Bubblewrap` | Uses `bwrap` from `PATH` first and falls back to a bundled helper requiring unprivileged user namespaces. See [Codex sandboxing](https://developers.openai.com/codex/concepts/sandboxing). |
+| **GitHub Copilot CLI** | Local sandbox using `bubblewrap` (`bwrap` >= 0.5.0) | `Bubblewrap` | Policies that permit outbound network traffic also require `slirp4netns`, `util-linux` >= 2.35 (`unshare`/`nsenter`), `iptables`/`ip6tables`, and `/dev/net/tun`. See [Copilot local sandboxing](https://docs.github.com/en/copilot/concepts/security-governance-and-network-settings/about-cloud-and-local-sandboxes). |
+| **Gemini CLI** | Container-based (Docker or Podman) | None | Enable with `gemini -s` or `GEMINI_SANDBOX=docker\|podman`. See [Gemini CLI sandboxing](https://geminicli.com/docs/cli/sandbox/). |
+| **OpenCode** | No built-in Linux OS sandbox | None | Uses permission rules; isolate externally with Docker or dev containers if needed. |
+| **Kimi Code** | No built-in Linux OS sandbox | None | Isolate externally with container sandboxes if needed. |
+| **Aider** | No built-in Linux OS sandbox | None | Runs directly on the host; run inside Docker for isolation. |
+| **Goose** | Tool permission and approval controls | None | No `bubblewrap` or `socat` prerequisite. |
+
+## Automatic Prerequisite Installation
+
+Catalog entries declare their runtime sandbox prerequisites under `linux.sandbox_prerequisites`. When you install an agent (by name or via `--categories "AI Coding Agents"`), DevEx prepends any missing, platform-supported prerequisites before the agent and includes them in both text dry runs and JSON plans:
+
+```sh
+devex install "Claude Code" --dry-run
+devex install "Claude Code" --dry-run --format json
+```
+
+On Debian/Ubuntu, `Bubblewrap` and `socat` are batched through `apt`. On Fedora/RHEL, Arch, and openSUSE, DevEx selects the matching `dnf`, `pacman`, or `zypper` alternative.
+
+## What `devex agent sandbox` Checks
+
+Run `devex agent sandbox` (or `devex agent sandbox --format json`) to inspect your host:
+
+1. **Binaries**: locates `bwrap` and `socat` on `PATH`.
+2. **Kernel sysctls**: reads `/proc/sys/kernel/apparmor_restrict_unprivileged_userns`, `/proc/sys/kernel/unprivileged_userns_clone`, and `/proc/sys/user/max_user_namespaces`.
+3. **AppArmor profile**: checks `/etc/apparmor.d/bwrap-userns-restrict` and `/etc/apparmor.d/*` for a profile targeting the detected `bwrap`.
+4. **Live sandbox probe**: runs `bwrap --ro-bind / / --dev /dev --unshare-all true` to confirm an unprivileged sandbox can actually start.
+
+The command always exits `0` for valid flags (it reports state rather than failing scripts) and writes the latest JSON report to `$DEVEX_STATE_DIR/agent-sandbox.json` (default `~/.local/state/devex/agent-sandbox.json`, mode `0600`) for diagnostic commands. After a non-interactive `devex install` of an agent declaring `sandbox_prerequisites` on Linux, DevEx runs this check automatically and prints a non-fatal warning to `stderr` if status is not `ok`.
+
+## Remediation Options
+
+DevEx never modifies sysctls or AppArmor profiles automatically. When `devex agent sandbox` reports `restricted`, apply one of the options below manually (preferred first):
+
+### 1. Load an AppArmor profile for `bwrap` (preferred)
+
+On Ubuntu 24.04 when `apparmor-profiles` provides the extra profile:
+
+```sh
+sudo cp /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/ && \
+  sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+
+If that file is not present (a fresh Ubuntu 24.04 cloud image does not have it), write a minimal profile in its own file, so no existing profile is replaced. This is the command for `/usr/bin/bwrap`; when `bwrap` lives elsewhere, run the command `devex agent sandbox` prints, which uses the detected path:
+
+```sh
+printf '%s\n' 'abi <abi/4.0>,' 'include <tunables/global>' \
+  'profile devex-bwrap "/usr/bin/bwrap" flags=(unconfined) {' '  userns,' \
+  '  include if exists <local/devex-bwrap>' '}' \
+  | sudo tee /etc/apparmor.d/devex-bwrap >/dev/null && \
+  sudo apparmor_parser -r /etc/apparmor.d/devex-bwrap
+```
+
+If a profile for `bwrap` already exists but the sandbox still fails, `devex agent sandbox` tells you to load that profile with `sudo apparmor_parser -r <profile>` instead of writing a new one.
+
+Ubuntu 25.04+ ships `/etc/apparmor.d/bwrap-userns-restrict` in the `apparmor` package, so installing `bubblewrap` normally works without extra AppArmor steps.
+
+### 2. Disable the AppArmor user-namespace restriction (not recommended)
+
+```sh
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+```
+
+This weakens a kernel hardening boundary for every process on the host. Prefer an AppArmor profile scoped to `/usr/bin/bwrap` instead.

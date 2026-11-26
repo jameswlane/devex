@@ -141,7 +141,7 @@ func devcontainerApps(cmd *cobra.Command, settings config.CrossPlatformSettings,
 			lookup = append(lookup, name)
 		}
 		if len(lookup) > 0 {
-			resolved, _, err := agentapi.SelectApplications(cmd.Context(), settings, agentapi.PlanRequest{Names: lookup})
+			resolved, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{Names: lookup})
 			if err != nil {
 				return nil, err
 			}
