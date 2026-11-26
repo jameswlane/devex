@@ -53,7 +53,7 @@ func main() {
 	}
 	// Validation must remain usable with malformed settings and must not create
 	// databases, migrate files or initialize installation state before reporting.
-	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) || agentSandboxCommand(os.Args[1:]) || agentDoctorCommand(os.Args[1:]) || agentLoginCommand(os.Args[1:]) {
+	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) || agentInitCommand(os.Args[1:]) || agentSandboxCommand(os.Args[1:]) || agentDoctorCommand(os.Args[1:]) || agentLoginCommand(os.Args[1:]) {
 		if presentationCommand(os.Args[1:]) {
 			if err := migrateLegacy(ctx, dirs, true, os.Args[1:], os.Stderr); err != nil {
 				handleError("checking legacy files", err)
@@ -65,7 +65,17 @@ func main() {
 			handleError("determining home directory", homeErr)
 			return
 		}
-		root := commands.NewRootCmd(version, nil, config.CrossPlatformSettings{HomeDir: homeDir})
+		settings := config.CrossPlatformSettings{HomeDir: homeDir}
+		if agentInitCommand(os.Args[1:]) && agentInitRequestsMCP(os.Args[1:]) {
+			loaded, loadErr := config.LoadCrossPlatformSettingsContext(ctx, homeDir)
+			if loadErr != nil {
+				handleError("loading cross-platform configuration", loadErr)
+				return
+			}
+			loaded.HomeDir = homeDir
+			settings = loaded
+		}
+		root := commands.NewRootCmd(version, nil, settings)
 		if err := root.ExecuteContext(ctx); err != nil {
 			Exit(exitCode(err))
 		}
@@ -323,6 +333,19 @@ func agentSkillInstallCommand(args []string) bool {
 	return resolveStartupRoute(args).agentSkillInstall()
 }
 
+// agentInitCommand identifies "devex agent init", which scaffolds project agent
+// files offline without bootstrapping databases or plugins.
+func agentInitCommand(args []string) bool {
+	return resolveStartupRoute(args).agentInit()
+}
+
+// agentInitRequestsMCP reports whether "devex agent init" requested --mcp,
+// which reads agents.yaml without mutating DevEx state.
+func agentInitRequestsMCP(args []string) bool {
+	route := resolveStartupRoute(args)
+	return route.agentInit() && route.flagTrue("mcp")
+}
+
 // agentSandboxCommand identifies "devex agent sandbox", which only probes host
 // sandbox prerequisites and writes agent-sandbox.json.
 func agentSandboxCommand(args []string) bool {
@@ -507,6 +530,11 @@ func (r startupRoute) agentSkillInstall() bool {
 	return r.is("agent", "install-skill")
 }
 
+// agentInit identifies "devex agent init".
+func (r startupRoute) agentInit() bool {
+	return r.is("agent", "init")
+}
+
 // agentSandbox identifies "devex agent sandbox".
 func (r startupRoute) agentSandbox() bool {
 	return r.is("agent", "sandbox")
@@ -562,7 +590,7 @@ func (r startupRoute) read() bool {
 	case "config":
 		return r.is("config", "effective") || r.is("config", "show")
 	case "agent":
-		return r.agentSkillInstall() || r.agentSandbox() || r.is("agent", "diff") || r.agentDoctor() || r.agentLogin()
+		return r.agentSkillInstall() || r.agentInit() || r.agentSandbox() || r.is("agent", "diff") || r.agentDoctor() || r.agentLogin()
 	}
 	return false
 }
