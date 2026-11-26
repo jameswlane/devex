@@ -38,15 +38,25 @@ func Detect(fsys fs.FS, projectName string) ProjectInfo {
 	runner, runnerTest, runnerLint := detectTaskRunner(fsys)
 	info.TaskRunner = runner
 
-	if runnerTest != "" {
+	// Declared package.json scripts fill targets the primary runner lacks
+	// (for example a build-only Makefile) before language defaults.
+	pkgTest, pkgLint := packageScriptCommands(fsys)
+
+	switch {
+	case runnerTest != "":
 		info.TestCommands = []string{runnerTest}
-	} else {
+	case pkgTest != "":
+		info.TestCommands = []string{pkgTest}
+	default:
 		info.TestCommands = defaultTestCommands(fsys, info.Languages)
 	}
 
-	if runnerLint != "" {
+	switch {
+	case runnerLint != "":
 		info.LintCommands = []string{runnerLint}
-	} else {
+	case pkgLint != "":
+		info.LintCommands = []string{pkgLint}
+	default:
 		info.LintCommands = defaultLintCommands(fsys, info.Languages)
 	}
 
@@ -376,4 +386,19 @@ func appendUnique(list []string, item string) []string {
 		return list
 	}
 	return append(list, item)
+}
+
+func packageScriptCommands(fsys fs.FS) (testCmd, lintCmd string) {
+	if !hasTopLevelFile(fsys, "package.json") {
+		return "", ""
+	}
+	_, hasTest, hasLint := parsePackageJSONScripts(fsys, "package.json")
+	pm := detectJSManager(fsys)
+	if hasTest {
+		testCmd = formatJSScriptCommand(pm, "test")
+	}
+	if hasLint {
+		lintCmd = formatJSScriptCommand(pm, "lint")
+	}
+	return testCmd, lintCmd
 }

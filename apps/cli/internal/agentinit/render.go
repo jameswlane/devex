@@ -84,6 +84,10 @@ func RenderClaudeMCPJSON(cfg config.AgentsConfig) ([]byte, bool, error) {
 		return nil, false, fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
 	}
 
+	if !slices.Contains(cfg.Enabled, config.AgentClaude) {
+		return nil, false, nil
+	}
+
 	servers := make(map[string]any)
 	for _, srv := range cfg.MCPServers {
 		if len(srv.Agents) > 0 && !slices.Contains(srv.Agents, config.AgentClaude) {
@@ -172,7 +176,8 @@ func PlanGitignoreAppend(existing []byte, exists bool) ([]byte, bool) {
 	present := make(map[string]bool, len(gitignoreEntries))
 	if exists {
 		for _, line := range strings.Split(string(existing), "\n") {
-			present[strings.TrimSpace(line)] = true
+			// Git keeps leading spaces in a pattern and drops unescaped trailing ones.
+			present[strings.TrimRight(line, " \r")] = true
 		}
 	}
 

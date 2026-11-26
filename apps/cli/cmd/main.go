@@ -343,7 +343,7 @@ func agentInitCommand(args []string) bool {
 // which reads agents.yaml without mutating DevEx state.
 func agentInitRequestsMCP(args []string) bool {
 	route := resolveStartupRoute(args)
-	return route.agentInit() && route.flagTrue("mcp")
+	return route.agentInit() && route.flagTrue("mcp") && !route.helpRequested()
 }
 
 // agentSandboxCommand identifies "devex agent sandbox", which only probes host

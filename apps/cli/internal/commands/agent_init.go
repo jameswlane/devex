@@ -144,7 +144,7 @@ func runAgentInit(cmd *cobra.Command, settings config.CrossPlatformSettings, opt
 	}
 
 	if opts.mcp && !hasMCP {
-		cmd.Printf("Skipped (.mcp.json): no Claude-compatible MCP servers configured\n")
+		cmd.Printf("Skipped (.mcp.json): no MCP servers configured for Claude Code (agents.enabled must include claude)\n")
 	}
 
 	return applyGitignoreInitFile(cmd, root, projectDir, dryRun)
@@ -313,7 +313,16 @@ func applyGitignoreInitFile(cmd *cobra.Command, root *os.Root, projectDir string
 		cmd.Printf("Would append: %s\n", absPath)
 		return nil
 	}
-	if err := root.WriteFile(relPath, updated, mode); err != nil {
+	// Append only the new suffix so a failed write cannot truncate existing rules.
+	f, err := root.OpenFile(relPath, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return fmt.Errorf("open %q: %w", absPath, err)
+	}
+	if _, err := f.Write(updated[len(existing):]); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("update %q: %w", absPath, err)
+	}
+	if err := f.Close(); err != nil {
 		return fmt.Errorf("update %q: %w", absPath, err)
 	}
 	cmd.Printf("Appended: %s\n", absPath)

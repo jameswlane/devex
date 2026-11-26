@@ -80,6 +80,13 @@ var _ = Describe("Agent init rendering", func() {
 			Expect(changedAgain).To(BeFalse())
 			Expect(again).To(Equal(out))
 		})
+
+		It("treats leading-space patterns as different, since git keeps leading spaces", func() {
+			existing := []byte("  .claude/settings.local.json\nCLAUDE.local.md  \r\n")
+			out, changed := agentinit.PlanGitignoreAppend(existing, true)
+			Expect(changed).To(BeTrue())
+			Expect(string(out)).To(Equal(string(existing) + "# DevEx agent-local files\n.claude/settings.local.json\n"))
+		})
 	})
 
 	Describe("Claude .mcp.json rendering", func() {
@@ -172,6 +179,32 @@ var _ = Describe("Agent init rendering", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeFalse())
 			Expect(out).To(BeNil())
+		})
+
+		It("writes no .mcp.json when Claude is not enabled, even for untargeted servers", func() {
+			cfg := config.AgentsConfig{
+				Enabled:  []string{"codex"},
+				DevExMCP: true,
+				MCPServers: []config.AgentMCPServerConfig{
+					{Name: "shared", Transport: config.MCPTransportStdio, Command: "shared-tool"},
+				},
+			}
+			out, ok, err := agentinit.RenderClaudeMCPJSON(cfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeFalse())
+			Expect(out).To(BeNil())
+		})
+
+		It("rejects a literal token in an http server URL path", func() {
+			cfg := config.AgentsConfig{
+				Enabled: []string{"claude"},
+				MCPServers: []config.AgentMCPServerConfig{
+					{Name: "hook", Transport: config.MCPTransportHTTP, URL: "https://mcp.example.com/ghp_abcdefghijklmnop1234/mcp"},
+				},
+			}
+			_, _, err := agentinit.RenderClaudeMCPJSON(cfg)
+			Expect(err).To(MatchError(ContainSubstring("url path appears to contain a literal secret")))
+			Expect(err.Error()).NotTo(ContainSubstring("ghp_"))
 		})
 
 		It("rejects invalid agents config with a literal secret", func() {

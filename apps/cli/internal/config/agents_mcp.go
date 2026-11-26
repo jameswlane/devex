@@ -184,6 +184,9 @@ func validateHTTPMCPServer(srv AgentMCPServerConfig, prefix, label string, add f
 			if parsed.User != nil {
 				add(prefix+".url", fmt.Sprintf("MCP server %q url must not contain embedded credentials; use headers with ${env:VAR_NAME} instead", label))
 			}
+			if LooksLikeMCPSecretValue(parsed.Path) || LooksLikeMCPSecretValue(parsed.Fragment) {
+				add(prefix+".url", fmt.Sprintf("MCP server %q url path appears to contain a literal secret; use headers with ${env:VAR_NAME} instead", label))
+			}
 			query, qErr := url.ParseQuery(parsed.RawQuery)
 			if qErr != nil {
 				add(prefix+".url", fmt.Sprintf("MCP server %q url query string is malformed; use headers with ${env:VAR_NAME} for credentials", label))

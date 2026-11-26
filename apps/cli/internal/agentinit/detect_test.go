@@ -247,6 +247,20 @@ tasks:
 				LintCommands: []string{"go vet ./..."},
 			},
 		),
+		Entry("build-only Makefile falls back to package.json test and lint scripts",
+			map[string]string{
+				"Makefile":       "build:\n\tnpm run build\n",
+				"package.json":   `{"scripts":{"test":"vitest","lint":"biome check"}}`,
+				"pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+			},
+			agentinit.ProjectInfo{
+				ProjectName:  "make-node",
+				Languages:    []string{"JavaScript"},
+				TaskRunner:   "make",
+				TestCommands: []string{"pnpm test"},
+				LintCommands: []string{"pnpm lint"},
+			},
+		),
 		Entry("empty directory reports no languages, runner, or commands",
 			map[string]string{},
 			agentinit.ProjectInfo{
