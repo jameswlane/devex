@@ -67,6 +67,16 @@ var _ = Describe("Curlpipe Package Manager", func() {
 				err := plugin.Execute("install", []string{"--dry-run"})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no URLs specified"))
+
+				err = plugin.Execute("install", []string{"--user"})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("no URLs specified"))
+			})
+
+			It("declares user privilege when --user is passed to install", func() {
+				info := plugin.Info()
+				Expect(sdk.PluginOperationPrivilege(info, []string{"install", "https://get.docker.com"})).To(Equal(&sdk.OperationPrivilege{Scope: sdk.ScopeSystem}))
+				Expect(sdk.PluginOperationPrivilege(info, []string{"install", "--user", "https://claude.ai/install.sh"})).To(Equal(&sdk.OperationPrivilege{Scope: sdk.ScopeUser}))
 			})
 		})
 

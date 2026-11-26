@@ -27,6 +27,11 @@ func NewCurlpipePlugin() *CurlpipePlugin {
 				Flags: map[string]string{
 					"dry-run": "Show what would be executed without running it",
 					"force":   "Skip domain validation (use with caution)",
+					"user":    "Execute the downloaded script as the invoking user without sudo",
+				},
+				Privilege: &sdk.OperationPrivilege{Scope: sdk.ScopeSystem},
+				FlagPrivileges: map[string]*sdk.OperationPrivilege{
+					"--user": {Scope: sdk.ScopeUser},
 				},
 			},
 			{

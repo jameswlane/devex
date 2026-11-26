@@ -188,10 +188,14 @@ var _ = Describe("Curlpipe Validation", func() {
 				"get.docker.com",
 				"sh.rustup.rs",
 				"raw.githubusercontent.com",
+				"claude.ai",
+				"opencode.ai",
+				"code.kimi.com",
 			}
 
 			for _, expected := range expectedDomains {
 				Expect(domainSet[expected]).To(BeTrue(), "Expected trusted domain %s not found", expected)
+				Expect(plugin.IsTrustedDomain(expected)).To(BeTrue(), "Expected IsTrustedDomain(%s) to be true", expected)
 			}
 		})
 

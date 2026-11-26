@@ -49,6 +49,7 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 	// Parse flags
 	dryRun := false
 	force := false
+	userScope := false
 	var scriptURLs []string
 
 	for _, arg := range args {
@@ -57,6 +58,8 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 			dryRun = true
 		case "--force":
 			force = true
+		case "--user":
+			userScope = true
 		default:
 			scriptURLs = append(scriptURLs, arg)
 		}
@@ -116,8 +119,14 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 		}
 		fmt.Fprintf(os.Stderr, "Download verification: checksum=%t signature=%t (false means skipped)\n", verified.ChecksumVerified, verified.SignatureVerified)
 		// Run the file with bash as a separate argv
-		if err := sdk.ExecCommandWithContext(ctx, true, "bash", tempFile.Name()); err != nil {
-			return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
+		if userScope {
+			if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "bash", tempFile.Name()); err != nil {
+				return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
+			}
+		} else {
+			if err := sdk.ExecCommandWithContext(ctx, true, "bash", tempFile.Name()); err != nil {
+				return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
+			}
 		}
 
 		p.logger.Success("Successfully executed script from %s", scriptURL)
