@@ -49,8 +49,18 @@ func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 		useArgs = append(useArgs, "--global")
 	}
 
+	// Backend tools (npm:, pipx:, ...) have install dependencies such as node
+	// or uv that mise only resolves when they are installed in the same call,
+	// so a separate per-tool `mise install` fails before they are active.
+	hasBackendTool := false
+	for _, tool := range args {
+		if strings.Contains(tool, ":") {
+			hasBackendTool = true
+		}
+	}
+
 	// Use parallel installer for multiple tools
-	if len(args) > 1 {
+	if len(args) > 1 && !hasBackendTool {
 		parallelInstaller := NewParallelInstaller(m.logger)
 
 		// Progress callback
@@ -80,9 +90,9 @@ func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	// Single tool installation (sequential)
-	tool := args[0]
-	if err := sdk.ExecCommandWithContext(ctx, false, "mise", append(useArgs, tool)...); err != nil {
+	// One `mise use` call installs and activates every tool in dependency order.
+	tool := strings.Join(args, " ")
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", append(useArgs, args...)...); err != nil {
 		return fmt.Errorf("failed to install tool '%s': %w", tool, err)
 	}
 

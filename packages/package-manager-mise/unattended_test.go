@@ -56,6 +56,18 @@ var _ = Describe("Unattended mise execution", func() {
 		Expect(calls[2]).To(Equal(sdktest.Call{Args: []string{"use", "--global", "kubectl@1.31", "helm@3"}}))
 	})
 
+	It("installs backend tools together with their install dependencies in one mise use", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		GinkgoT().Setenv("MISE_LOCAL", "0")
+		plugin := main.NewMisePlugin()
+		Expect(plugin.HandleInstall(context.Background(), []string{"uv@latest", "pipx:aider-chat[python=3.12]@latest"})).To(Succeed())
+		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+			{Args: []string{"use", "--global", "uv@latest", "pipx:aider-chat[python=3.12]@latest"}},
+		}))
+	})
+
 	It("writes the local mise config when MISE_LOCAL is set", func() {
 		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
 		sdktest.CloseStdin(GinkgoT())

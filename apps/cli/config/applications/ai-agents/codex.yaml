@@ -15,7 +15,7 @@ windows:
   # OpenAI documents npm install -g @openai/codex; mise installs that package
   # without a global npm prefix.
   install_method: mise
-  install_command: npm:@openai/codex@latest
+  install_command: node@lts npm:@openai/codex@latest
   uninstall_command: npm:@openai/codex
   self_updating: false
   official_support: true

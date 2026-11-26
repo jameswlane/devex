@@ -18,7 +18,7 @@ macos:
   official_support: true
   alternatives:
     - install_method: mise
-      install_command: npm:@moonshot-ai/kimi-code@latest
+      install_command: node@lts npm:@moonshot-ai/kimi-code@latest
       uninstall_command: npm:@moonshot-ai/kimi-code
       self_updating: false
       official_support: true
@@ -26,7 +26,7 @@ macos:
         - Node.js
 windows:
   install_method: mise
-  install_command: npm:@moonshot-ai/kimi-code@latest
+  install_command: node@lts npm:@moonshot-ai/kimi-code@latest
   uninstall_command: npm:@moonshot-ai/kimi-code
   self_updating: false
   official_support: true
@@ -48,7 +48,7 @@ linux:
   official_support: true
   alternatives:
     - install_method: mise
-      install_command: npm:@moonshot-ai/kimi-code@latest
+      install_command: node@lts npm:@moonshot-ai/kimi-code@latest
       uninstall_command: npm:@moonshot-ai/kimi-code
       self_updating: false
       official_support: true

@@ -8,35 +8,29 @@ macos:
   # Aider's official docs warn against Homebrew due to dependency conflicts and
   # recommend an isolated Python 3.12 tool environment via uv.
   install_method: mise
-  install_command: pipx:aider-chat[python=3.12]@latest
+  install_command: uv@latest pipx:aider-chat[python=3.12]@latest
   uninstall_command: pipx:aider-chat
   self_updating: false
   official_support: true
   dependencies:
     - mise
-  pre_install:
-    - shell: mise use --global uv@latest
 windows:
   install_method: mise
-  install_command: pipx:aider-chat[python=3.12]@latest
+  install_command: uv@latest pipx:aider-chat[python=3.12]@latest
   uninstall_command: pipx:aider-chat
   self_updating: false
   official_support: true
   dependencies:
     - mise
-  pre_install:
-    - shell: mise use --global uv@latest
 linux:
   # mise's pipx backend runs uv tool install with an isolated mise-managed
   # Python 3.12 runtime (aider-chat requires Python >=3.10,<3.13) without
-  # touching the system Python. The backend needs an active uv (or pipx), so a
-  # pre-install step activates uv first; uninstall removes Aider and keeps uv.
+  # touching the system Python. The backend needs uv (or pipx), so uv is
+  # installed in the same mise call; uninstall removes Aider and keeps uv.
   install_method: mise
-  install_command: pipx:aider-chat[python=3.12]@latest
+  install_command: uv@latest pipx:aider-chat[python=3.12]@latest
   uninstall_command: pipx:aider-chat
   self_updating: false
   official_support: true
   dependencies:
     - mise
-  pre_install:
-    - shell: mise use --global uv@latest
