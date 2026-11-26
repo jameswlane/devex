@@ -422,10 +422,61 @@ kill -9 $$`)
 		Expect(codex.PathMatches).To(HaveLen(1))
 
 		gemini := findAgentReport(report, "gemini")
-		Expect(gemini.LoginState).To(Equal(agentdoctor.LoginStateNotLoggedIn))
-		Expect(gemini.EnvVarsSet).To(BeEmpty())
+		Expect(gemini.LoginState).To(Equal(agentdoctor.LoginStateUnknown))
+		Expect(gemini.EnvVarsSet).To(ConsistOf("GOOGLE_API_KEY"))
 		Expect(gemini.MCPConfigs).To(ConsistOf(HaveField("Error", "invalid: syntax error at line 1, column 15")))
 		Expect(agentdoctor.CollectSecretValues(probe.Getenv)).To(ContainElement("google-key-value"))
+	})
+
+	It("says the Node version is unknown, not missing, when node runs but prints no version", func() {
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		writeFakeBinary(binDir, "gemini", `echo "0.5.0"`)
+		nodePath := writeFakeBinary(binDir, "node", `echo "garbled"`)
+
+		probe := makeOSBackedProbe(home, []string{binDir}, nil, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"gemini"})
+		Expect(err).NotTo(HaveOccurred())
+		report := agentdoctor.Check(context.Background(), probe, specs)
+
+		gemini := findAgentReport(report, "gemini")
+		Expect(gemini.Node).NotTo(BeNil())
+		Expect(gemini.Node.Path).To(Equal(nodePath))
+		Expect(gemini.Problems).To(ContainElement(SatisfyAll(
+			HaveField("Code", "node_version"),
+			HaveField("Summary", ContainSubstring("could not determine the version of "+nodePath)),
+		)))
+		table := agentdoctor.FormatTable(report, nil)
+		Expect(table).To(ContainSubstring("version unknown (detected " + nodePath))
+		Expect(table).NotTo(ContainSubstring("not found"))
+		jsonOut, err := agentdoctor.FormatJSON(report, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(jsonOut)).To(ContainSubstring("could not determine the version"))
+	})
+
+	It("points an unreadable MCP config at permissions, not syntax", func() {
+		if os.Geteuid() == 0 {
+			Skip("root bypasses directory permissions")
+		}
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		writeFakeBinary(binDir, "gemini", `echo "0.5.0"`)
+		writeFakeBinary(binDir, "node", `echo "v22.14.0"`)
+		geminiDir := filepath.Join(home, ".gemini")
+		Expect(os.MkdirAll(geminiDir, 0o700)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(geminiDir, "settings.json"), []byte("{}"), 0o600)).To(Succeed())
+		Expect(os.Chmod(geminiDir, 0)).To(Succeed())
+		DeferCleanup(os.Chmod, geminiDir, os.FileMode(0o700))
+
+		probe := makeOSBackedProbe(home, []string{binDir}, nil, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"gemini"})
+		Expect(err).NotTo(HaveOccurred())
+		gemini := findAgentReport(agentdoctor.Check(context.Background(), probe, specs), "gemini")
+
+		Expect(gemini.MCPConfigs).To(ConsistOf(HaveField("Error", "invalid: unreadable file")))
+		Expect(gemini.Problems).To(ContainElement(HaveField("Fix", ContainSubstring("readable by your user"))))
+		Expect(gemini.LoginState).To(Equal(agentdoctor.LoginStateUnknown))
+		Expect(gemini.LoginDetail).To(Equal("credential file could not be inspected"))
 	})
 
 	It("rejects an unterminated block comment in a JSONC config", func() {

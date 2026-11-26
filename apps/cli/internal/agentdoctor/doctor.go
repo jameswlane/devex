@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -282,7 +283,7 @@ func checkAgent(
 	}
 
 	// 3. Relevant API-key env var NAMES (never read or record values).
-	for _, envName := range spec.APIKeyEnvVars {
+	for _, envName := range append(append([]string(nil), spec.APIKeyEnvVars...), spec.RedactOnlyEnvVars...) {
 		if strings.TrimSpace(probe.Getenv(envName)) != "" {
 			ar.EnvVarsSet = append(ar.EnvVarsSet, envName)
 		}
@@ -368,12 +369,22 @@ func checkAgent(
 				Code:    "mcp_config",
 				Agent:   spec.ID,
 				Summary: fmt.Sprintf("MCP config %s is %s", res.Path, res.Error),
-				Fix:     fmt.Sprintf("Fix syntax errors in %s", res.Path),
+				Fix:     mcpFix(res),
 			})
 		}
 	}
 
 	return ar
+}
+
+func mcpFix(res MCPConfigResult) string {
+	switch res.Error {
+	case "invalid: unreadable file":
+		return fmt.Sprintf("Check that %s exists and is readable by your user", res.Path)
+	case "invalid: not a regular file":
+		return fmt.Sprintf("Replace %s with a regular file", res.Path)
+	}
+	return fmt.Sprintf("Fix syntax errors in %s", res.Path)
 }
 
 func analyzePathShadowing(spec AgentSpec, matches []PathMatch, shadowedByNPM *bool) []Problem {
@@ -476,14 +487,20 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 	}
 
 	// Check whether any known API-key env var NAME is set.
-	if len(ar.EnvVarsSet) > 0 && !spec.EnvVarsDoNotAuthenticate {
+	var loginEnvSet []string
+	for _, name := range ar.EnvVarsSet {
+		if slices.Contains(spec.APIKeyEnvVars, name) {
+			loginEnvSet = append(loginEnvSet, name)
+		}
+	}
+	if len(loginEnvSet) > 0 && !spec.EnvVarsDoNotAuthenticate {
 		ar.LoginState = LoginStateLoggedIn
-		ar.LoginDetail = fmt.Sprintf("env var %s set", strings.Join(ar.EnvVarsSet, ", "))
+		ar.LoginDetail = fmt.Sprintf("env var %s set", strings.Join(loginEnvSet, ", "))
 		return
 	}
 
 	// File-backed agents without OS keyring fallback can be reported not_logged_in.
-	if len(spec.CredentialPaths) > 0 && !spec.UsesKeyring && spec.OtherAuthStore == "" && !credentialUninspectable {
+	if len(spec.CredentialPaths) > 0 && !spec.UsesKeyring && spec.OtherAuthStore == "" && !credentialUninspectable && len(ar.EnvVarsSet) == 0 {
 		ar.LoginState = LoginStateNotLoggedIn
 		ar.LoginDetail = "no credential file or API key env var found"
 		ar.Problems = append(ar.Problems, notLoggedInProblem(spec))
@@ -627,13 +644,15 @@ func FormatTable(r Report, secrets []string) string {
 			fmt.Fprintf(&b, "    %-14s %s\n", "env vars set:", strings.Join(ag.EnvVarsSet, ", "))
 		}
 		if ag.Node != nil {
-			nodeState := "ok"
-			if !ag.Node.OK {
-				nodeState = "missing or too old"
-			}
-			detected := ag.Node.Detected
-			if detected == "" {
-				detected = "not found"
+			nodeState, detected := "ok", ag.Node.Detected
+			switch {
+			case ag.Node.OK:
+			case detected != "":
+				nodeState = "too old"
+			case ag.Node.Path != "":
+				nodeState, detected = "version unknown", ag.Node.Path
+			default:
+				nodeState, detected = "missing", "not found"
 			}
 			fmt.Fprintf(&b, "    %-14s %s (detected %s, requires >= %s)\n", "node:", nodeState, detected, ag.Node.Required)
 		}
