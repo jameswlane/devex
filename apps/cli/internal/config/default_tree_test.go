@@ -246,5 +246,24 @@ var _ = Describe("Shipped default configuration tree and manifest", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(again).To(BeEmpty())
 		})
+
+		It("writes shipped files that are new since the manifest was recorded", func() {
+			// An older CLI never shipped this file, so its manifest has no entry.
+			const newRelPath = "applications/development/bubblewrap.yaml"
+			Expect(config.WriteDefaultConfig(configDir)).To(Succeed())
+			newTarget := filepath.Join(configDir, filepath.FromSlash(newRelPath))
+			Expect(os.Remove(newTarget)).To(Succeed())
+			manifest := readManifest(configDir)
+			delete(manifest.Files, newRelPath)
+			writeManifest(configDir, manifest)
+
+			updated, err := config.RefreshShippedConfig(configDir)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated).To(ConsistOf(newRelPath))
+			shipped, err := shipconfig.Files.ReadFile(newRelPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.ReadFile(newTarget)).To(Equal(shipped))
+			Expect(readManifest(configDir).Files).To(HaveKeyWithValue(newRelPath, testSHA256Hex(shipped)))
+		})
 	})
 })

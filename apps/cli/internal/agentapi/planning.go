@@ -70,8 +70,20 @@ type PlannedApp struct {
 	UnknownEffects bool     `json:"unknown_effects"`
 }
 
-// SelectApplications is the shared CLI execution and planning selection policy.
+// SelectApplications is the shared CLI install execution and planning
+// selection policy: the requested applications plus the sandbox prerequisites
+// they declare for the current platform.
 func SelectApplications(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) ([]types.CrossPlatformApp, config.CrossPlatformSettings, error) {
+	apps, s, err := SelectRequestedApplications(ctx, s, r)
+	if err != nil {
+		return nil, s, err
+	}
+	return expandSandboxPrerequisites(apps, s), s, nil
+}
+
+// SelectRequestedApplications resolves only the requested applications, for
+// operations such as update and upgrade that must not add install prerequisites.
+func SelectRequestedApplications(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) ([]types.CrossPlatformApp, config.CrossPlatformSettings, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, s, err
 	}
@@ -100,13 +112,15 @@ func SelectApplications(ctx context.Context, s config.CrossPlatformSettings, r P
 	if len(apps) == 0 && !present {
 		return nil, s, &Error{Category: "not_found", Message: "no applications matched the install request"}
 	}
-	apps = expandSandboxPrerequisites(apps, s)
 	return apps, s, nil
 }
 
-// expandSandboxPrerequisites inserts each selected app's current-platform
-// sandbox_prerequisites before the first app that requires them, deduplicated
-// and filtered to catalog applications supported on the current platform.
+// expandSandboxPrerequisites puts the current-platform sandbox_prerequisites
+// of the selected apps first, in declaration order and deduplicated, followed by
+// the remaining apps in their selected order. Prerequisites are filtered to
+// catalog applications supported on this platform. The order depends only on
+// the set of selected apps' declarations, so resolving the expanded names again
+// (as MCP confirmation does) yields the same roots in the same order.
 func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) []types.CrossPlatformApp {
 	if len(apps) == 0 {
 		return apps
@@ -115,26 +129,34 @@ func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.C
 	for _, app := range settings.GetAllApps() {
 		catalog[normalizeInstallLookup(app.Name)] = app
 	}
-	emitted := make(map[string]bool, len(apps))
-	expanded := make([]types.CrossPlatformApp, 0, len(apps))
+	var prerequisites []types.CrossPlatformApp
+	isPrerequisite := map[string]bool{}
 	for _, app := range apps {
 		appKey := normalizeInstallLookup(app.Name)
-		if emitted[appKey] {
+		for _, name := range app.GetOSConfig().SandboxPrerequisites {
+			key := normalizeInstallLookup(name)
+			if key == "" || key == appKey || isPrerequisite[key] {
+				continue
+			}
+			prerequisite, ok := catalog[key]
+			if !ok || !prerequisite.IsSupported() {
+				continue
+			}
+			isPrerequisite[key] = true
+			prerequisites = append(prerequisites, prerequisite)
+		}
+	}
+	if len(prerequisites) == 0 {
+		return apps
+	}
+	expanded := append([]types.CrossPlatformApp(nil), prerequisites...)
+	emitted := map[string]bool{}
+	for _, app := range apps {
+		key := normalizeInstallLookup(app.Name)
+		if isPrerequisite[key] || emitted[key] {
 			continue
 		}
-		for _, prereqName := range app.GetOSConfig().SandboxPrerequisites {
-			prereqKey := normalizeInstallLookup(prereqName)
-			if prereqKey == "" || prereqKey == appKey || emitted[prereqKey] {
-				continue
-			}
-			prereq, ok := catalog[prereqKey]
-			if !ok || !prereq.IsSupported() {
-				continue
-			}
-			emitted[prereqKey] = true
-			expanded = append(expanded, prereq)
-		}
-		emitted[appKey] = true
+		emitted[key] = true
 		expanded = append(expanded, app)
 	}
 	return expanded

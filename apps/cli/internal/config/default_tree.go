@@ -36,7 +36,8 @@ func OverwriteDefaultConfig(configDir string) error {
 }
 
 // RefreshShippedConfig updates existing, unmodified shipped files in configDir
-// whose tracked digest differs from the currently embedded content. Missing
+// whose tracked digest differs from the currently embedded content, and writes
+// shipped files that are new since the manifest was recorded. Deleted tracked
 // files and user-edited files are never touched.
 func RefreshShippedConfig(configDir string) ([]string, error) {
 	if configDir == "" {
@@ -71,20 +72,36 @@ func RefreshShippedConfig(configDir string) ([]string, error) {
 		}
 
 		recordedHash, tracked := manifest.Files[path]
-		if !tracked || recordedHash == "" {
-			return nil
-		}
-
 		shipped, err := shipconfig.Files.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read embedded config %s: %w", path, err)
 		}
 		shippedHash := sha256Hex(shipped)
+		target := filepath.Join(configDir, filepath.FromSlash(path))
+		if !tracked {
+			// A shipped file the manifest has never seen is new in this CLI
+			// version (refreshed files may already reference it); write it
+			// once. Deleted shipped files stay tracked and are not recreated.
+			if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0750); err != nil {
+				return fmt.Errorf("create config directory %s: %w", filepath.Dir(target), err)
+			}
+			if err := os.WriteFile(target, shipped, 0600); err != nil {
+				return fmt.Errorf("write config file %s: %w", target, err)
+			}
+			manifest.Files[path] = shippedHash
+			updated = append(updated, path)
+			return nil
+		}
+		if recordedHash == "" {
+			return nil
+		}
 		if shippedHash == recordedHash {
 			return nil
 		}
 
-		target := filepath.Join(configDir, filepath.FromSlash(path))
 		existing, err := os.ReadFile(target)
 		if errors.Is(err, os.ErrNotExist) {
 			return nil

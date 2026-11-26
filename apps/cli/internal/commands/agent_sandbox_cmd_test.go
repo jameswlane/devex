@@ -179,4 +179,66 @@ var _ = Describe("Agent sandbox command", func() {
 		Expect(loadErr).NotTo(HaveOccurred())
 		Expect(recorded.Status).To(Equal(agentsandbox.StatusRestricted))
 	})
+	It("does not warn about socat after installing an agent that declares only Bubblewrap", func() {
+		if runtime.GOOS != "linux" {
+			Skip("post-install Linux sandbox check only runs on Linux")
+		}
+		oldPrepare, oldBatch, oldSources, oldInstall, oldQuery := prepareApplicationInstallers, preparePackageBatch, prepareAptSources, installApplication, nativeApplicationInstalled
+		oldProbe, oldErrWriter := plainInstallSandboxProbe, plainInstallErrWriter
+		DeferCleanup(func() {
+			prepareApplicationInstallers, preparePackageBatch, prepareAptSources, installApplication, nativeApplicationInstalled = oldPrepare, oldBatch, oldSources, oldInstall, oldQuery
+			plainInstallSandboxProbe, plainInstallErrWriter = oldProbe, oldErrWriter
+		})
+
+		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { return nil }
+		preparePackageBatch = func(context.Context, []types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) (tui.PackageBatch, error) {
+			return tui.PackageBatch{}, nil
+		}
+		prepareAptSources = func(context.Context, types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) error {
+			return nil
+		}
+		installApplication = func(context.Context, types.CrossPlatformApp, config.CrossPlatformSettings, types.Repository) error {
+			return nil
+		}
+		nativeApplicationInstalled = func(context.Context, types.CrossPlatformApp) (bool, error) { return false, nil }
+
+		probeCalls := 0
+		plainInstallSandboxProbe = func() agentsandbox.Probe {
+			probeCalls++
+			probe := restrictedProbe()
+			probe.LookPath = func(name string) (string, error) {
+				if name == "bwrap" {
+					return "/usr/bin/bwrap", nil
+				}
+				return "", exec.ErrNotFound
+			}
+			probe.Run = func(context.Context, string, ...string) ([]byte, error) { return nil, nil }
+			return probe
+		}
+		var errOut bytes.Buffer
+		plainInstallErrWriter = &errOut
+
+		app := types.CrossPlatformApp{
+			Name:     "Codex CLI",
+			Category: "AI Coding Agents",
+			Linux: types.OSConfig{
+				InstallMethod:        "curlpipe",
+				DownloadURL:          "https://claude.ai/install.sh",
+				InstallScope:         "user",
+				InstalledBinary:      "claude",
+				UninstallCommand:     `rm -f "$HOME/.local/bin/claude"`,
+				SandboxPrerequisites: []string{"Bubblewrap"},
+			},
+		}
+
+		var out bytes.Buffer
+		err := runPlainInstall(context.Background(), &out, []types.CrossPlatformApp{app}, mocks.NewMockRepository(), config.CrossPlatformSettings{HomeDir: home}, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(probeCalls).To(Equal(1))
+		Expect(errOut.String()).To(BeEmpty())
+
+		recorded, loadErr := agentsandbox.LoadLastReport()
+		Expect(loadErr).NotTo(HaveOccurred())
+		Expect(recorded.Status).To(Equal(agentsandbox.StatusOK))
+	})
 })

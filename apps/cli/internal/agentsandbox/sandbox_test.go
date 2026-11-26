@@ -122,15 +122,58 @@ var _ = Describe("Agent sandbox prerequisite check", func() {
 		Expect(report.Status).To(Equal(agentsandbox.StatusRestricted))
 		Expect(report.Remediation).To(HaveLen(2))
 		Expect(report.Remediation[0]).To(And(
-			ContainSubstring("sudo tee /etc/apparmor.d/bwrap"),
+			ContainSubstring("sudo tee /etc/apparmor.d/devex-bwrap"),
 			ContainSubstring("abi <abi/4.0>,"),
-			ContainSubstring("profile bwrap /usr/bin/bwrap flags=(unconfined)"),
-			ContainSubstring("sudo apparmor_parser -r /etc/apparmor.d/bwrap"),
+			ContainSubstring("profile devex-bwrap /usr/bin/bwrap flags=(unconfined)"),
+			ContainSubstring("sudo apparmor_parser -r /etc/apparmor.d/devex-bwrap"),
 		))
 		// The command is one pasteable line under its header (no heredoc).
 		Expect(strings.Split(report.Remediation[0], "\n")).To(HaveLen(2))
 		Expect(report.Remediation[1]).To(ContainSubstring("sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"))
 		Expect(fake.runCommands).To(Equal([]string{"/usr/bin/bwrap"}))
+	})
+
+	It("loads an existing bwrap profile instead of writing a new one when bwrap still fails", func() {
+		fake := &fakeProbeConfig{
+			goos: "linux",
+			bins: map[string]string{"bwrap": "/usr/bin/bwrap", "socat": "/usr/bin/socat"},
+			files: map[string]string{
+				"/etc/os-release": "ID=ubuntu\nVERSION_ID=\"24.04\"\n",
+				"/proc/sys/kernel/apparmor_restrict_unprivileged_userns": "1\n",
+				"/etc/apparmor.d/bwrap":                                  "profile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n}\n",
+			},
+			existing: map[string]bool{"/usr/share/apparmor/extra-profiles/bwrap-userns-restrict": true},
+			runOut:   "bwrap: setting up uid map: Permission denied\n",
+			runErr:   errors.New("exit status 1"),
+		}
+
+		report := agentsandbox.Check(context.Background(), fake.probe())
+
+		Expect(report.Status).To(Equal(agentsandbox.StatusRestricted))
+		Expect(report.Remediation[0]).To(ContainSubstring("sudo apparmor_parser -r /etc/apparmor.d/bwrap"))
+		Expect(strings.Join(report.Remediation, "\n")).NotTo(Or(ContainSubstring("tee"), ContainSubstring("cp ")))
+	})
+
+	It("writes the minimal profile for a bwrap outside /usr/bin and never offers Ubuntu's /usr/bin profile", func() {
+		fake := &fakeProbeConfig{
+			goos: "linux",
+			bins: map[string]string{"bwrap": "/usr/local/bin/bwrap", "socat": "/usr/bin/socat"},
+			files: map[string]string{
+				"/proc/sys/kernel/apparmor_restrict_unprivileged_userns": "1\n",
+				// Ubuntu's profile covers /usr/bin/bwrap only.
+				"/etc/apparmor.d/bwrap-userns-restrict": "profile bwrap /usr/bin/bwrap flags=(attach_disconnected) {\n}\n",
+			},
+			existing: map[string]bool{"/usr/share/apparmor/extra-profiles/bwrap-userns-restrict": true},
+			runOut:   "bwrap: setting up uid map: Permission denied\n",
+			runErr:   errors.New("exit status 1"),
+		}
+
+		report := agentsandbox.Check(context.Background(), fake.probe())
+
+		Expect(report.Status).To(Equal(agentsandbox.StatusRestricted))
+		Expect(report.Remediation[0]).To(ContainSubstring("profile devex-bwrap /usr/local/bin/bwrap flags=(unconfined)"))
+		Expect(report.Remediation[0]).NotTo(ContainSubstring("extra-profiles"))
+		Expect(report.AppArmorBwrapProfile).To(BeEmpty())
 	})
 
 	It("reports ok when unrestricted and bwrap works", func() {
@@ -233,6 +276,22 @@ var _ = Describe("Agent sandbox prerequisite check", func() {
 			"sudo apt-get install -y socat",
 			"devex install socat",
 		}))
+	})
+
+	It("reports ok without socat when the check does not require it", func() {
+		fake := &fakeProbeConfig{
+			goos:  "linux",
+			bins:  map[string]string{"bwrap": "/usr/bin/bwrap"},
+			files: map[string]string{"/etc/os-release": "ID=ubuntu\n"},
+		}
+		probe := fake.probe()
+		probe.SocatNotRequired = true
+
+		report := agentsandbox.Check(context.Background(), probe)
+
+		Expect(report.Status).To(Equal(agentsandbox.StatusOK))
+		Expect(report.SocatPath).To(BeEmpty())
+		Expect(report.Remediation).To(BeEmpty())
 	})
 
 	It("reports failed with bwrap error when unrestricted but bwrap still fails", func() {

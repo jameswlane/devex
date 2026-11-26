@@ -75,7 +75,7 @@ func newPackageMaintenanceCmd(action string, settings config.CrossPlatformSettin
 		if err := viper.BindPFlags(cmd.Flags()); err != nil {
 			return err
 		}
-		apps, _, err := agentapi.SelectApplications(cmd.Context(), settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+		apps, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
 		if err != nil {
 			return err
 		}

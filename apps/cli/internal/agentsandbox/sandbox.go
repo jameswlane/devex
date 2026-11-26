@@ -42,6 +42,7 @@ const (
 	pathAppArmorDir              = "/etc/apparmor.d"
 	pathAppArmorBwrapRestrict    = "/etc/apparmor.d/bwrap-userns-restrict"
 	pathAppArmorBwrapCustom      = "/etc/apparmor.d/bwrap"
+	pathAppArmorDevexBwrap       = "/etc/apparmor.d/devex-bwrap"
 	pathAppArmorExtraBwrap       = "/usr/share/apparmor/extra-profiles/bwrap-userns-restrict"
 	pathOSRelease                = "/etc/os-release"
 	defaultBwrapBinaryPath       = "/usr/bin/bwrap"
@@ -58,6 +59,9 @@ type Probe struct {
 	Run      func(ctx context.Context, name string, args ...string) ([]byte, error)
 	Stat     func(path string) (os.FileInfo, error)
 	Glob     func(pattern string) ([]string, error)
+	// SocatNotRequired reports a missing socat without counting it as a
+	// problem, for checks scoped to agents that do not declare socat.
+	SocatNotRequired bool
 }
 
 // DefaultProbe returns a Probe wired to the local operating system.
@@ -150,12 +154,13 @@ func Check(ctx context.Context, probe Probe) Report {
 		report.MaxUserNamespaces = &val
 	}
 
+	socatMissing := report.SocatPath == "" && !probe.SocatNotRequired
 	report.AppArmorBwrapProfile = findAppArmorBwrapProfile(probe, report.BwrapPath)
 	distro := detectLinuxDistro(probe)
 
 	if report.BwrapPath == "" {
 		report.Status = StatusMissing
-		report.Remediation = missingPackagesRemediation(distro, true, report.SocatPath == "")
+		report.Remediation = missingPackagesRemediation(distro, true, socatMissing)
 		return report
 	}
 
@@ -169,7 +174,7 @@ func Check(ctx context.Context, probe Probe) Report {
 	out, err := probe.Run(probeCtx, report.BwrapPath, "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-all", "true")
 	if err == nil {
 		report.BwrapWorks = true
-		if report.SocatPath == "" {
+		if socatMissing {
 			report.Status = StatusMissing
 			report.Remediation = missingPackagesRemediation(distro, false, true)
 			return report
@@ -185,8 +190,8 @@ func Check(ctx context.Context, probe Probe) Report {
 	maxUsernsDisabled := report.MaxUserNamespaces != nil && *report.MaxUserNamespaces == 0
 	if report.UsernsRestricted || usernsCloneDisabled || maxUsernsDisabled {
 		report.Status = StatusRestricted
-		report.Remediation = restrictedRemediation(probe, report.UsernsRestricted, usernsCloneDisabled, maxUsernsDisabled)
-		if report.SocatPath == "" {
+		report.Remediation = restrictedRemediation(probe, report.BwrapPath, report.AppArmorBwrapProfile, report.UsernsRestricted, usernsCloneDisabled, maxUsernsDisabled)
+		if socatMissing {
 			report.Remediation = append(report.Remediation, missingPackagesRemediation(distro, false, true)...)
 		}
 		return report
@@ -196,7 +201,7 @@ func Check(ctx context.Context, probe Probe) Report {
 	report.Remediation = []string{
 		fmt.Sprintf("Inspect why `%s` failed (%s) and verify your kernel or container allows unprivileged user namespaces.", bwrapProbeCommandDescription, report.BwrapError),
 	}
-	if report.SocatPath == "" {
+	if socatMissing {
 		report.Remediation = append(report.Remediation, missingPackagesRemediation(distro, false, true)...)
 	}
 	return report
@@ -215,17 +220,21 @@ func readSysctlInt(probe Probe, path string) (int, bool) {
 }
 
 func findAppArmorBwrapProfile(probe Probe, bwrapPath string) string {
-	if _, err := probe.Stat(pathAppArmorBwrapRestrict); err == nil {
-		return pathAppArmorBwrapRestrict
+	// Only a profile for the bwrap that runs counts; Ubuntu's profile and the
+	// default target cover /usr/bin/bwrap.
+	target := bwrapPath
+	if target == "" {
+		target = defaultBwrapBinaryPath
 	}
-	if _, err := probe.ReadFile(pathAppArmorBwrapRestrict); err == nil {
-		return pathAppArmorBwrapRestrict
+	if target == defaultBwrapBinaryPath {
+		if _, err := probe.Stat(pathAppArmorBwrapRestrict); err == nil {
+			return pathAppArmorBwrapRestrict
+		}
+		if _, err := probe.ReadFile(pathAppArmorBwrapRestrict); err == nil {
+			return pathAppArmorBwrapRestrict
+		}
 	}
-
-	targets := []string{defaultBwrapBinaryPath}
-	if bwrapPath != "" && bwrapPath != defaultBwrapBinaryPath {
-		targets = append(targets, bwrapPath)
-	}
+	targets := []string{target}
 
 	matches, _ := probe.Glob(filepath.Join(pathAppArmorDir, "*"))
 	sort.Strings(matches)
@@ -308,18 +317,27 @@ func missingPackagesRemediation(pkgManager string, missingBwrap, missingSocat bo
 	}
 }
 
-func restrictedRemediation(probe Probe, apparmorRestricted, usernsCloneDisabled, maxUsernsDisabled bool) []string {
+func restrictedRemediation(probe Probe, bwrapPath, profile string, apparmorRestricted, usernsCloneDisabled, maxUsernsDisabled bool) []string {
 	var steps []string
 	if apparmorRestricted {
-		if _, err := probe.Stat(pathAppArmorExtraBwrap); err == nil {
+		_, extraErr := probe.Stat(pathAppArmorExtraBwrap)
+		switch {
+		case profile != "":
+			// Never replace a profile that already covers bwrap; it is most
+			// likely installed but not loaded.
+			steps = append(steps,
+				fmt.Sprintf("An AppArmor profile for bwrap exists at %s but bwrap still fails; load it (preferred):\n", profile)+
+					"  sudo apparmor_parser -r "+profile,
+			)
+		case bwrapPath == defaultBwrapBinaryPath && extraErr == nil:
 			steps = append(steps,
 				"Install and load Ubuntu's AppArmor profile for bwrap (preferred):\n"+
 					"  sudo cp /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/ && sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict",
 			)
-		} else {
+		default:
 			steps = append(steps,
 				"Create and load a minimal AppArmor profile for bwrap (preferred):\n"+
-					"  "+minimalBwrapProfileCommand,
+					"  "+minimalBwrapProfileCommand(bwrapPath),
 			)
 		}
 		steps = append(steps,
@@ -343,11 +361,14 @@ func restrictedRemediation(probe Probe, apparmorRestricted, usernsCloneDisabled,
 }
 
 // minimalBwrapProfileCommand writes an unconfined AppArmor profile that lets
-// /usr/bin/bwrap create user namespaces. It is a single line so it can be
-// pasted as is (an indented heredoc terminator would not end the heredoc).
-const minimalBwrapProfileCommand = "printf '%s\\n' 'abi <abi/4.0>,' 'include <tunables/global>' " +
-	"'profile bwrap /usr/bin/bwrap flags=(unconfined) {' '  userns,' '  include if exists <local/bwrap>' '}' " +
-	"| sudo tee /etc/apparmor.d/bwrap >/dev/null && sudo apparmor_parser -r /etc/apparmor.d/bwrap"
+// the detected bwrap create user namespaces. It uses its own file and profile
+// name so it never replaces an existing bwrap profile, and it is a single line
+// so it can be pasted as is (an indented heredoc terminator would not end it).
+func minimalBwrapProfileCommand(bwrapPath string) string {
+	return "printf '%s\\n' 'abi <abi/4.0>,' 'include <tunables/global>' " +
+		"'profile devex-bwrap " + bwrapPath + " flags=(unconfined) {' '  userns,' '  include if exists <local/devex-bwrap>' '}' " +
+		"| sudo tee " + pathAppArmorDevexBwrap + " >/dev/null && sudo apparmor_parser -r " + pathAppArmorDevexBwrap
+}
 
 // bwrapProbeTimeout bounds the sandbox start check; `true` exits immediately.
 const bwrapProbeTimeout = 15 * time.Second

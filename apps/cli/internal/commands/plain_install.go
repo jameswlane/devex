@@ -236,26 +236,33 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 	if len(failures) > 0 {
 		return errors.Join(result, fmt.Errorf("failed to install applications: %s", strings.Join(failures, ", ")))
 	}
-	if result == nil && runtime.GOOS == "linux" && hasSandboxPrerequisites(apps) {
-		reportPostInstallSandboxCheck(ctx, plainInstallErrWriter)
+	if result == nil && runtime.GOOS == "linux" {
+		if declared := declaredSandboxPrerequisites(apps); len(declared) > 0 {
+			reportPostInstallSandboxCheck(ctx, plainInstallErrWriter, declared)
+		}
 	}
 	return result
 }
 
-func hasSandboxPrerequisites(apps []types.CrossPlatformApp) bool {
+// declaredSandboxPrerequisites returns the lower-case names of the sandbox
+// prerequisites the installed applications declare for this platform.
+func declaredSandboxPrerequisites(apps []types.CrossPlatformApp) map[string]bool {
+	declared := map[string]bool{}
 	for _, app := range apps {
-		if len(app.GetOSConfig().SandboxPrerequisites) > 0 {
-			return true
+		for _, name := range app.GetOSConfig().SandboxPrerequisites {
+			declared[strings.ToLower(strings.TrimSpace(name))] = true
 		}
 	}
-	return false
+	return declared
 }
 
-func reportPostInstallSandboxCheck(ctx context.Context, errOut io.Writer) {
+func reportPostInstallSandboxCheck(ctx context.Context, errOut io.Writer, declared map[string]bool) {
 	if errOut == nil {
 		errOut = os.Stderr
 	}
-	report := agentsandbox.Check(ctx, plainInstallSandboxProbe())
+	probe := plainInstallSandboxProbe()
+	probe.SocatNotRequired = !declared["socat"]
+	report := agentsandbox.Check(ctx, probe)
 	if _, err := agentsandbox.SaveReport(report); err != nil {
 		log.Warn("Could not record agent sandbox check report", "error", err)
 	}

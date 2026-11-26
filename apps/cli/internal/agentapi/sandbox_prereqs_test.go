@@ -2,6 +2,7 @@ package agentapi_test
 
 import (
 	"context"
+	"sort"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
@@ -145,5 +146,33 @@ var _ = Describe("Sandbox prerequisite selection expansion", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appNames(apps)).To(Equal([]string{"Claude Code", "Codex CLI"}))
+	})
+
+	It("keeps the same roots and order when the sorted expanded names are resolved again", func() {
+		// MCP confirmation sorts the expanded root names and resolves them again.
+		settings.ApplicationOverrides = append(settings.ApplicationOverrides, types.CrossPlatformApp{
+			Name:     "Build Essential",
+			Category: "Dependency",
+			Linux:    types.OSConfig{InstallMethod: "apt", InstallCommand: "build-essential", UninstallCommand: "build-essential"},
+		})
+		first, _, err := agentapi.SelectApplications(context.Background(), settings, agentapi.PlanRequest{
+			Names: []string{"Build Essential", "Claude Code"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(appNames(first)).To(Equal([]string{"Bubblewrap", "socat", "Build Essential", "Claude Code"}))
+
+		replayed := append([]string(nil), appNames(first)...)
+		sort.Strings(replayed)
+		again, _, err := agentapi.SelectApplications(context.Background(), settings, agentapi.PlanRequest{Names: replayed})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(appNames(again)).To(Equal(appNames(first)))
+	})
+
+	It("does not add prerequisites for requested-only selections such as update", func() {
+		apps, _, err := agentapi.SelectRequestedApplications(context.Background(), settings, agentapi.PlanRequest{
+			Names: []string{"Claude Code"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(appNames(apps)).To(Equal([]string{"Claude Code"}))
 	})
 })

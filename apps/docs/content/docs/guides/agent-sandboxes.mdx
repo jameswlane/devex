@@ -37,7 +37,7 @@ Run `devex agent sandbox` (or `devex agent sandbox --format json`) to inspect yo
 
 1. **Binaries**: locates `bwrap` and `socat` on `PATH`.
 2. **Kernel sysctls**: reads `/proc/sys/kernel/apparmor_restrict_unprivileged_userns`, `/proc/sys/kernel/unprivileged_userns_clone`, and `/proc/sys/user/max_user_namespaces`.
-3. **AppArmor profile**: checks `/etc/apparmor.d/bwrap-userns-restrict` and `/etc/apparmor.d/*` for a profile targeting `/usr/bin/bwrap`.
+3. **AppArmor profile**: checks `/etc/apparmor.d/bwrap-userns-restrict` and `/etc/apparmor.d/*` for a profile targeting the detected `bwrap`.
 4. **Live sandbox probe**: runs `bwrap --ro-bind / / --dev /dev --unshare-all true` to confirm an unprivileged sandbox can actually start.
 
 The command always exits `0` for valid flags (it reports state rather than failing scripts) and writes the latest JSON report to `$DEVEX_STATE_DIR/agent-sandbox.json` (default `~/.local/state/devex/agent-sandbox.json`, mode `0600`) for diagnostic commands. After a non-interactive `devex install` of an agent declaring `sandbox_prerequisites` on Linux, DevEx runs this check automatically and prints a non-fatal warning to `stderr` if status is not `ok`.
@@ -55,20 +55,17 @@ sudo cp /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d
   sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 ```
 
-If `/usr/share/apparmor/extra-profiles/bwrap-userns-restrict` is not present, create a minimal profile for `/usr/bin/bwrap`:
+If that file is not present (a fresh Ubuntu 24.04 cloud image does not have it), or `bwrap` is not `/usr/bin/bwrap`, write a minimal profile for the detected `bwrap` in its own file, so no existing profile is replaced:
 
 ```sh
-sudo tee /etc/apparmor.d/bwrap <<'EOF'
-abi <abi/4.0>,
-include <tunables/global>
-
-profile bwrap /usr/bin/bwrap flags=(unconfined) {
-  userns,
-  include if exists <local/bwrap>
-}
-EOF
-sudo apparmor_parser -r /etc/apparmor.d/bwrap
+printf '%s\n' 'abi <abi/4.0>,' 'include <tunables/global>' \
+  'profile devex-bwrap /usr/bin/bwrap flags=(unconfined) {' '  userns,' \
+  '  include if exists <local/devex-bwrap>' '}' \
+  | sudo tee /etc/apparmor.d/devex-bwrap >/dev/null && \
+  sudo apparmor_parser -r /etc/apparmor.d/devex-bwrap
 ```
+
+If a profile for `bwrap` already exists but the sandbox still fails, `devex agent sandbox` tells you to load that profile with `sudo apparmor_parser -r <profile>` instead of writing a new one.
 
 Ubuntu 25.04+ ships `/etc/apparmor.d/bwrap-userns-restrict` in the `apparmor` package, so installing `bubblewrap` normally works without extra AppArmor steps.
 
