@@ -19,6 +19,7 @@
 		"self-update",
 		"mcp",
 		"agent-skills",
+		"agent-sandbox",
 		"global-flags"
 	]
 }

@@ -1,0 +1,39 @@
+name: Bubblewrap
+description: Unprivileged sandboxing tool used by Linux coding agent harnesses
+category: Dependency
+default: false
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: bubblewrap
+  uninstall_command: bubblewrap
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  alternatives:
+    - install_method: dnf
+      install_command: bubblewrap
+      uninstall_command: bubblewrap
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - os: centos
+        - os: rhel
+    - install_method: pacman
+      install_command: bubblewrap
+      uninstall_command: bubblewrap
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: bubblewrap
+      uninstall_command: bubblewrap
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+        - os: opensuse-tumbleweed
+        - os: opensuse-leap
+        - os: suse

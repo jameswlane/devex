@@ -53,7 +53,7 @@ func main() {
 	}
 	// Validation must remain usable with malformed settings and must not create
 	// databases, migrate files or initialize installation state before reporting.
-	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) {
+	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) || agentSandboxCommand(os.Args[1:]) {
 		if presentationCommand(os.Args[1:]) {
 			if err := migrateLegacy(ctx, dirs, true, os.Args[1:], os.Stderr); err != nil {
 				handleError("checking legacy files", err)
@@ -323,6 +323,12 @@ func agentSkillInstallCommand(args []string) bool {
 	return resolveStartupRoute(args).agentSkillInstall()
 }
 
+// agentSandboxCommand identifies "devex agent sandbox", which only probes host
+// sandbox prerequisites and writes agent-sandbox.json.
+func agentSandboxCommand(args []string) bool {
+	return resolveStartupRoute(args).agentSandbox()
+}
+
 func readCommand(args []string) bool {
 	return resolveStartupRoute(args).read()
 }
@@ -489,6 +495,11 @@ func (r startupRoute) agentSkillInstall() bool {
 	return r.is("agent", "install-skill")
 }
 
+// agentSandbox identifies "devex agent sandbox".
+func (r startupRoute) agentSandbox() bool {
+	return r.is("agent", "sandbox")
+}
+
 // configurationValidation identifies "devex config validate".
 func (r startupRoute) configurationValidation() bool {
 	return r.is("config", "validate")
@@ -529,7 +540,7 @@ func (r startupRoute) read() bool {
 	case "config":
 		return r.is("config", "effective") || r.is("config", "show")
 	case "agent":
-		return r.agentSkillInstall()
+		return r.agentSkillInstall() || r.agentSandbox()
 	}
 	return false
 }

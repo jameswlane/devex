@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"runtime"
 	"strings"
 	"sync"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/scheduler"
 
 	"github.com/spf13/viper"
@@ -24,6 +27,12 @@ import (
 
 var installApplication = installers.InstallCrossPlatformApp
 var prepareApplicationInstallers = initializeApplicationInstallers
+
+// plainInstallSandboxProbe and plainInstallErrWriter are replaced in tests.
+var (
+	plainInstallSandboxProbe           = agentsandbox.DefaultProbe
+	plainInstallErrWriter    io.Writer = os.Stderr
+)
 
 // preparePackageBatch shares the TUI's batched package transactions; tests replace it.
 var preparePackageBatch = tui.PreparePackageBatch
@@ -227,7 +236,40 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 	if len(failures) > 0 {
 		return errors.Join(result, fmt.Errorf("failed to install applications: %s", strings.Join(failures, ", ")))
 	}
+	if result == nil && runtime.GOOS == "linux" && hasSandboxPrerequisites(apps) {
+		reportPostInstallSandboxCheck(ctx, plainInstallErrWriter)
+	}
 	return result
+}
+
+func hasSandboxPrerequisites(apps []types.CrossPlatformApp) bool {
+	for _, app := range apps {
+		if len(app.GetOSConfig().SandboxPrerequisites) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func reportPostInstallSandboxCheck(ctx context.Context, errOut io.Writer) {
+	if errOut == nil {
+		errOut = os.Stderr
+	}
+	report := agentsandbox.Check(ctx, plainInstallSandboxProbe())
+	if _, err := agentsandbox.SaveReport(report); err != nil {
+		log.Warn("Could not record agent sandbox check report", "error", err)
+	}
+	if report.Status == agentsandbox.StatusOK || report.Status == agentsandbox.StatusUnsupported {
+		return
+	}
+	fmt.Fprintf(errOut, "Warning: Linux agent sandbox check returned %s", report.Status)
+	if report.BwrapError != "" {
+		fmt.Fprintf(errOut, " (%s)", report.BwrapError)
+	}
+	fmt.Fprintln(errOut, ". Run `devex agent sandbox` for details.")
+	for i, step := range report.Remediation {
+		fmt.Fprintf(errOut, "  %d. %s\n", i+1, step)
+	}
 }
 
 func installConcurrency() int {

@@ -1,0 +1,30 @@
+---
+title: Agent sandbox verification
+description: Verify Linux bubblewrap and socat sandbox prerequisites for coding agents.
+---
+
+`devex agent sandbox` checks whether this host can run unprivileged Linux sandboxes for coding agents such as Claude Code, Codex CLI, and GitHub Copilot CLI.
+
+```sh
+devex agent sandbox
+devex agent sandbox --format json
+```
+
+## Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--format` | `table` | Output format: `table` or `json` |
+
+## What It Checks
+
+- Presence of `bwrap` and `socat` on `PATH`
+- Kernel user-namespace sysctls (`/proc/sys/kernel/apparmor_restrict_unprivileged_userns`, `/proc/sys/kernel/unprivileged_userns_clone`, `/proc/sys/user/max_user_namespaces`)
+- Existing AppArmor profiles covering `/usr/bin/bwrap` under `/etc/apparmor.d/`
+- Live sandbox execution via `bwrap --ro-bind / / --dev /dev --unshare-all true`
+
+## Output and State
+
+The command reports one of `ok`, `missing`, `restricted`, `failed`, or `unsupported` (non-Linux hosts). It exits `0` for valid invocations and saves the JSON report atomically (mode `0600`) to `$DEVEX_STATE_DIR/agent-sandbox.json` (default `~/.local/state/devex/agent-sandbox.json`).
+
+DevEx never modifies sysctls or AppArmor profiles itself. When the sandbox is missing or restricted, the output lists exact manual remediation commands in preferred order. See the [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes) guide for per-agent details.

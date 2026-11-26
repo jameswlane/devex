@@ -115,7 +115,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 	})
 
 	DescribeTable("resolves each AI coding agent install plan on Ubuntu 24.04",
-		func(name, wantMethod, wantTarget, wantScope string, wantSelfUpdating bool, wantDeps []string, wantUninstall string) {
+		func(name, wantMethod, wantTarget, wantScope string, wantSelfUpdating bool, wantDeps, wantSandboxPrereqs []string, wantUninstall string) {
 			app, ok := agents[name]
 			Expect(ok).To(BeTrue(), "expected %s in ai-agents catalog", name)
 
@@ -131,6 +131,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			Expect(resolved.InstallScope).To(Equal(wantScope))
 			Expect(resolved.SelfUpdating).To(Equal(wantSelfUpdating))
 			Expect(resolved.UninstallCommand).To(Equal(wantUninstall))
+			Expect(resolved.SandboxPrerequisites).To(Equal(wantSandboxPrereqs))
 
 			switch wantMethod {
 			case "curlpipe":
@@ -149,6 +150,9 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			plan, err := agentapi.PlanInstall(context.Background(), settings, agentapi.PlanRequest{Names: []string{name}})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(plan.DependencyOrder).To(ContainElement(name))
+			for _, prereq := range wantSandboxPrereqs {
+				Expect(plan.DependencyOrder).To(ContainElement(prereq))
+			}
 			for _, dep := range wantDeps {
 				if strings.EqualFold(dep, "Node.js") {
 					Expect(plan.DependencyOrder).To(Equal([]string{dep, name}))
@@ -175,15 +179,18 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			cmd.SetErr(&out)
 			cmd.SetArgs([]string{"install", "--dry-run", name})
 			Expect(cmd.Execute()).To(Succeed())
+			for _, prereq := range wantSandboxPrereqs {
+				Expect(out.String()).To(ContainSubstring("Would install " + prereq))
+			}
 			Expect(out.String()).To(ContainSubstring("Would install " + name))
 		},
-		Entry("Claude Code", "Claude Code", "curlpipe", "https://claude.ai/install.sh", "user", true, nil, `rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"`),
-		Entry("Codex CLI", "Codex CLI", "mise", "codex@latest", "", false, []string{"mise"}, "codex"),
-		Entry("Gemini CLI", "Gemini CLI", "mise", "node@lts npm:@google/gemini-cli@latest", "", true, []string{"Node.js"}, "npm:@google/gemini-cli"),
-		Entry("GitHub Copilot CLI", "GitHub Copilot CLI", "curlpipe", "https://raw.githubusercontent.com/github/copilot-cli/main/install.sh", "user", true, nil, `rm -f "$HOME/.local/bin/copilot"`),
-		Entry("OpenCode", "OpenCode", "curlpipe", "https://opencode.ai/install", "user", true, nil, `rm -f "$HOME/.opencode/bin/opencode"`),
-		Entry("Kimi Code", "Kimi Code", "curlpipe", "https://code.kimi.com/kimi-code/install.sh", "user", false, nil, `rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),
-		Entry("Aider", "Aider", "mise", "uv@latest pipx:aider-chat[python=3.12]@latest", "", false, []string{"mise"}, "pipx:aider-chat"),
-		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, "aqua:aaif-goose/goose"),
+		Entry("Claude Code", "Claude Code", "curlpipe", "https://claude.ai/install.sh", "user", true, nil, []string{"Bubblewrap", "socat"}, `rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"`),
+		Entry("Codex CLI", "Codex CLI", "mise", "codex@latest", "", false, []string{"mise"}, []string{"Bubblewrap"}, "codex"),
+		Entry("Gemini CLI", "Gemini CLI", "mise", "node@lts npm:@google/gemini-cli@latest", "", true, []string{"Node.js"}, nil, "npm:@google/gemini-cli"),
+		Entry("GitHub Copilot CLI", "GitHub Copilot CLI", "curlpipe", "https://raw.githubusercontent.com/github/copilot-cli/main/install.sh", "user", true, nil, []string{"Bubblewrap"}, `rm -f "$HOME/.local/bin/copilot"`),
+		Entry("OpenCode", "OpenCode", "curlpipe", "https://opencode.ai/install", "user", true, nil, nil, `rm -f "$HOME/.opencode/bin/opencode"`),
+		Entry("Kimi Code", "Kimi Code", "curlpipe", "https://code.kimi.com/kimi-code/install.sh", "user", false, nil, nil, `rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),
+		Entry("Aider", "Aider", "mise", "uv@latest pipx:aider-chat[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:aider-chat"),
+		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, nil, "aqua:aaif-goose/goose"),
 	)
 })

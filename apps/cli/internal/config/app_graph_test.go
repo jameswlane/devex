@@ -117,4 +117,23 @@ var _ = Describe("Application graph validation", func() {
 		app.Linux.Themes[0].Files[0].RequiresAny = []string{"~/.config/nvim/lua/config/lazy.lua"}
 		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{app})).To(BeEmpty())
 	})
+
+	It("validates that sandbox_prerequisites resolve to catalog applications", func() {
+		bwrap := linuxApp("Bubblewrap", "apt", "bubblewrap")
+		agent := linuxApp("Claude Code", "curlpipe", "")
+		agent.Linux.DownloadURL = "https://claude.ai/install.sh"
+		agent.Linux.SandboxPrerequisites = []string{"Bubblewrap", "missing-prereq", "", "Claude Code"}
+
+		errs := config.ValidateApplicationGraph([]types.CrossPlatformApp{bwrap, agent})
+
+		Expect(errs).To(ContainElements(
+			And(HaveField("Field", "linux.sandbox_prerequisites[1]"), HaveField("Message", ContainSubstring(`unknown sandbox prerequisite "missing-prereq"`))),
+			And(HaveField("Field", "linux.sandbox_prerequisites[2]"), HaveField("Message", ContainSubstring("must not be empty"))),
+			And(HaveField("Field", "linux.sandbox_prerequisites[3]"), HaveField("Message", ContainSubstring("cannot list itself"))),
+		))
+		Expect(errs).To(HaveLen(3))
+
+		agent.Linux.SandboxPrerequisites = []string{"bubblewrap"}
+		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{bwrap, agent})).To(BeEmpty())
+	})
 })

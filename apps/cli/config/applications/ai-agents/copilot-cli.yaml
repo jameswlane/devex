@@ -29,3 +29,7 @@ linux:
   self_updating: true
   uninstall_command: rm -f "$HOME/.local/bin/copilot"
   official_support: true
+  # Linux local sandboxing uses the bubblewrap backend (bwrap >= 0.5.0):
+  # https://docs.github.com/en/copilot/concepts/security-governance-and-network-settings/about-cloud-and-local-sandboxes
+  sandbox_prerequisites:
+    - Bubblewrap

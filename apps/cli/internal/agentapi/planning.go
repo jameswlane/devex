@@ -100,7 +100,44 @@ func SelectApplications(ctx context.Context, s config.CrossPlatformSettings, r P
 	if len(apps) == 0 && !present {
 		return nil, s, &Error{Category: "not_found", Message: "no applications matched the install request"}
 	}
+	apps = expandSandboxPrerequisites(apps, s)
 	return apps, s, nil
+}
+
+// expandSandboxPrerequisites inserts each selected app's current-platform
+// sandbox_prerequisites before the first app that requires them, deduplicated
+// and filtered to catalog applications supported on the current platform.
+func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) []types.CrossPlatformApp {
+	if len(apps) == 0 {
+		return apps
+	}
+	catalog := make(map[string]types.CrossPlatformApp)
+	for _, app := range settings.GetAllApps() {
+		catalog[normalizeInstallLookup(app.Name)] = app
+	}
+	emitted := make(map[string]bool, len(apps))
+	expanded := make([]types.CrossPlatformApp, 0, len(apps))
+	for _, app := range apps {
+		appKey := normalizeInstallLookup(app.Name)
+		if emitted[appKey] {
+			continue
+		}
+		for _, prereqName := range app.GetOSConfig().SandboxPrerequisites {
+			prereqKey := normalizeInstallLookup(prereqName)
+			if prereqKey == "" || prereqKey == appKey || emitted[prereqKey] {
+				continue
+			}
+			prereq, ok := catalog[prereqKey]
+			if !ok || !prereq.IsSupported() {
+				continue
+			}
+			emitted[prereqKey] = true
+			expanded = append(expanded, prereq)
+		}
+		emitted[appKey] = true
+		expanded = append(expanded, app)
+	}
+	return expanded
 }
 
 // PlanInstall has no installer, executor, filesystem writer, or network dependency.

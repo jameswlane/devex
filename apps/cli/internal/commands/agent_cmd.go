@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/agentskills"
 	"github.com/spf13/cobra"
 )
@@ -33,6 +35,12 @@ func (d agentSkillDestination) path() string {
 }
 
 func NewAgentCmd() *cobra.Command {
+	return NewAgentCmdWithSandboxProbe(agentsandbox.DefaultProbe())
+}
+
+// NewAgentCmdWithSandboxProbe constructs the `agent` command with an injected
+// sandbox probe so tests can run without inspecting the host kernel or binaries.
+func NewAgentCmdWithSandboxProbe(sandboxProbe agentsandbox.Probe) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
 		Short: "Manage coding agent integrations",
@@ -67,6 +75,41 @@ to remove so Kimi does not load DevEx twice. Differing content requires --overwr
 	install.Flags().BoolVar(&options.overwrite, "overwrite", false, "Replace differing content and retain a backup")
 	install.Flags().BoolVar(&options.dryRun, "dry-run", false, "Preview without writing files")
 	cmd.AddCommand(install)
+	cmd.AddCommand(newAgentSandboxCmd(sandboxProbe))
+	return cmd
+}
+
+func newAgentSandboxCmd(probe agentsandbox.Probe) *cobra.Command {
+	var format string
+	cmd := &cobra.Command{
+		Use:          "sandbox",
+		Short:        "Check Linux sandbox prerequisites for coding agents",
+		SilenceUsage: true,
+		Args:         cobra.NoArgs,
+		Long: `Verify that Linux sandbox prerequisites (bubblewrap, socat, user namespaces,
+and AppArmor profiles) are installed and able to launch an unprivileged sandbox.
+
+DevEx never modifies kernel sysctls or AppArmor profiles automatically; when a
+restriction is detected, exact manual remediation commands are printed instead.
+The JSON report is saved to the DevEx state directory for reuse by diagnostics.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if format != "table" && format != "json" {
+				return fmt.Errorf("unsupported format %q: use table or json", format)
+			}
+			report := agentsandbox.Check(cmd.Context(), probe)
+			if _, err := agentsandbox.SaveReport(report); err != nil {
+				cmd.PrintErrf("Warning: could not record sandbox report: %v\n", err)
+			}
+			if format == "json" {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			cmd.Print(agentsandbox.FormatTable(report))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
 	return cmd
 }
 
