@@ -216,6 +216,39 @@ var _ = Describe("Agent sandbox prerequisite check", func() {
 		Expect(report.Remediation[0]).To(ContainSubstring("sudo tee /etc/apparmor.d/devex-bwrap"))
 	})
 
+	It("matches only profile attachments, including DevEx's quoted and escaped one", func() {
+		check := func(bwrapPath, profile string) string {
+			fake := &fakeProbeConfig{
+				goos: "linux",
+				bins: map[string]string{"bwrap": bwrapPath, "socat": "/usr/bin/socat"},
+				files: map[string]string{
+					"/proc/sys/kernel/apparmor_restrict_unprivileged_userns": "1\n",
+					"/etc/apparmor.d/candidate":                              profile,
+				},
+				runErr: errors.New("exit status 1"),
+			}
+			return agentsandbox.Check(context.Background(), fake.probe()).AppArmorBwrapProfile
+		}
+		Expect(check("/usr/bin/bwrap", "profile other /usr/bin/other {\n  /usr/bin/bwrap ix,\n}\n")).To(BeEmpty())
+		Expect(check("/usr/bin/bwrap", "profile other /usr/bin/other { # /usr/bin/bwrap\n}\n")).To(BeEmpty())
+		Expect(check("/usr/bin/bwrap", "/usr/bin/bwrap flags=(unconfined) {\n}\n")).To(Equal("/etc/apparmor.d/candidate"))
+
+		// Write DevEx's own profile for an unusual path, then detect it.
+		path := "/opt/it's [build]/bw*rap"
+		fake := &fakeProbeConfig{
+			goos:   "linux",
+			bins:   map[string]string{"bwrap": path, "socat": "/usr/bin/socat"},
+			files:  map[string]string{"/proc/sys/kernel/apparmor_restrict_unprivileged_userns": "1\n"},
+			runErr: errors.New("exit status 1"),
+		}
+		command := strings.SplitN(agentsandbox.Check(context.Background(), fake.probe()).Remediation[0], "\n", 2)[1]
+		printOnly, _, _ := strings.Cut(strings.TrimSpace(command), " | sudo tee ")
+		generated, err := exec.CommandContext(context.Background(), "sh", "-c", printOnly).Output()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(generated)).To(ContainSubstring(`"/opt/it's \[build\]/bw\*rap"`))
+		Expect(check(path, string(generated))).To(Equal("/etc/apparmor.d/candidate"))
+	})
+
 	It("reports ok when unrestricted and bwrap works", func() {
 		fake := &fakeProbeConfig{
 			goos: "linux",

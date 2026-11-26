@@ -262,19 +262,58 @@ func findAppArmorBwrapProfile(probe Probe, bwrapPath string) string {
 func profileAttaches(content, target string) bool {
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+		var rest string
+		if after, ok := strings.CutPrefix(line, "profile "); ok {
+			// `profile <name> <attachment> ...`
+			_, rest, _ = strings.Cut(strings.TrimSpace(after), " ")
+		} else if strings.HasPrefix(line, "/") || strings.HasPrefix(line, `"`) {
+			// `<attachment> ... {` starts a profile block.
+			if !strings.HasSuffix(stripComment(line), "{") {
+				continue
+			}
+			rest = line
+		} else {
 			continue
 		}
-		if strings.Contains(line, `"`+target+`"`) {
+		if attachment, ok := leadingPath(strings.TrimSpace(rest)); ok && attachment == target {
 			return true
-		}
-		for _, field := range strings.Fields(line) {
-			if field == target {
-				return true
-			}
 		}
 	}
 	return false
+}
+
+// leadingPath reads the attachment at the start of s: a quoted path (with
+// backslash escapes removed) or an unquoted token.
+func leadingPath(s string) (string, bool) {
+	if !strings.HasPrefix(s, `"`) {
+		token := strings.Fields(s)
+		if len(token) == 0 || strings.HasPrefix(token[0], "#") {
+			return "", false
+		}
+		return token[0], true
+	}
+	var b strings.Builder
+	for i := 1; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			if i+1 < len(s) {
+				i++
+				b.WriteByte(s[i])
+			}
+		case '"':
+			return b.String(), true
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return "", false
+}
+
+func stripComment(line string) string {
+	if i := strings.Index(line, "#"); i >= 0 {
+		line = line[:i]
+	}
+	return strings.TrimSpace(line)
 }
 
 func detectLinuxDistro(probe Probe) string {
@@ -387,7 +426,7 @@ func restrictedRemediation(probe Probe, bwrapPath, profile string, apparmorRestr
 func minimalBwrapProfileCommand(bwrapPath string) string {
 	// The attachment is a quoted AppArmor path, so spaces stay literal; every
 	// printf argument is shell-quoted, so apostrophes cannot end the quoting.
-	attachment := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(bwrapPath) + `"`
+	attachment := `"` + appArmorPathEscaper.Replace(bwrapPath) + `"`
 	lines := []string{
 		"abi <abi/4.0>,",
 		"include <tunables/global>",
@@ -403,6 +442,13 @@ func minimalBwrapProfileCommand(bwrapPath string) string {
 	return "printf '%s\\n' " + strings.Join(quoted, " ") +
 		" | sudo tee " + pathAppArmorDevexBwrap + " >/dev/null && sudo apparmor_parser -r " + pathAppArmorDevexBwrap
 }
+
+// appArmorPathEscaper escapes AppArmor glob and quoting characters so the
+// attachment matches exactly the detected path.
+var appArmorPathEscaper = strings.NewReplacer(
+	`\`, `\\`, `"`, `\"`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`,
+	`{`, `\{`, `}`, `\}`, `^`, `\^`, `,`, `\,`,
+)
 
 // shellQuote quotes value as one POSIX shell word.
 func shellQuote(value string) string {
