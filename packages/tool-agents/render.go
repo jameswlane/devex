@@ -284,6 +284,7 @@ func planClaude(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 		doc.Set("model", newJSONString(spec.Model))
 	}
 
+	var ownedAllow, ownedDeny []string
 	needPermissions := spec.Preset != "" || len(desiredAllow) > 0 || len(desiredDeny) > 0 || len(prev.Allow) > 0 || len(prev.Deny) > 0
 	if needPermissions {
 		perms, err := doc.EnsureObject("permissions")
@@ -302,6 +303,7 @@ func planClaude(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 			if err != nil {
 				return nil, AgentManagedState{}, fmt.Errorf("%s: permissions.%w", settingsPath, err)
 			}
+			ownedAllow = OwnedEntries(existingAllow, prev.Allow, desiredAllow)
 			merged := MergeStringList(existingAllow, prev.Allow, desiredAllow)
 			perms.SetStringArray("allow", merged)
 		}
@@ -310,6 +312,7 @@ func planClaude(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 			if err != nil {
 				return nil, AgentManagedState{}, fmt.Errorf("%s: permissions.%w", settingsPath, err)
 			}
+			ownedDeny = OwnedEntries(existingDeny, prev.Deny, desiredDeny)
 			merged := MergeStringList(existingDeny, prev.Deny, desiredDeny)
 			perms.SetStringArray("deny", merged)
 		}
@@ -317,8 +320,8 @@ func planClaude(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 
 	files = append(files, buildJSONFilePlan(AgentClaude, settingsPath, before, exists, mode, origDoc, doc))
 	return files, AgentManagedState{
-		Allow: uniqueStrings(desiredAllow),
-		Deny:  uniqueStrings(desiredDeny),
+		Allow: ownedAllow,
+		Deny:  ownedDeny,
 	}, nil
 }
 
@@ -378,6 +381,9 @@ func planCodex(spec AgentSpec, configDir string) ([]FilePlan, AgentManagedState,
 	beforeRules, existsRules, modeRules, err := readExistingFile(rulesPath, settingsFileMode)
 	if err != nil {
 		return nil, AgentManagedState{}, err
+	}
+	if existsRules && !strings.HasPrefix(beforeRules, codexRulesHeader) {
+		return nil, AgentManagedState{}, fmt.Errorf("%s was not written by DevEx (missing %q header); rename it so DevEx can manage this file", rulesPath, strings.TrimSpace(codexRulesHeader))
 	}
 	hasRules := len(spec.AllowedCommands) > 0 || len(spec.DeniedCommands) > 0
 	switch {
@@ -479,6 +485,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 		generalObj.Set("defaultApprovalMode", newJSONString(approvalMode))
 	}
 
+	var ownedAllow, ownedDeny []string
 	if len(desiredAllow) > 0 || len(desiredDeny) > 0 || len(prev.Allow) > 0 || len(prev.Deny) > 0 {
 		toolsObj, err := doc.EnsureObject("tools")
 		if err != nil {
@@ -489,6 +496,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 			if err != nil {
 				return nil, AgentManagedState{}, fmt.Errorf("%s: tools.%w", settingsPath, err)
 			}
+			ownedAllow = OwnedEntries(existingAllow, prev.Allow, desiredAllow)
 			merged := MergeStringList(existingAllow, prev.Allow, desiredAllow)
 			toolsObj.SetStringArray("allowed", merged)
 		}
@@ -497,6 +505,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 			if err != nil {
 				return nil, AgentManagedState{}, fmt.Errorf("%s: tools.%w", settingsPath, err)
 			}
+			ownedDeny = OwnedEntries(existingDeny, prev.Deny, desiredDeny)
 			merged := MergeStringList(existingDeny, prev.Deny, desiredDeny)
 			toolsObj.SetStringArray("exclude", merged)
 		}
@@ -504,8 +513,8 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 
 	files = append(files, buildJSONFilePlan(AgentGemini, settingsPath, before, exists, mode, origDoc, doc))
 	return files, AgentManagedState{
-		Allow: uniqueStrings(desiredAllow),
-		Deny:  uniqueStrings(desiredDeny),
+		Allow: ownedAllow,
+		Deny:  ownedDeny,
 	}, nil
 }
 
@@ -579,6 +588,7 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 		doc.Set("model", newJSONString(spec.Model))
 	}
 
+	var ownedRules []OpenCodeRule
 	if len(desiredRules) > 0 || len(prev.Permissions) > 0 {
 		var existingItems []jsonValue
 		if rawPerms, ok := doc.Get("permissions"); ok {
@@ -588,13 +598,24 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 			}
 			existingItems = arr.Items
 		}
+		existingRules := make([]OpenCodeRule, 0, len(existingItems))
+		for _, item := range existingItems {
+			if parsed, ok := openCodeRuleFromJSON(item); ok {
+				existingRules = append(existingRules, parsed)
+			}
+		}
+		for _, r := range desiredRules {
+			if slices.Contains(prev.Permissions, r) || !slices.Contains(existingRules, r) {
+				ownedRules = append(ownedRules, r)
+			}
+		}
 		merged := mergeOpenCodePermissions(existingItems, prev.Permissions, presetRules, allowRules, denyRules)
 		doc.Set("permissions", &jsonArray{Items: merged})
 	}
 
 	files = append(files, buildJSONFilePlan(AgentOpenCode, settingsPath, before, exists, mode, origDoc, doc))
 	return files, AgentManagedState{
-		Permissions: desiredRules,
+		Permissions: ownedRules,
 	}, nil
 }
 

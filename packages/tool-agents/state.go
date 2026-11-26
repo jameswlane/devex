@@ -144,3 +144,16 @@ func MergeStringList(existing, prevManaged, desired []string) []string {
 	}
 	return out
 }
+
+// OwnedEntries returns the desired entries DevEx owns after a merge: entries it
+// already managed, plus entries it adds now. A desired entry the user already
+// had is left user-owned, so dropping it from DevEx config never removes it.
+func OwnedEntries(existing, prevManaged, desired []string) []string {
+	out := make([]string, 0, len(desired))
+	for _, item := range uniqueStrings(desired) {
+		if slices.Contains(prevManaged, item) || !slices.Contains(existing, item) {
+			out = append(out, item)
+		}
+	}
+	return out
+}

@@ -226,6 +226,30 @@ var _ = Describe("Agent apply and diff commands", func() {
 		Expect(specFlag.Agents[0].Preset).To(Equal("balanced"))
 	})
 
+	It("honours DEVEX_AGENTS and DEVEX_AGENTS_PRESET through the root command's flag binding", func() {
+		GinkgoT().Setenv("DEVEX_AGENTS", "codex")
+		GinkgoT().Setenv("DEVEX_AGENTS_PRESET", "strict")
+		root := NewRootCmd("test", mocks.NewMockRepository(), settings)
+		for _, sub := range root.Commands() {
+			if sub.Name() == "agent" {
+				root.RemoveCommand(sub)
+				break
+			}
+		}
+		root.AddCommand(NewAgentCmdWithDeps(settings, nil, agentsandbox.Probe{}, fake))
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		root.SetArgs([]string{"agent", "diff"})
+
+		Expect(root.Execute()).To(Succeed())
+		var spec resolvedAgentPluginSpec
+		Expect(json.Unmarshal(fake.specBytes, &spec)).To(Succeed())
+		Expect(spec.Agents).To(HaveLen(1))
+		Expect(spec.Agents[0].Name).To(Equal("codex"))
+		Expect(spec.Agents[0].Preset).To(Equal("strict"))
+	})
+
 	It("rejects agents not in enabled list, unknown agents, and forbidden presets without running plugin", func() {
 		cmd1 := NewAgentCmdWithDeps(settings, nil, agentsandbox.Probe{}, fake)
 		cmd1.SetArgs([]string{"diff", "--agents", "gemini"})

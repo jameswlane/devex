@@ -43,7 +43,7 @@ Both presets are conservative. DevEx never maps any preset to an unsandboxed or 
 | `gemini` | `tools.allowed`: `run_shell_command(<cmd>)` | `tools.exclude`: `run_shell_command(<cmd>)` |
 | `opencode` | `permissions`: `{action: "shell", resource: "<cmd> *", effect: "allow"}` | `permissions`: `{action: "shell", resource: "<cmd> *", effect: "deny"}` |
 
-DevEx tracks the list entries it added in `$DEVEX_STATE_DIR/agents/managed.json` so dropping an entry from DevEx config removes only that DevEx-managed entry on the next apply while keeping all user-added entries untouched.
+DevEx tracks the list entries it added in `$DEVEX_STATE_DIR/agents/managed.json` so dropping an entry from DevEx config removes only that DevEx-managed entry on the next apply while keeping all user-added entries untouched. An entry that was already in the agent's file before DevEx declared it stays yours. Codex's `rules/devex.rules` is owned by DevEx as a whole file; DevEx refuses to replace or delete one it did not write.
 
 ## Rendering Guarantees
 

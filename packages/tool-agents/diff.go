@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -20,8 +21,8 @@ func UnifiedDiff(path, before, after string) string {
 	ops := computeLineDiff(oldLines, newLines)
 
 	var out strings.Builder
-	fromLabel := "a/" + path
-	toLabel := "b/" + path
+	fromLabel := "a/" + strings.TrimPrefix(filepath.ToSlash(path), "/")
+	toLabel := "b/" + strings.TrimPrefix(filepath.ToSlash(path), "/")
 	if before == "" {
 		fromLabel = "/dev/null"
 	}

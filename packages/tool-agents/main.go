@@ -159,8 +159,19 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 	return nil
 }
 
-func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
-	anyWritten := false
+func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) (err error) {
+	// Record managed entries agent by agent, so a failure part-way through still
+	// remembers what DevEx wrote for the agents that finished and can remove
+	// those entries later instead of treating them as the user's.
+	state := plan.InitialState.clone()
+	defer func() {
+		if state.equal(plan.InitialState) {
+			return
+		}
+		if saveErr := SaveManagedState(plan.StatePath, state); saveErr != nil && err == nil {
+			err = saveErr
+		}
+	}()
 	for _, ap := range plan.Agents {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -179,9 +190,6 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 			if err != nil {
 				return err
 			}
-			if fp.Action != actionUnchanged {
-				anyWritten = true
-			}
 			label := applyStatusLabel(fp.Action)
 			if backupPath != "" {
 				if _, err := fmt.Fprintf(p.out, "%s: %s (backup: %s)\n", label, fp.Path, backupPath); err != nil {
@@ -193,11 +201,10 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 				}
 			}
 		}
-	}
-
-	if anyWritten || !plan.InitialState.equal(plan.NextState) {
-		if err := SaveManagedState(plan.StatePath, plan.NextState); err != nil {
-			return err
+		if next, ok := plan.NextState.Agents[ap.Agent]; ok {
+			state.Agents[ap.Agent] = next
+		} else {
+			delete(state.Agents, ap.Agent)
 		}
 	}
 	return nil

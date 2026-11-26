@@ -19,6 +19,11 @@ import (
 const (
 	toolAgentsPluginName = "tool-agents"
 	agentsDocsURL        = "https://docs.devex.sh/configuration/agents"
+
+	// Read directly: root binds every flag into viper, and the --agents flag
+	// shadows nested "agents.*" keys, so viper never returns these values.
+	agentsSelectEnv = "DEVEX_AGENTS"
+	agentsPresetEnv = "DEVEX_AGENTS_PRESET"
 )
 
 type agentPluginExecutor interface {
@@ -136,9 +141,6 @@ backups, or state.`,
 }
 
 func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, agentsFlag, presetFlag string, diffOnly bool) error {
-	_ = viper.BindEnv("agents.preset", "DEVEX_AGENTS_PRESET")
-	_ = viper.BindEnv("agents.selected", "DEVEX_AGENTS")
-
 	cfg := settings.Agents
 	if len(cfg.Enabled) == 0 && !cfg.IsConfigured() {
 		agentsPath := filepath.Join(settings.GetUserConfigDir(), "agents.yaml")
@@ -161,7 +163,7 @@ func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSett
 	presetOverride := ""
 	if cmd.Flags().Changed("preset") {
 		presetOverride = strings.TrimSpace(presetFlag)
-	} else if envPreset := strings.TrimSpace(viper.GetString("agents.preset")); envPreset != "" {
+	} else if envPreset := strings.TrimSpace(os.Getenv(agentsPresetEnv)); envPreset != "" {
 		presetOverride = envPreset
 	}
 	if err := config.ValidateAgentPreset(presetOverride); err != nil {
@@ -171,7 +173,7 @@ func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSett
 	selectedRaw := ""
 	if cmd.Flags().Changed("agents") {
 		selectedRaw = strings.TrimSpace(agentsFlag)
-	} else if envAgents := strings.TrimSpace(viper.GetString("agents.selected")); envAgents != "" {
+	} else if envAgents := strings.TrimSpace(os.Getenv(agentsSelectEnv)); envAgents != "" {
 		selectedRaw = envAgents
 	}
 
