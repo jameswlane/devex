@@ -426,13 +426,19 @@ func loadAgentsConfigFile(path string) (AgentsConfig, bool, error) {
 	if err != nil {
 		return AgentsConfig{}, false, fmt.Errorf("read agents config %s: %w", path, err)
 	}
-	var doc struct {
-		Agents AgentsConfig `yaml:"agents"`
-	}
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	var raw map[string]yaml.Node
+	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return AgentsConfig{}, false, fmt.Errorf("decode agents config %s: %w", path, err)
 	}
-	return doc.Agents, true, nil
+	agentsNode, hasAgents := raw["agents"]
+	if !hasAgents {
+		return AgentsConfig{}, false, nil
+	}
+	var cfg AgentsConfig
+	if err := agentsNode.Decode(&cfg); err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("decode agents config %s: %w", path, err)
+	}
+	return cfg, true, nil
 }
 
 func loadGitConfig(path string) ([]types.GitConfig, error) {

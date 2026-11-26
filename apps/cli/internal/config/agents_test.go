@@ -334,4 +334,89 @@ var _ = Describe("Agents configuration schema and validation", func() {
 			Expect(e.Message).NotTo(ContainSubstring(secret4))
 		}
 	})
+
+	It("enforces secret policy for Cookie, Proxy-Authorization, secret CLI flags in args, and allows AUTH_MODE", func() {
+		errs := ValidateAgentsConfig(AgentsConfig{
+			Enabled: []string{AgentClaude},
+			MCPServers: []AgentMCPServerConfig{
+				{
+					Name:      "local",
+					Transport: MCPTransportStdio,
+					Command:   "npx",
+					Args:      []string{"--token", "plain-tok-val", "--api-key=plain-key-val", "--auth-token", "${env:MY_TOK}"},
+					Env: map[string]string{
+						"AUTH_MODE": "oauth",
+					},
+				},
+				{
+					Name:      "remote",
+					Transport: MCPTransportHTTP,
+					URL:       "https://api.example.com/mcp",
+					Headers: map[string]string{
+						"Cookie":              "session=secret-cookie",
+						"Proxy-Authorization": "Basic secret-proxy",
+					},
+				},
+			},
+		}, "agents.yaml")
+
+		Expect(errs).To(HaveLen(5))
+		for _, e := range errs {
+			Expect(e.Message).NotTo(ContainSubstring("plain-tok-val"))
+			Expect(e.Message).NotTo(ContainSubstring("plain-key-val"))
+			Expect(e.Message).NotTo(ContainSubstring("secret-cookie"))
+			Expect(e.Message).NotTo(ContainSubstring("secret-proxy"))
+		}
+	})
+
+	It("rejects MCP server names starting with a hyphen or underscore", func() {
+		errs := ValidateAgentsConfig(AgentsConfig{
+			Enabled: []string{AgentClaude},
+			MCPServers: []AgentMCPServerConfig{
+				{Name: "-bad", Transport: MCPTransportStdio, Command: "mcp"},
+				{Name: "--scope", Transport: MCPTransportStdio, Command: "mcp"},
+				{Name: "_bad", Transport: MCPTransportStdio, Command: "mcp"},
+			},
+		}, "agents.yaml")
+		Expect(errs).To(HaveLen(3))
+	})
+
+	It("does not override agents config when agents.yaml has no agents key", func() {
+		teamDir := settings.GetTeamConfigDir()
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(teamDir, "agents.yaml"), []byte(`agents:
+  enabled: [claude]
+  preset: strict
+`), 0o600)).To(Succeed())
+
+		// User tier has an agents.yaml with no top-level agents key.
+		writeAgentsYAML("# empty user agents.yaml\n")
+
+		loaded, err := LoadCrossPlatformSettings(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.Agents.Enabled).To(Equal([]string{"claude"}))
+		Expect(loaded.Agents.Preset).To(Equal("strict"))
+	})
+
+	It("allows a higher-precedence tier to override agents from a non-agents.yaml file", func() {
+		teamDir := settings.GetTeamConfigDir()
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(teamDir, "agents.yaml"), []byte(`agents:
+  enabled: [claude]
+  preset: strict
+`), 0o600)).To(Succeed())
+
+		// User tier overrides agents via another config file (dotfiles.yaml) without its own agents.yaml.
+		userDir := settings.GetUserConfigDir()
+		Expect(os.MkdirAll(userDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(userDir, "dotfiles.yaml"), []byte(`agents:
+  enabled: [codex]
+  preset: balanced
+`), 0o600)).To(Succeed())
+
+		loaded, err := LoadCrossPlatformSettings(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.Agents.Enabled).To(Equal([]string{"codex"}))
+		Expect(loaded.Agents.Preset).To(Equal("balanced"))
+	})
 })

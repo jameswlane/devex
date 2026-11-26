@@ -9,10 +9,20 @@ import (
 )
 
 var (
-	mcpServerNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	mcpServerNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 	mcpEnvVarNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	mcpEnvRefRe     = regexp.MustCompile(`^\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}$`)
 	mcpHeaderNameRe = regexp.MustCompile(`^[!#$%&'*+\-.^_` + "`" + `|~0-9A-Za-z]+$`)
+
+	mcpSecretArgFlags = map[string]bool{
+		"--token":        true,
+		"--api-key":      true,
+		"--apikey":       true,
+		"--password":     true,
+		"--secret":       true,
+		"--auth-token":   true,
+		"--access-token": true,
+	}
 
 	mcpSecretPATRe    = regexp.MustCompile(`(^|[^A-Z0-9])PAT([^A-Z0-9]|$)`)
 	mcpSecretValueRes = []*regexp.Regexp{
@@ -43,7 +53,7 @@ func validateAgentMCPServers(
 		}
 
 		if !mcpServerNameRe.MatchString(srv.Name) {
-			add(prefix+".name", fmt.Sprintf("MCP server name %q must match ^[A-Za-z0-9_-]{1,64}$", srv.Name))
+			add(prefix+".name", fmt.Sprintf("MCP server name %q must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", srv.Name))
 		} else {
 			if seenNames[srv.Name] {
 				add(prefix+".name", fmt.Sprintf("duplicate MCP server name %q", srv.Name))
@@ -111,10 +121,26 @@ func validateStdioMCPServer(srv AgentMCPServerConfig, prefix, label string, add 
 	if len(srv.Headers) > 0 {
 		add(prefix+".headers", fmt.Sprintf("MCP server %q uses transport %q and must not set headers", label, MCPTransportStdio))
 	}
-	for i, arg := range srv.Args {
+	for i := 0; i < len(srv.Args); i++ {
+		arg := srv.Args[i]
 		field := fmt.Sprintf("%s.args[%d]", prefix, i)
 		if hasAgentControlChars(arg) {
 			add(field, fmt.Sprintf("MCP server %q args[%d] must not contain control characters", label, i))
+			continue
+		}
+		if flagPart, valPart, hasEq := strings.Cut(arg, "="); hasEq && mcpSecretArgFlags[strings.ToLower(flagPart)] && strings.TrimSpace(valPart) != "" {
+			add(field, fmt.Sprintf("MCP server %q args[%d] passes a secret via %s; pass secrets via env references (${env:VAR_NAME}) in env instead", label, i, flagPart))
+			continue
+		}
+		if mcpSecretArgFlags[strings.ToLower(arg)] && i+1 < len(srv.Args) && strings.TrimSpace(srv.Args[i+1]) != "" {
+			nextIdx := i + 1
+			nextField := fmt.Sprintf("%s.args[%d]", prefix, nextIdx)
+			if hasAgentControlChars(srv.Args[nextIdx]) {
+				add(nextField, fmt.Sprintf("MCP server %q args[%d] must not contain control characters", label, nextIdx))
+			} else {
+				add(nextField, fmt.Sprintf("MCP server %q args[%d] passes a secret via %s; pass secrets via env references (${env:VAR_NAME}) in env instead", label, nextIdx, arg))
+			}
+			i++
 			continue
 		}
 		if LooksLikeMCPSecretValue(arg) {
@@ -225,7 +251,9 @@ func IsMCPSecretKey(key string) bool {
 		"ACCESS_KEY",
 		"PRIVATE_KEY",
 		"CREDENTIAL",
-		"AUTH",
+		"AUTHORIZATION",
+		"AUTH_TOKEN",
+		"COOKIE",
 	} {
 		if strings.Contains(upper, needle) {
 			return true

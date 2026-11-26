@@ -645,6 +645,8 @@ func loadConfigDirs(homeDir string, configDirs []string, applicationLoader Appli
 		} else if ok {
 			agentsFromYAML = tierAgents
 			hasAgentsYAML = true
+		} else if tier.IsSet("agents") {
+			hasAgentsYAML = false
 		}
 		legacyApps, err := loadLegacyInitApplications([]string{configDir})
 		if err != nil {
