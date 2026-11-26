@@ -299,14 +299,19 @@ func checkAgent(
 		if !nc.OK {
 			rec := recommendedMiseNodeSpec(spec.MinNodeVersion)
 			summary := fmt.Sprintf("Node.js >= %s is required but node was not found on PATH", spec.MinNodeVersion)
-			if nc.Detected != "" {
+			fix := fmt.Sprintf("mise use -g node@%s", rec)
+			switch {
+			case nc.Detected != "":
 				summary = fmt.Sprintf("Node.js %s is older than the required >= %s", nc.Detected, spec.MinNodeVersion)
+			case nc.Path != "":
+				summary = fmt.Sprintf("could not determine the version of %s (Node.js >= %s is required)", nc.Path, spec.MinNodeVersion)
+				fix = fmt.Sprintf("Check that %s --version runs, or run: mise use -g node@%s", nc.Path, rec)
 			}
 			ar.Problems = append(ar.Problems, Problem{
 				Code:    "node_version",
 				Agent:   spec.ID,
 				Summary: summary,
-				Fix:     fmt.Sprintf("mise use -g node@%s", rec),
+				Fix:     fix,
 			})
 		}
 	}
@@ -344,14 +349,17 @@ func checkAgent(
 			continue
 		}
 		info, err := probe.Stat(resolved)
-		if err != nil || (info != nil && info.IsDir()) {
+		if errors.Is(err, os.ErrNotExist) || (err == nil && info != nil && info.IsDir()) {
 			continue
 		}
 		var res MCPConfigResult
-		if info != nil && !info.Mode().IsRegular() {
+		switch {
+		case err != nil:
+			res = MCPConfigResult{Path: resolved, Format: mcpSpec.Format, Status: MCPStatusInvalid, Error: "invalid: unreadable file"}
+		case info != nil && !info.Mode().IsRegular():
 			// Reading a FIFO or device could block the doctor.
 			res = MCPConfigResult{Path: resolved, Format: mcpSpec.Format, Status: MCPStatusInvalid, Error: "invalid: not a regular file"}
-		} else {
+		default:
 			res = validateMCPConfig(probe, mcpSpec, resolved)
 		}
 		ar.MCPConfigs = append(ar.MCPConfigs, res)
@@ -437,6 +445,10 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 		case timedOut || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
 			ar.LoginState = LoginStateUnknown
 			ar.LoginDetail = cmdDesc + " timed out"
+		case !isExitError(err):
+			// The command never ran to completion, so it said nothing about login.
+			ar.LoginState = LoginStateUnknown
+			ar.LoginDetail = cmdDesc + " could not run"
 		default:
 			ar.LoginState = LoginStateNotLoggedIn
 			ar.LoginDetail = cmdDesc + " exited non-zero"
@@ -446,16 +458,20 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 	}
 
 	// Check documented credential files via Stat only (NEVER ReadFile).
+	credentialUninspectable := false
 	for _, tpl := range spec.CredentialPaths {
 		resolved := tpl.Resolve(probe)
 		if resolved == "" {
 			continue
 		}
 		info, err := probe.Stat(resolved)
-		if err == nil && (info == nil || !info.IsDir()) {
+		if err == nil && (info == nil || info.Mode().IsRegular()) {
 			ar.LoginState = LoginStateLoggedIn
 			ar.LoginDetail = fmt.Sprintf("credential file present (%s)", resolved)
 			return
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			credentialUninspectable = true
 		}
 	}
 
@@ -467,7 +483,7 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 	}
 
 	// File-backed agents without OS keyring fallback can be reported not_logged_in.
-	if len(spec.CredentialPaths) > 0 && !spec.UsesKeyring && spec.OtherAuthStore == "" {
+	if len(spec.CredentialPaths) > 0 && !spec.UsesKeyring && spec.OtherAuthStore == "" && !credentialUninspectable {
 		ar.LoginState = LoginStateNotLoggedIn
 		ar.LoginDetail = "no credential file or API key env var found"
 		ar.Problems = append(ar.Problems, notLoggedInProblem(spec))
@@ -476,6 +492,8 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 
 	ar.LoginState = LoginStateUnknown
 	switch {
+	case credentialUninspectable:
+		ar.LoginDetail = "credential file could not be inspected"
 	case spec.UsesKeyring:
 		ar.LoginDetail = "credentials may be in OS keyring; no token env var or file found"
 	case spec.OtherAuthStore != "":
@@ -485,6 +503,11 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 	default:
 		ar.LoginDetail = "no status command or credential signal"
 	}
+}
+
+func isExitError(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.Exited()
 }
 
 func notLoggedInProblem(spec AgentSpec) Problem {

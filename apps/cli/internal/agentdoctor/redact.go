@@ -20,6 +20,9 @@ func AllKnownSecretEnvVars() []string {
 		for _, name := range spec.APIKeyEnvVars {
 			seen[name] = true
 		}
+		for _, name := range spec.RedactOnlyEnvVars {
+			seen[name] = true
+		}
 	}
 	names := make([]string, 0, len(seen))
 	for name := range seen {

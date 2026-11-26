@@ -32,7 +32,9 @@ func FindBinariesOnPATH(probe Probe, binary string) []PathMatch {
 	matches := make([]PathMatch, 0, 2)
 
 	for _, dir := range dirs {
-		if dir == "" {
+		// Relative entries resolve against the working directory, which
+		// exec.LookPath refuses too; never select or launch from them.
+		if dir == "" || !filepath.IsAbs(dir) {
 			continue
 		}
 		cleanDir := filepath.Clean(dir)

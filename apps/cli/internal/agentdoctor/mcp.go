@@ -47,10 +47,13 @@ func validateMCPConfig(probe Probe, spec MCPConfigSpec, resolvedPath string) MCP
 	switch spec.Format {
 	case MCPFormatJSON:
 		parseErr = parseJSONMCP(data, spec.ServersKey)
-	case MCPFormatJSONC:
-		parseErr = parseJSONMCP(stripJSONC(data, true), spec.ServersKey)
-	case MCPFormatJSONComments:
-		parseErr = parseJSONMCP(stripJSONC(data, false), spec.ServersKey)
+	case MCPFormatJSONC, MCPFormatJSONComments:
+		stripped, ok := stripJSONC(data, spec.Format == MCPFormatJSONC)
+		if !ok {
+			parseErr = "invalid: unterminated block comment"
+		} else {
+			parseErr = parseJSONMCP(stripped, spec.ServersKey)
+		}
 	case MCPFormatTOML:
 		parseErr = parseTOMLMCP(data, spec.ServersKey)
 	case MCPFormatYAML:
@@ -73,7 +76,12 @@ func parseJSONMCP(data []byte, serversKey string) string {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		var syntaxErr *json.SyntaxError
 		if errors.As(err, &syntaxErr) {
-			line, col := offsetToLineCol(data, syntaxErr.Offset)
+			offset := syntaxErr.Offset
+			if offset > 0 && offset < int64(len(data)) {
+				// Offset counts the offending byte; point at it, not past it.
+				offset--
+			}
+			line, col := offsetToLineCol(data, offset)
 			return fmt.Sprintf("invalid: syntax error at line %d, column %d", line, col)
 		}
 		var typeErr *json.UnmarshalTypeError
@@ -165,7 +173,7 @@ func offsetToLineCol(data []byte, offset int64) (int, int) {
 
 // stripJSONC blanks comments (and trailing commas when allowed) outside strings with spaces,
 // keeping newlines so parser error positions still match the original file.
-func stripJSONC(data []byte, trailingCommas bool) []byte {
+func stripJSONC(data []byte, trailingCommas bool) ([]byte, bool) {
 	out := make([]byte, len(data))
 	copy(out, data)
 	inString := false
@@ -189,15 +197,20 @@ func stripJSONC(data []byte, trailingCommas bool) []byte {
 			}
 		case c == '/' && i+1 < len(out) && out[i+1] == '*':
 			out[i], out[i+1] = ' ', ' '
+			closed := false
 			for i += 2; i < len(out); i++ {
 				if out[i] == '*' && i+1 < len(out) && out[i+1] == '/' {
 					out[i], out[i+1] = ' ', ' '
 					i++
+					closed = true
 					break
 				}
 				if out[i] != '\n' {
 					out[i] = ' '
 				}
+			}
+			if !closed {
+				return nil, false
 			}
 		case c == ',' && trailingCommas:
 			if next := nextSignificant(out, i+1); next == '}' || next == ']' {
@@ -205,7 +218,7 @@ func stripJSONC(data []byte, trailingCommas bool) []byte {
 			}
 		}
 	}
-	return out
+	return out, true
 }
 
 // nextSignificant returns the next byte after start that is not whitespace or

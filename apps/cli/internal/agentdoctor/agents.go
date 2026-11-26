@@ -106,11 +106,14 @@ type AgentSpec struct {
 	// consumed automatically, so a set variable is not a login signal.
 	EnvVarsDoNotAuthenticate bool
 	APIKeyEnvVars            []string
-	MCPConfigs               []MCPConfigSpec
-	NPMPackage               string
-	MinNodeVersion           string
-	NodeRequired             bool
-	SandboxPrerequisites     []string
+	// RedactOnlyEnvVars hold secrets the agent can use that are not a login
+	// signal on their own; they are redacted but never reported as a login.
+	RedactOnlyEnvVars    []string
+	MCPConfigs           []MCPConfigSpec
+	NPMPackage           string
+	MinNodeVersion       string
+	NodeRequired         bool
+	SandboxPrerequisites []string
 }
 
 // knownAgentDefs is the static registry of AI coding agents matching
@@ -209,7 +212,9 @@ var knownAgentDefs = []AgentSpec{
 		CredentialPaths: []PathTemplate{
 			{EnvDirVar: "GEMINI_CLI_HOME", EnvRelPath: ".gemini/oauth_creds.json", HomeRelPath: ".gemini/oauth_creds.json"},
 		},
-		APIKeyEnvVars: []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"},
+		APIKeyEnvVars: []string{"GEMINI_API_KEY"},
+		// GOOGLE_API_KEY authenticates only with Vertex AI selected.
+		RedactOnlyEnvVars: []string{"GOOGLE_API_KEY"},
 		MCPConfigs: []MCPConfigSpec{
 			{
 				// GEMINI_CLI_HOME replaces the home directory, and settings.json
@@ -240,6 +245,9 @@ var knownAgentDefs = []AgentSpec{
 		LoginArgs:     []string{"login"},
 		UsesKeyring:   true,
 		APIKeyEnvVars: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"},
+		// A bring-your-own model key, separate from the GitHub login:
+		// https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli
+		RedactOnlyEnvVars: []string{"COPILOT_PROVIDER_API_KEY"},
 		MCPConfigs: []MCPConfigSpec{
 			{
 				Path: PathTemplate{

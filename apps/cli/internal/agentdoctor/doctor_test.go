@@ -349,7 +349,7 @@ exit 0`)
 		Expect(err).NotTo(HaveOccurred())
 		writeFakeBinary(binDir, "codex", `
 if [ "$1" = "--version" ]; then echo "codex-cli 0.172.0"; exit 0; fi
-exec `+sleepPath+` 5`)
+exec '`+sleepPath+`' 5`)
 
 		probe := makeOSBackedProbe(home, []string{binDir}, nil, okSandboxProbe(nil), nil)
 		specs, err := agentdoctor.FilterAgents([]string{"codex"})
@@ -390,6 +390,57 @@ exec `+sleepPath+` 5`)
 		Expect(opencode.MCPConfigs[0].Status).To(Equal(agentdoctor.MCPStatusInvalid))
 		Expect(opencode.MCPConfigs[0].Error).To(ContainSubstring("line 3"))
 		Expect(opencode.MCPConfigs[0].Error).NotTo(ContainSubstring("sk-never-echo-jsonc"))
+	})
+
+	It("does not guess from status commands that die, special files, relative PATH entries, or non-login keys", func() {
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		writeFakeBinary(binDir, "codex", `
+if [ "$1" = "--version" ]; then echo "codex-cli 0.172.0"; exit 0; fi
+kill -9 $$`)
+		writeFakeBinary(binDir, "gemini", `echo "0.5.0"`)
+		Expect(os.MkdirAll(filepath.Join(home, ".gemini"), 0o700)).To(Succeed())
+		Expect(exec.Command("mkfifo", filepath.Join(home, ".gemini", "oauth_creds.json")).Run()).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(home, ".gemini", "settings.json"), []byte(`{"mcpServers":!}`), 0o600)).To(Succeed())
+
+		// A relative PATH entry that resolves from the working directory.
+		writeFakeBinary(filepath.Join(home, "relbin"), "codex", `echo "0.1.0"`)
+		wd, err := os.Getwd()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.Chdir(home)).To(Succeed())
+		DeferCleanup(os.Chdir, wd)
+
+		probe := makeOSBackedProbe(home, []string{"relbin", binDir}, map[string]string{"GOOGLE_API_KEY": "google-key-value"}, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"codex", "gemini"})
+		Expect(err).NotTo(HaveOccurred())
+		report := agentdoctor.Check(context.Background(), probe, specs)
+
+		codex := findAgentReport(report, "codex")
+		Expect(codex.ResolvedPath).To(Equal(filepath.Join(binDir, "codex")))
+		Expect(codex.LoginState).To(Equal(agentdoctor.LoginStateUnknown))
+		Expect(codex.LoginDetail).To(ContainSubstring("could not run"))
+		Expect(codex.PathMatches).To(HaveLen(1))
+
+		gemini := findAgentReport(report, "gemini")
+		Expect(gemini.LoginState).To(Equal(agentdoctor.LoginStateNotLoggedIn))
+		Expect(gemini.EnvVarsSet).To(BeEmpty())
+		Expect(gemini.MCPConfigs).To(ConsistOf(HaveField("Error", "invalid: syntax error at line 1, column 15")))
+		Expect(agentdoctor.CollectSecretValues(probe.Getenv)).To(ContainElement("google-key-value"))
+	})
+
+	It("rejects an unterminated block comment in a JSONC config", func() {
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		writeFakeBinary(binDir, "opencode", `echo "opencode v2.0.26"`)
+		configDir := filepath.Join(home, ".config", "opencode")
+		Expect(os.MkdirAll(configDir, 0o700)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(configDir, "opencode.jsonc"), []byte("{\"mcp\": {}}\n/* never closed"), 0o600)).To(Succeed())
+
+		probe := makeOSBackedProbe(home, []string{binDir}, nil, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"opencode"})
+		Expect(err).NotTo(HaveOccurred())
+		opencode := findAgentReport(agentdoctor.Check(context.Background(), probe, specs), "opencode")
+		Expect(opencode.MCPConfigs).To(ConsistOf(HaveField("Error", "invalid: unterminated block comment")))
 	})
 
 	It("runs the sandbox probe at most once across multiple agents declaring sandbox prerequisites", func() {
@@ -438,6 +489,9 @@ exit 0`)
 		writeFakeBinary(binDir, "gemini", `echo "0.5.0"`)
 
 		GinkgoT().Setenv("HOME", home)
+		for _, name := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "GEMINI_CLI_HOME", "COPILOT_HOME", "KIMI_CODE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"} {
+			GinkgoT().Setenv(name, "")
+		}
 		GinkgoT().Setenv("PATH", binDir)
 		GinkgoT().Setenv("ANTHROPIC_API_KEY", envSentinel)
 		GinkgoT().Setenv("OPENAI_API_KEY", pathSentinel)
