@@ -209,6 +209,23 @@ var _ = Describe("Tool Manager", func() {
 				}))
 			})
 
+			It("reports the tool missing when only its runtime is still installed", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				recorder.Script("mise", []string{"where", "uv@latest"}, sdktest.Response{
+					ExitCode: 0,
+					Stdout:   "/home/devex-test-user/.local/share/mise/installs/uv/0.13.10\n",
+				})
+				recorder.Script("mise", []string{"where", "pipx:aider-chat[python=3.12]@latest"}, sdktest.Response{
+					ExitCode: 1,
+					Stderr:   "mise ERROR pipx:aider-chat@latest not installed\n",
+				})
+
+				err := plugin.HandleIsInstalled(context.Background(), []string{"uv@latest", "pipx:aider-chat[python=3.12]@latest"})
+				var notInstalled *sdk.NotInstalledError
+				Expect(errors.As(err, &notInstalled)).To(BeTrue())
+				Expect(notInstalled.Packages).To(Equal([]string{"pipx:aider-chat[python=3.12]@latest"}))
+			})
+
 			It("returns a wrapped error when mise where fails for another reason", func() {
 				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
 				recorder.Script("mise", []string{"where", "node@24"}, sdktest.Response{

@@ -225,36 +225,43 @@ func (m *MisePlugin) HandleList(ctx context.Context, args []string) error {
 	return sdk.ExecCommandWithContext(ctx, false, "mise", "ls")
 }
 
-// HandleIsInstalled checks if a tool is installed
+// HandleIsInstalled checks that every given tool is installed. A catalog entry
+// can name a runtime with its tool (node@lts npm:...), and a runtime left in
+// place after the tool's removal must not report the tool as installed.
 func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no tool specified")
 	}
-
-	tool := args[0]
-	if err := m.ValidateToolSpec(tool); err != nil {
-		return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
-	}
-
-	// Check if tool is installed
-	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "where", tool)
-	if err != nil {
-		// mise also exits 1 for errors such as an invalid config file, so
-		// only its "missing version" messages mean the tool is absent.
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			stderr := string(exitErr.Stderr)
-			if strings.Contains(stderr, "not installed") || strings.Contains(stderr, "no versions found") {
-				return &sdk.NotInstalledError{Packages: []string{tool}}
-			}
+	for _, tool := range args {
+		if err := m.ValidateToolSpec(tool); err != nil {
+			return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 		}
-		return fmt.Errorf("failed to check whether tool '%s' is installed: %w", tool, err)
 	}
-	installPath := strings.TrimSpace(output)
-	if installPath == "" {
-		return &sdk.NotInstalledError{Packages: []string{tool}}
+	var missing []string
+	for _, tool := range args {
+		output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "where", tool)
+		if err != nil {
+			// mise also exits 1 for errors such as an invalid config file, so
+			// only its "missing version" messages mean the tool is absent.
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				stderr := string(exitErr.Stderr)
+				if strings.Contains(stderr, "not installed") || strings.Contains(stderr, "no versions found") {
+					missing = append(missing, tool)
+					continue
+				}
+			}
+			return fmt.Errorf("failed to check whether tool '%s' is installed: %w", tool, err)
+		}
+		installPath := strings.TrimSpace(output)
+		if installPath == "" {
+			missing = append(missing, tool)
+			continue
+		}
+		m.logger.Success("Tool %s is installed: %s", tool, installPath)
 	}
-
-	m.logger.Success("Tool %s is installed: %s", tool, installPath)
+	if len(missing) > 0 {
+		return &sdk.NotInstalledError{Packages: missing}
+	}
 	return nil
 }
