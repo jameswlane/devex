@@ -491,7 +491,7 @@ func readAPICommand(cmd *cobra.Command) bool {
 		template, _ := cmd.Flags().GetString("template")
 		format, _ := cmd.Flags().GetString("format")
 		return !fix && template == "" && format == "json"
-	case "install-skill", "sandbox", "diff":
+	case "install-skill", "sandbox", "diff", "doctor", "login":
 		return cmd.Parent() != nil && cmd.Parent().Name() == "agent"
 	case "keygen", "sign", "verify":
 		return cmd.Parent() != nil && cmd.Parent().Name() == "approval"

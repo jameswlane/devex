@@ -130,6 +130,9 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("agent diff is read-only", []string{"agent", "diff"}, true),
 		Entry("agent diff with flags is read-only", []string{"agent", "diff", "--agents", "claude", "--preset", "strict"}, true),
 		Entry("agent apply bootstraps plugins", []string{"agent", "apply"}, false),
+		Entry("agent doctor check is read-only", []string{"agent", "doctor"}, true),
+		Entry("agent doctor json check is read-only", []string{"agent", "doctor", "--format", "json", "--agent", "claude"}, true),
+		Entry("agent login handoff is read-only", []string{"agent", "login", "claude"}, true),
 		Entry("agent group alone is not read-only", []string{"agent"}, false),
 		Entry("mcp serve is read-only", []string{"mcp", "serve"}, true),
 		Entry("mcp serve with a flag is read-only", []string{"mcp", "serve", "--request-timeout", "5s"}, true),
@@ -204,6 +207,12 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("agent sandbox", agentSandboxCommand, []string{"agent", "sandbox"}, true),
 		Entry("agent sandbox with format", agentSandboxCommand, []string{"--install-concurrency", "4", "agent", "sandbox", "--format", "json"}, true),
 		Entry("agent sandbox --help=false still checks", agentSandboxCommand, []string{"agent", "sandbox", "--help=false"}, true),
+		Entry("agent doctor", agentDoctorCommand, []string{"agent", "doctor"}, true),
+		Entry("agent doctor with flags", agentDoctorCommand, []string{"--install-concurrency", "4", "agent", "doctor", "--format", "json", "--agent", "claude"}, true),
+		Entry("agent doctor --help=false still checks", agentDoctorCommand, []string{"agent", "doctor", "--help=false"}, true),
+		Entry("agent login", agentLoginCommand, []string{"agent", "login", "claude"}, true),
+		Entry("agent login after a global flag", agentLoginCommand, []string{"--install-concurrency", "4", "agent", "login", "codex"}, true),
+		Entry("agent login --help=false still runs", agentLoginCommand, []string{"agent", "login", "claude", "--help=false"}, true),
 		// Explicitly false booleans are set but false, as Cobra treats them:
 		// these commands execute, so they must not take the nil-repository
 		// early presentation path.

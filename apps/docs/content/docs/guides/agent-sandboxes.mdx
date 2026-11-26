@@ -76,3 +76,7 @@ sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 ```
 
 This weakens a kernel hardening boundary for every process on the host. Prefer an AppArmor profile scoped to `/usr/bin/bwrap` instead.
+
+## Related Guides
+
+- [Agent Credentials](/docs/guides/agent-credentials) — Supported ways to authenticate coding agents via `devex agent login`, secret managers, or the OS keyring without storing secrets in DevEx config.

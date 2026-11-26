@@ -197,12 +197,14 @@ var _ = Describe("Runtime logging configuration", func() {
 })
 
 var _ = Describe("Read-only command classification", func() {
-	It("routes agent skill installation through the shared inspection policy", func() {
+	It("routes agent subcommands through the shared inspection policy", func() {
 		cmd := NewRootCmd("test", nil, config.CrossPlatformSettings{})
-		agentSkill, _, err := cmd.Find([]string{"agent", "install-skill"})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(agentSkill.Name()).To(Equal("install-skill"))
-		Expect(readAPICommand(agentSkill)).To(BeTrue())
+		for _, sub := range []string{"install-skill", "sandbox", "doctor", "login"} {
+			agentSub, _, err := cmd.Find([]string{"agent", sub})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agentSub.Name()).To(Equal(sub))
+			Expect(readAPICommand(agentSub)).To(BeTrue(), "expected readAPICommand true for agent %s", sub)
+		}
 	})
 })
 

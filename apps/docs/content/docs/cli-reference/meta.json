@@ -21,6 +21,8 @@
 		"agent-skills",
 		"agent-sandbox",
 		"agent-config",
+		"agent-doctor",
+		"agent-login",
 		"global-flags"
 	]
 }
