@@ -75,8 +75,11 @@ type claudeHTTPMCPServer struct {
 
 // RenderClaudeMCPJSON renders Claude Code's project-scope .mcp.json content
 // from declarative AgentsConfig. Returns ok=false when no Claude-applicable
-// servers are configured.
-func RenderClaudeMCPJSON(cfg config.AgentsConfig, devexCommand string) ([]byte, bool, error) {
+// servers are configured. The devex server always uses the bare "devex"
+// command: .mcp.json is committed and shared, so a machine-specific absolute
+// executable path (as `agent apply` writes to user config) would break for
+// other contributors.
+func RenderClaudeMCPJSON(cfg config.AgentsConfig) ([]byte, bool, error) {
 	if errs := config.ValidateAgentsConfig(cfg, "agents.yaml"); len(errs) > 0 {
 		return nil, false, fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
 	}
@@ -122,13 +125,9 @@ func RenderClaudeMCPJSON(cfg config.AgentsConfig, devexCommand string) ([]byte, 
 	}
 
 	if cfg.DevExMCP {
-		cmd := strings.TrimSpace(devexCommand)
-		if cmd == "" {
-			cmd = "devex"
-		}
 		servers["devex"] = claudeStdioMCPServer{
 			Type:    "stdio",
-			Command: cmd,
+			Command: "devex",
 			Args:    []string{"mcp", "serve"},
 		}
 	}

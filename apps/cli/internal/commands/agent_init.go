@@ -81,12 +81,8 @@ func runAgentInit(cmd *cobra.Command, settings config.CrossPlatformSettings, opt
 		hasMCP     bool
 	)
 	if opts.mcp {
-		devexCmd := ""
-		if settings.Agents.DevExMCP {
-			devexCmd = resolveDevExMCPCommand(agentLookPath, agentExecutable)
-		}
 		var err error
-		mcpContent, hasMCP, err = agentinit.RenderClaudeMCPJSON(settings.Agents, devexCmd)
+		mcpContent, hasMCP, err = agentinit.RenderClaudeMCPJSON(settings.Agents)
 		if err != nil {
 			return err
 		}

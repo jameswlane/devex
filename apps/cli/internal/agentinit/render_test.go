@@ -24,7 +24,7 @@ var _ = Describe("Agent init rendering", func() {
 		Expect(text).To(ContainSubstring("# demo-service"))
 		Expect(text).To(ContainSubstring("Go"))
 		Expect(text).To(ContainSubstring("`task`"))
-		Expect(text).To(ContainSubstring("task test\ntask lint"))
+		Expect(text).To(ContainSubstring("# Test\ntask test\n\n# Lint\ntask lint"))
 		Expect(text).To(ContainSubstring("## Conventions"))
 		Expect(text).To(ContainSubstring("## Do Not Touch"))
 	})
@@ -117,7 +117,7 @@ var _ = Describe("Agent init rendering", func() {
 				},
 			}
 
-			out, ok, err := agentinit.RenderClaudeMCPJSON(cfg, "devex")
+			out, ok, err := agentinit.RenderClaudeMCPJSON(cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeTrue())
 			Expect(out).To(HaveSuffix("\n"))
@@ -168,7 +168,7 @@ var _ = Describe("Agent init rendering", func() {
 					},
 				},
 			}
-			out, ok, err := agentinit.RenderClaudeMCPJSON(cfg, "devex")
+			out, ok, err := agentinit.RenderClaudeMCPJSON(cfg)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeFalse())
 			Expect(out).To(BeNil())
@@ -188,7 +188,7 @@ var _ = Describe("Agent init rendering", func() {
 					},
 				},
 			}
-			_, _, err := agentinit.RenderClaudeMCPJSON(cfg, "devex")
+			_, _, err := agentinit.RenderClaudeMCPJSON(cfg)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("env"))
 		})

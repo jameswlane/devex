@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -271,18 +272,17 @@ var _ = Describe("Agent init command", func() {
 	})
 
 	Describe(".mcp.json generation with --mcp", func() {
-		It("writes Claude-compatible stdio, http, and devex servers while excluding codex-only servers", func() {
+		It("writes Claude-compatible stdio, http, and a portable devex server while excluding codex-only servers", func() {
 			origLookPath := agentLookPath
 			origExecutable := agentExecutable
 			DeferCleanup(func() {
 				agentLookPath = origLookPath
 				agentExecutable = origExecutable
 			})
-			fakeBin := filepath.Join(home, "bin", "devex")
-			Expect(os.MkdirAll(filepath.Dir(fakeBin), 0o750)).To(Succeed())
-			Expect(os.WriteFile(fakeBin, []byte("#!/bin/sh\n"), 0o700)).To(Succeed())
-			agentExecutable = func() (string, error) { return fakeBin, nil }
-			agentLookPath = func(string) (string, error) { return fakeBin, nil }
+			// The running binary is not the one on PATH: a committed .mcp.json
+			// must still use the bare "devex" command, not this machine's path.
+			agentExecutable = func() (string, error) { return filepath.Join(home, "build", "devex"), nil }
+			agentLookPath = func(string) (string, error) { return "", exec.ErrNotFound }
 
 			settings.Agents = config.AgentsConfig{
 				Enabled:  []string{"claude", "codex"},
