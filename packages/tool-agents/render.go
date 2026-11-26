@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
@@ -20,10 +22,11 @@ const (
 // Env injects host environment lookups so planning and rendering are testable
 // inside an isolated temporary HOME.
 type Env struct {
-	HomeDir  func() (string, error)
-	Getenv   func(string) string
-	LookPath func(string) (string, error)
-	StateDir func(home string) string
+	HomeDir    func() (string, error)
+	Getenv     func(string) string
+	LookPath   func(string) (string, error)
+	StateDir   func(home string) string
+	RunCommand func(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
 // DefaultEnv returns the host environment implementation.
@@ -34,6 +37,9 @@ func DefaultEnv() Env {
 		LookPath: exec.LookPath,
 		StateDir: func(home string) string {
 			return sdk.PathsForHome(home).State
+		},
+		RunCommand: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return exec.CommandContext(ctx, name, args...).CombinedOutput()
 		},
 	}
 }
@@ -52,15 +58,23 @@ func (e Env) normalize() Env {
 	if e.StateDir == nil {
 		e.StateDir = def.StateDir
 	}
+	if e.RunCommand == nil {
+		e.RunCommand = def.RunCommand
+	}
 	return e
 }
 
-// AgentPlan holds the planned file operations for a single agent.
+// AgentPlan holds the planned file and command operations for a single agent.
 type AgentPlan struct {
-	Agent   string
-	Skipped bool
-	Reason  string
-	Files   []FilePlan
+	Agent         string
+	Skipped       bool
+	Reason        string
+	Files         []FilePlan
+	MCPDiffs      []MCPDiffPlan
+	MCPActions    []MCPCommandAction
+	MCPNotice     string
+	MCPConfigPath string
+	Warnings      []string
 }
 
 // PlanResult contains all planned agent operations plus updated managed state.
@@ -170,19 +184,19 @@ func BuildPlan(spec Spec, env Env) (PlanResult, error) {
 
 		prevAgentState := initialState.Agents[agent.Name]
 		var (
-			files     []FilePlan
+			agentPlan AgentPlan
 			nextAgent AgentManagedState
 			planErr   error
 		)
 		switch agent.Name {
 		case AgentClaude:
-			files, nextAgent, planErr = planClaude(agent, configDir, prevAgentState)
+			agentPlan, nextAgent, planErr = planClaude(agent, configDir, home, env, prevAgentState)
 		case AgentCodex:
-			files, nextAgent, planErr = planCodex(agent, configDir)
+			agentPlan, nextAgent, planErr = planCodex(agent, configDir, prevAgentState)
 		case AgentGemini:
-			files, nextAgent, planErr = planGemini(agent, configDir, prevAgentState)
+			agentPlan, nextAgent, planErr = planGemini(agent, configDir, prevAgentState)
 		case AgentOpenCode:
-			files, nextAgent, planErr = planOpenCode(agent, configDir, prevAgentState)
+			agentPlan, nextAgent, planErr = planOpenCode(agent, configDir, prevAgentState)
 		default:
 			planErr = fmt.Errorf("unsupported agent %q", agent.Name)
 		}
@@ -190,16 +204,14 @@ func BuildPlan(spec Spec, env Env) (PlanResult, error) {
 			return PlanResult{}, fmt.Errorf("%s: %w", agent.Name, planErr)
 		}
 
-		if len(nextAgent.Allow) == 0 && len(nextAgent.Deny) == 0 && len(nextAgent.Permissions) == 0 && len(nextAgent.PresetPermissions) == 0 {
+		if nextAgent.isEmpty() {
 			delete(nextState.Agents, agent.Name)
 		} else {
 			nextState.Agents[agent.Name] = nextAgent
 		}
 
-		result.Agents = append(result.Agents, AgentPlan{
-			Agent: agent.Name,
-			Files: files,
-		})
+		agentPlan.Agent = agent.Name
+		result.Agents = append(result.Agents, agentPlan)
 	}
 
 	result.NextState = nextState
@@ -237,13 +249,13 @@ func planInstructionsFile(agent, path, instructions string) (*FilePlan, error) {
 	}, nil
 }
 
-func planClaude(spec AgentSpec, configDir string, prev AgentManagedState) ([]FilePlan, AgentManagedState, error) {
-	var files []FilePlan
+func planClaude(spec AgentSpec, configDir, home string, env Env, prev AgentManagedState) (AgentPlan, AgentManagedState, error) {
+	var plan AgentPlan
 
 	if fp, err := planInstructionsFile(AgentClaude, filepath.Join(configDir, "CLAUDE.md"), spec.Instructions); err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	} else if fp != nil {
-		files = append(files, *fp)
+		plan.Files = append(plan.Files, *fp)
 	}
 
 	desiredAllow := make([]string, 0, len(spec.AllowedCommands))
@@ -258,83 +270,106 @@ func planClaude(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 	settingsPath := filepath.Join(configDir, "settings.json")
 	before, exists, mode, err := readExistingFile(settingsPath, settingsFileMode)
 	if err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	}
 
 	hasSettingsWork := spec.Model != "" || spec.Preset != "" ||
 		len(desiredAllow) > 0 || len(desiredDeny) > 0 ||
 		len(prev.Allow) > 0 || len(prev.Deny) > 0
 
-	if !exists && !hasSettingsWork {
-		return files, AgentManagedState{}, nil
-	}
-
-	var doc *jsonObject
-	if exists {
-		doc, err = ParseJSONObject([]byte(before), settingsPath)
-		if err != nil {
-			return nil, AgentManagedState{}, err
-		}
-	} else {
-		doc = &jsonObject{}
-	}
-	origDoc := doc.Clone()
-
-	if spec.Model != "" {
-		doc.Set("model", newJSONString(spec.Model))
-	}
-
 	var ownedAllow, ownedDeny []string
-	needPermissions := spec.Preset != "" || len(desiredAllow) > 0 || len(desiredDeny) > 0 || len(prev.Allow) > 0 || len(prev.Deny) > 0
-	if needPermissions {
-		perms, err := doc.EnsureObject("permissions")
-		if err != nil {
-			return nil, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
-		}
-		if spec.Preset != "" {
-			defaultMode, err := claudePresetMode(spec.Preset)
+	if exists || hasSettingsWork {
+		var doc *jsonObject
+		if exists {
+			doc, err = ParseJSONObject([]byte(before), settingsPath)
 			if err != nil {
-				return nil, AgentManagedState{}, err
+				return AgentPlan{}, AgentManagedState{}, err
 			}
-			perms.Set("defaultMode", newJSONString(defaultMode))
+		} else {
+			doc = &jsonObject{}
 		}
-		if len(desiredAllow) > 0 || len(prev.Allow) > 0 {
-			existingAllow, _, err := perms.GetStringArray("allow")
+		origDoc := doc.Clone()
+
+		if spec.Model != "" {
+			doc.Set("model", newJSONString(spec.Model))
+		}
+
+		needPermissions := spec.Preset != "" || len(desiredAllow) > 0 || len(desiredDeny) > 0 || len(prev.Allow) > 0 || len(prev.Deny) > 0
+		if needPermissions {
+			perms, err := doc.EnsureObject("permissions")
 			if err != nil {
-				return nil, AgentManagedState{}, fmt.Errorf("%s: permissions.%w", settingsPath, err)
+				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
 			}
-			ownedAllow = OwnedEntries(existingAllow, prev.Allow, desiredAllow)
-			merged := MergeStringList(existingAllow, prev.Allow, desiredAllow)
-			perms.SetStringArray("allow", merged)
-		}
-		if len(desiredDeny) > 0 || len(prev.Deny) > 0 {
-			existingDeny, _, err := perms.GetStringArray("deny")
-			if err != nil {
-				return nil, AgentManagedState{}, fmt.Errorf("%s: permissions.%w", settingsPath, err)
+			if spec.Preset != "" {
+				defaultMode, err := claudePresetMode(spec.Preset)
+				if err != nil {
+					return AgentPlan{}, AgentManagedState{}, err
+				}
+				perms.Set("defaultMode", newJSONString(defaultMode))
 			}
-			ownedDeny = OwnedEntries(existingDeny, prev.Deny, desiredDeny)
-			merged := MergeStringList(existingDeny, prev.Deny, desiredDeny)
-			perms.SetStringArray("deny", merged)
+			if len(desiredAllow) > 0 || len(prev.Allow) > 0 {
+				existingAllow, _, err := perms.GetStringArray("allow")
+				if err != nil {
+					return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: permissions.%w", settingsPath, err)
+				}
+				ownedAllow = OwnedEntries(existingAllow, prev.Allow, desiredAllow)
+				merged := MergeStringList(existingAllow, prev.Allow, desiredAllow)
+				perms.SetStringArray("allow", merged)
+			}
+			if len(desiredDeny) > 0 || len(prev.Deny) > 0 {
+				existingDeny, _, err := perms.GetStringArray("deny")
+				if err != nil {
+					return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: permissions.%w", settingsPath, err)
+				}
+				ownedDeny = OwnedEntries(existingDeny, prev.Deny, desiredDeny)
+				merged := MergeStringList(existingDeny, prev.Deny, desiredDeny)
+				perms.SetStringArray("deny", merged)
+			}
 		}
+
+		fp := buildJSONFilePlan(AgentClaude, settingsPath, before, exists, mode, origDoc, doc)
+		fp.OwnsPermissions = true
+		plan.Files = append(plan.Files, fp)
 	}
 
-	files = append(files, buildJSONFilePlan(AgentClaude, settingsPath, before, exists, mode, origDoc, doc))
-	return files, AgentManagedState{
+	mcpDiff, mcpActions, mcpNotice, ownedMCP, resolvedMCPPath, mcpSkipped, mcpWarnings, err := planClaudeMCP(spec.MCPServers, home, env, prev)
+	if err != nil {
+		return AgentPlan{}, AgentManagedState{}, err
+	}
+	if mcpDiff != nil {
+		plan.MCPDiffs = append(plan.MCPDiffs, *mcpDiff)
+	}
+	plan.MCPActions = mcpActions
+	plan.MCPNotice = mcpNotice
+	plan.MCPConfigPath = resolvedMCPPath
+	plan.Warnings = append(plan.Warnings, mcpWarnings...)
+
+	nextState := AgentManagedState{
 		Allow: ownedAllow,
 		Deny:  ownedDeny,
-	}, nil
+	}
+	if mcpSkipped {
+		nextState.MCPOwned = cloneMCPOwned(prev.MCPOwned)
+	} else {
+		nextState.MCPOwned = withMCPOwnedForPath(prev.MCPOwned, resolvedMCPPath, ownedMCP)
+	}
+	return plan, nextState, nil
 }
 
-func planCodex(spec AgentSpec, configDir string) ([]FilePlan, AgentManagedState, error) {
-	var files []FilePlan
+func planCodex(spec AgentSpec, configDir string, prev AgentManagedState) (AgentPlan, AgentManagedState, error) {
+	var plan AgentPlan
 
 	if fp, err := planInstructionsFile(AgentCodex, filepath.Join(configDir, "AGENTS.md"), spec.Instructions); err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	} else if fp != nil {
-		files = append(files, *fp)
+		plan.Files = append(plan.Files, *fp)
 	}
 
 	configPath := filepath.Join(configDir, "config.toml")
+	resolvedConfigPath, err := resolveCanonicalWriteTarget(configPath)
+	if err != nil {
+		return AgentPlan{}, AgentManagedState{}, err
+	}
 	updates := map[string]string{}
 	orderedKeys := []string{"model", "approval_policy", "sandbox_mode"}
 	if spec.Model != "" {
@@ -343,54 +378,83 @@ func planCodex(spec AgentSpec, configDir string) ([]FilePlan, AgentManagedState,
 	if spec.Preset != "" {
 		approvalPolicy, sandboxMode, err := codexPresetModes(spec.Preset)
 		if err != nil {
-			return nil, AgentManagedState{}, err
+			return AgentPlan{}, AgentManagedState{}, err
 		}
 		updates["approval_policy"] = approvalPolicy
 		updates["sandbox_mode"] = sandboxMode
 	}
 
+	desiredMCP := make(map[string]CodexMCPTable, len(spec.MCPServers))
+	desiredOrder := make([]string, 0, len(spec.MCPServers))
+	for _, srv := range spec.MCPServers {
+		tbl, err := buildCodexMCPTable(srv)
+		if err != nil {
+			return AgentPlan{}, AgentManagedState{}, err
+		}
+		desiredMCP[srv.Name] = tbl
+		desiredOrder = append(desiredOrder, srv.Name)
+	}
+
 	beforeTOML, existsTOML, modeTOML, err := readExistingFile(configPath, settingsFileMode)
 	if err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	}
-	if existsTOML || len(updates) > 0 {
-		afterTOML, changedTOML, err := EditTOMLTopLevelStrings(beforeTOML, updates, orderedKeys)
-		if err != nil {
-			return nil, AgentManagedState{}, fmt.Errorf("%s: %w", configPath, err)
+	if existsTOML && strings.TrimSpace(beforeTOML) != "" {
+		var parsed map[string]any
+		if _, parseErr := toml.Decode(beforeTOML, &parsed); parseErr == nil {
+			plan.Warnings = append(plan.Warnings, scanCodexMCPServers(configPath, parsed)...)
 		}
-		action := actionUnchanged
-		if changedTOML {
-			if existsTOML {
-				action = actionUpdate
-			} else {
-				action = actionCreate
+	}
+
+	prevMCP := prevMCPServersForPath(prev, resolvedConfigPath)
+	var ownedMCP []string
+	hasTOMLWork := len(updates) > 0 || len(desiredMCP) > 0 || len(prevMCP) > 0
+	if existsTOML || hasTOMLWork {
+		afterTOML := beforeTOML
+		if len(updates) > 0 {
+			afterTOML, _, err = EditTOMLTopLevelStrings(afterTOML, updates, orderedKeys)
+			if err != nil {
+				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", configPath, err)
 			}
 		}
-		files = append(files, FilePlan{
-			Agent:  AgentCodex,
-			Path:   configPath,
-			Action: action,
-			Before: beforeTOML,
-			After:  afterTOML,
-			Mode:   modeTOML,
-			Exists: existsTOML,
+		if len(desiredMCP) > 0 || len(prevMCP) > 0 {
+			afterTOML, _, ownedMCP, err = EditTOMLMCPServers(afterTOML, desiredMCP, desiredOrder, prevMCP)
+			if err != nil {
+				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", configPath, err)
+			}
+		}
+		action := actionUnchanged
+		if !existsTOML && afterTOML != "" {
+			action = actionCreate
+		} else if afterTOML != beforeTOML {
+			action = actionUpdate
+		}
+		plan.Files = append(plan.Files, FilePlan{
+			Agent:   AgentCodex,
+			Path:    configPath,
+			Action:  action,
+			Before:  beforeTOML,
+			After:   afterTOML,
+			Mode:    modeTOML,
+			Exists:  existsTOML,
+			OwnsMCP: true,
 		})
 	}
 
 	rulesPath := filepath.Join(configDir, "rules", "devex.rules")
 	beforeRules, existsRules, modeRules, err := readExistingFile(rulesPath, settingsFileMode)
 	if err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	}
 	if existsRules && !strings.HasPrefix(beforeRules, codexRulesHeader) {
-		return nil, AgentManagedState{}, fmt.Errorf("%s was not written by DevEx (missing %q header); rename it so DevEx can manage this file", rulesPath, strings.TrimSpace(codexRulesHeader))
+		return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s was not written by DevEx (missing %q header); rename it so DevEx can manage this file", rulesPath, strings.TrimSpace(codexRulesHeader))
 	}
 	hasRules := len(spec.AllowedCommands) > 0 || len(spec.DeniedCommands) > 0
 	switch {
 	case hasRules:
 		afterRules, err := renderCodexRules(spec.AllowedCommands, spec.DeniedCommands)
 		if err != nil {
-			return nil, AgentManagedState{}, err
+			return AgentPlan{}, AgentManagedState{}, err
 		}
 		action := actionUnchanged
 		if !existsRules {
@@ -398,7 +462,7 @@ func planCodex(spec AgentSpec, configDir string) ([]FilePlan, AgentManagedState,
 		} else if afterRules != beforeRules {
 			action = actionUpdate
 		}
-		files = append(files, FilePlan{
+		plan.Files = append(plan.Files, FilePlan{
 			Agent:  AgentCodex,
 			Path:   rulesPath,
 			Action: action,
@@ -408,7 +472,7 @@ func planCodex(spec AgentSpec, configDir string) ([]FilePlan, AgentManagedState,
 			Exists: existsRules,
 		})
 	case existsRules:
-		files = append(files, FilePlan{
+		plan.Files = append(plan.Files, FilePlan{
 			Agent:  AgentCodex,
 			Path:   rulesPath,
 			Action: actionDelete,
@@ -419,16 +483,19 @@ func planCodex(spec AgentSpec, configDir string) ([]FilePlan, AgentManagedState,
 		})
 	}
 
-	return files, AgentManagedState{}, nil
+	plan.MCPConfigPath = resolvedConfigPath
+	return plan, AgentManagedState{
+		MCPOwned: withMCPOwnedForPath(prev.MCPOwned, resolvedConfigPath, ownedMCP),
+	}, nil
 }
 
-func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]FilePlan, AgentManagedState, error) {
-	var files []FilePlan
+func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) (AgentPlan, AgentManagedState, error) {
+	var plan AgentPlan
 
 	if fp, err := planInstructionsFile(AgentGemini, filepath.Join(configDir, "GEMINI.md"), spec.Instructions); err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	} else if fp != nil {
-		files = append(files, *fp)
+		plan.Files = append(plan.Files, *fp)
 	}
 
 	desiredAllow := make([]string, 0, len(spec.AllowedCommands))
@@ -441,24 +508,32 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 	}
 
 	settingsPath := filepath.Join(configDir, "settings.json")
+	resolvedSettingsPath, err := resolveCanonicalWriteTarget(settingsPath)
+	if err != nil {
+		return AgentPlan{}, AgentManagedState{}, err
+	}
+	prevMCP := prevMCPServersForPath(prev, resolvedSettingsPath)
 	before, exists, mode, err := readExistingFile(settingsPath, settingsFileMode)
 	if err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	}
 
 	hasSettingsWork := spec.Model != "" || spec.Preset != "" ||
 		len(desiredAllow) > 0 || len(desiredDeny) > 0 ||
-		len(prev.Allow) > 0 || len(prev.Deny) > 0
+		len(prev.Allow) > 0 || len(prev.Deny) > 0 ||
+		len(spec.MCPServers) > 0 || len(prevMCP) > 0
 
 	if !exists && !hasSettingsWork {
-		return files, AgentManagedState{}, nil
+		return plan, AgentManagedState{
+			MCPOwned: cloneMCPOwned(prev.MCPOwned),
+		}, nil
 	}
 
 	var doc *jsonObject
 	if exists {
 		doc, err = ParseJSONObject([]byte(before), settingsPath)
 		if err != nil {
-			return nil, AgentManagedState{}, err
+			return AgentPlan{}, AgentManagedState{}, err
 		}
 	} else {
 		doc = &jsonObject{}
@@ -468,7 +543,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 	if spec.Model != "" {
 		modelObj, err := doc.EnsureObject("model")
 		if err != nil {
-			return nil, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
+			return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
 		}
 		modelObj.Set("name", newJSONString(spec.Model))
 	}
@@ -476,11 +551,11 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 	if spec.Preset != "" {
 		approvalMode, err := geminiPresetMode(spec.Preset)
 		if err != nil {
-			return nil, AgentManagedState{}, err
+			return AgentPlan{}, AgentManagedState{}, err
 		}
 		generalObj, err := doc.EnsureObject("general")
 		if err != nil {
-			return nil, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
+			return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
 		}
 		generalObj.Set("defaultApprovalMode", newJSONString(approvalMode))
 	}
@@ -489,12 +564,12 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 	if len(desiredAllow) > 0 || len(desiredDeny) > 0 || len(prev.Allow) > 0 || len(prev.Deny) > 0 {
 		toolsObj, err := doc.EnsureObject("tools")
 		if err != nil {
-			return nil, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
+			return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", settingsPath, err)
 		}
 		if len(desiredAllow) > 0 || len(prev.Allow) > 0 {
 			existingAllow, _, err := toolsObj.GetStringArray("allowed")
 			if err != nil {
-				return nil, AgentManagedState{}, fmt.Errorf("%s: tools.%w", settingsPath, err)
+				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: tools.%w", settingsPath, err)
 			}
 			ownedAllow = OwnedEntries(existingAllow, prev.Allow, desiredAllow)
 			merged := MergeStringList(existingAllow, prev.Allow, desiredAllow)
@@ -503,7 +578,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 		if len(desiredDeny) > 0 || len(prev.Deny) > 0 {
 			existingDeny, _, err := toolsObj.GetStringArray("exclude")
 			if err != nil {
-				return nil, AgentManagedState{}, fmt.Errorf("%s: tools.%w", settingsPath, err)
+				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: tools.%w", settingsPath, err)
 			}
 			ownedDeny = OwnedEntries(existingDeny, prev.Deny, desiredDeny)
 			merged := MergeStringList(existingDeny, prev.Deny, desiredDeny)
@@ -511,35 +586,65 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) ([]Fil
 		}
 	}
 
-	files = append(files, buildJSONFilePlan(AgentGemini, settingsPath, before, exists, mode, origDoc, doc))
-	return files, AgentManagedState{
-		Allow: ownedAllow,
-		Deny:  ownedDeny,
+	ownedMCP, mcpWarnings, err := mergeJSONMCPServers(
+		AgentGemini,
+		settingsPath,
+		"mcpServers",
+		doc,
+		spec.MCPServers,
+		prevMCP,
+		renderGeminiMCPServerObject,
+		geminiNativeRefRe.MatchString,
+	)
+	if err != nil {
+		return AgentPlan{}, AgentManagedState{}, err
+	}
+	plan.Warnings = append(plan.Warnings, mcpWarnings...)
+	plan.MCPConfigPath = resolvedSettingsPath
+
+	fp := buildJSONFilePlan(AgentGemini, settingsPath, before, exists, mode, origDoc, doc)
+	fp.OwnsPermissions = true
+	fp.OwnsMCP = true
+	plan.Files = append(plan.Files, fp)
+	return plan, AgentManagedState{
+		Allow:    ownedAllow,
+		Deny:     ownedDeny,
+		MCPOwned: withMCPOwnedForPath(prev.MCPOwned, resolvedSettingsPath, ownedMCP),
 	}, nil
 }
 
-func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]FilePlan, AgentManagedState, error) {
-	var files []FilePlan
+func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) (AgentPlan, AgentManagedState, error) {
+	var plan AgentPlan
 
 	if fp, err := planInstructionsFile(AgentOpenCode, filepath.Join(configDir, "AGENTS.md"), spec.Instructions); err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	} else if fp != nil {
-		files = append(files, *fp)
+		plan.Files = append(plan.Files, *fp)
 	}
 
 	// OpenCode reads both opencode.json and opencode.jsonc, with opencode.jsonc
 	// taking precedence when present. Target opencode.jsonc if it already exists
 	// (rejecting comments/trailing commas rather than stripping them), otherwise
 	// manage opencode.json.
-	settingsPath := filepath.Join(configDir, "opencode.json")
+	jsonPath := filepath.Join(configDir, "opencode.json")
 	jsoncPath := filepath.Join(configDir, "opencode.jsonc")
+	settingsPath := jsonPath
+	otherPath := ""
 	if _, err := os.Lstat(jsoncPath); err == nil {
 		settingsPath = jsoncPath
+		if _, err2 := os.Lstat(jsonPath); err2 == nil {
+			otherPath = jsonPath
+		}
 	}
+	resolvedSettingsPath, err := resolveCanonicalWriteTarget(settingsPath)
+	if err != nil {
+		return AgentPlan{}, AgentManagedState{}, err
+	}
+	prevMCP := prevMCPServersForPath(prev, resolvedSettingsPath)
 
 	presetRules, err := openCodePresetRules(spec.Preset)
 	if err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	}
 	allowRules := make([]OpenCodeRule, 0, len(spec.AllowedCommands))
 	for _, cmd := range spec.AllowedCommands {
@@ -565,19 +670,23 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 
 	before, exists, mode, err := readExistingFile(settingsPath, settingsFileMode)
 	if err != nil {
-		return nil, AgentManagedState{}, err
+		return AgentPlan{}, AgentManagedState{}, err
 	}
 
-	hasSettingsWork := spec.Model != "" || len(desiredRules) > 0 || len(prev.Permissions) > 0 || len(prev.PresetPermissions) > 0
+	hasSettingsWork := spec.Model != "" ||
+		len(desiredRules) > 0 || len(prev.Permissions) > 0 || len(prev.PresetPermissions) > 0 ||
+		len(spec.MCPServers) > 0 || len(prevMCP) > 0
 	if !exists && !hasSettingsWork {
-		return files, AgentManagedState{}, nil
+		return plan, AgentManagedState{
+			MCPOwned: cloneMCPOwned(prev.MCPOwned),
+		}, nil
 	}
 
 	var doc *jsonObject
 	if exists {
 		doc, err = ParseJSONObject([]byte(before), settingsPath)
 		if err != nil {
-			return nil, AgentManagedState{}, err
+			return AgentPlan{}, AgentManagedState{}, err
 		}
 	} else {
 		doc = &jsonObject{}
@@ -594,7 +703,7 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 		if rawPerms, ok := doc.Get("permissions"); ok {
 			arr, isArr := rawPerms.(*jsonArray)
 			if !isArr {
-				return nil, AgentManagedState{}, fmt.Errorf("%s: key \"permissions\" must be a JSON array", settingsPath)
+				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: key \"permissions\" must be a JSON array", settingsPath)
 			}
 			existingItems = arr.Items
 		}
@@ -603,10 +712,27 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 		doc.Set("permissions", &jsonArray{Items: merged})
 	}
 
-	files = append(files, buildJSONFilePlan(AgentOpenCode, settingsPath, before, exists, mode, origDoc, doc))
-	return files, AgentManagedState{
+	ownedMCP, mcpWarnings, err := mergeOpenCodeMCPServers(
+		settingsPath,
+		otherPath,
+		doc,
+		spec.MCPServers,
+		prevMCP,
+	)
+	if err != nil {
+		return AgentPlan{}, AgentManagedState{}, err
+	}
+	plan.Warnings = append(plan.Warnings, mcpWarnings...)
+	plan.MCPConfigPath = resolvedSettingsPath
+
+	fp := buildJSONFilePlan(AgentOpenCode, settingsPath, before, exists, mode, origDoc, doc)
+	fp.OwnsPermissions = true
+	fp.OwnsMCP = true
+	plan.Files = append(plan.Files, fp)
+	return plan, AgentManagedState{
 		PresetPermissions: ownedPreset,
 		Permissions:       ownedExplicit,
+		MCPOwned:          withMCPOwnedForPath(prev.MCPOwned, resolvedSettingsPath, ownedMCP),
 	}, nil
 }
 

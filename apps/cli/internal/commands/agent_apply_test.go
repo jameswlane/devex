@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -269,5 +270,97 @@ var _ = Describe("Agent apply and diff commands", func() {
 		cmd3.SetArgs([]string{"apply", "--preset", "yolo"})
 		Expect(cmd3.Execute()).To(MatchError(ContainSubstring(config.ErrAgentsSkipPermissions)))
 		Expect(fake.called).To(BeFalse())
+	})
+
+	It("omits mcp_servers from the plugin spec JSON when none are configured for backwards compatibility", func() {
+		cmd := NewAgentCmdWithDeps(settings, nil, agentsandbox.Probe{}, fake)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"diff"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(string(fake.specBytes)).NotTo(ContainSubstring(`"mcp_servers"`))
+	})
+
+	It("resolves per-agent mcp_servers subsets and devex_mcp entry into the plugin spec", func() {
+		origLookPath := agentLookPath
+		origExecutable := agentExecutable
+		DeferCleanup(func() {
+			agentLookPath = origLookPath
+			agentExecutable = origExecutable
+		})
+
+		fakeBin := filepath.Join(home, "bin", "devex")
+		Expect(os.MkdirAll(filepath.Dir(fakeBin), 0o750)).To(Succeed())
+		Expect(os.WriteFile(fakeBin, []byte("#!/bin/sh\n"), 0o700)).To(Succeed())
+
+		// Case 1: LookPath("devex") matches os.Executable() -> uses "devex".
+		agentExecutable = func() (string, error) { return fakeBin, nil }
+		agentLookPath = func(string) (string, error) { return fakeBin, nil }
+
+		settings.Agents.DevExMCP = true
+		settings.Agents.MCPServers = []config.AgentMCPServerConfig{
+			{
+				Name:      "github",
+				Transport: config.MCPTransportHTTP,
+				URL:       "https://api.githubcopilot.com/mcp/",
+				Headers:   map[string]string{"Authorization": "Bearer ${env:GITHUB_TOKEN}"},
+				Agents:    []string{"claude"},
+			},
+			{
+				Name:      "filesystem",
+				Transport: config.MCPTransportStdio,
+				Command:   "npx",
+				Args:      []string{"-y", "@modelcontextprotocol/server-filesystem", "/tmp"},
+			},
+		}
+
+		cmd := NewAgentCmdWithDeps(settings, nil, agentsandbox.Probe{}, fake)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"apply"})
+		Expect(cmd.Execute()).To(Succeed())
+
+		var spec resolvedAgentPluginSpec
+		Expect(json.Unmarshal(fake.specBytes, &spec)).To(Succeed())
+		Expect(spec.Agents).To(HaveLen(2))
+		// claude gets github, filesystem, and devex
+		Expect(spec.Agents[0].MCPServers).To(HaveLen(3))
+		Expect(spec.Agents[0].MCPServers[0].Name).To(Equal("github"))
+		Expect(spec.Agents[0].MCPServers[1].Name).To(Equal("filesystem"))
+		Expect(spec.Agents[0].MCPServers[2]).To(Equal(resolvedMCPServerSpec{
+			Name:      "devex",
+			Transport: config.MCPTransportStdio,
+			Command:   "devex",
+			Args:      []string{"mcp", "serve"},
+		}))
+		// codex gets filesystem and devex (not github)
+		Expect(spec.Agents[1].MCPServers).To(HaveLen(2))
+		Expect(spec.Agents[1].MCPServers[0].Name).To(Equal("filesystem"))
+		Expect(spec.Agents[1].MCPServers[1].Name).To(Equal("devex"))
+
+		// Case 2: LookPath("devex") does NOT match os.Executable() -> uses absolute path.
+		agentLookPath = func(string) (string, error) { return "", os.ErrNotExist }
+		fake2 := &fakeAgentPluginExecutor{}
+		cmd2 := NewAgentCmdWithDeps(settings, nil, agentsandbox.Probe{}, fake2)
+		cmd2.SetArgs([]string{"diff"})
+		Expect(cmd2.Execute()).To(Succeed())
+
+		var spec2 resolvedAgentPluginSpec
+		Expect(json.Unmarshal(fake2.specBytes, &spec2)).To(Succeed())
+		Expect(spec2.Agents[0].MCPServers[2].Command).To(Equal(fakeBin))
+	})
+
+	It("hints to update tool-agents when an older plugin rejects mcp_servers as an unknown field", func() {
+		settings.Agents.DevExMCP = true
+		fake.err = errors.New(`decode agents spec: json: unknown field "mcp_servers"`)
+		cmd := NewAgentCmdWithDeps(settings, nil, agentsandbox.Probe{}, fake)
+		cmd.SetArgs([]string{"apply"})
+		err := cmd.Execute()
+		Expect(err).To(MatchError(And(
+			ContainSubstring("does not support mcp_servers"),
+			ContainSubstring("devex plugin update tool-agents"),
+		)))
 	})
 })

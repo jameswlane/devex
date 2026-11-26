@@ -408,6 +408,85 @@ func loadSystemDirectory(settings *CrossPlatformSettings, dir string) error {
 	return nil
 }
 
+// loadTierAgentsConfig decodes the top-level `agents` mapping with yaml.v3 from
+// every YAML file a tier loads in CrossPlatformFiles order so map key case
+// (such as env vars and HTTP headers) is preserved and an explicit empty
+// mapping (`agents: {}`) clears lower tiers.
+func loadTierAgentsConfig(configDir string) (AgentsConfig, bool, error) {
+	var (
+		resolved AgentsConfig
+		found    bool
+	)
+	for _, filename := range CrossPlatformFiles {
+		path := filepath.Join(configDir, filename)
+		exists, err := fs.Exists(path)
+		if err != nil {
+			return AgentsConfig{}, false, fmt.Errorf("check configuration %s: %w", path, err)
+		}
+		if !exists {
+			continue
+		}
+		cfg, ok, err := loadAgentsConfigFile(path)
+		if err != nil {
+			return AgentsConfig{}, false, err
+		}
+		if ok {
+			resolved = cfg
+			found = true
+		}
+	}
+	return resolved, found, nil
+}
+
+func loadAgentsConfigFile(path string) (AgentsConfig, bool, error) {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return AgentsConfig{}, false, nil
+	}
+	if err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("inspect agents config %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return AgentsConfig{}, false, nil
+	}
+	if info.Size() > maxFileSize {
+		return AgentsConfig{}, false, fmt.Errorf("agents config %s exceeds maximum size (%d bytes)", path, maxFileSize)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("read agents config %s: %w", path, err)
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("decode agents config %s: %w", path, err)
+	}
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return AgentsConfig{}, false, nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return AgentsConfig{}, false, nil
+	}
+	var (
+		agentsNode *yaml.Node
+		hasAgents  bool
+	)
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if strings.EqualFold(root.Content[i].Value, "agents") {
+			agentsNode = root.Content[i+1]
+			hasAgents = true
+		}
+	}
+	if !hasAgents {
+		return AgentsConfig{}, false, nil
+	}
+	var cfg AgentsConfig
+	if err := agentsNode.Decode(&cfg); err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("decode agents config %s: %w", path, err)
+	}
+	return cfg, true, nil
+}
+
 func loadGitConfig(path string) ([]types.GitConfig, error) {
 	info, err := os.Stat(path)
 	if err != nil {

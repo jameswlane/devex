@@ -24,6 +24,19 @@ type AgentManagedState struct {
 	Permissions []OpenCodeRule `json:"permissions,omitempty"`
 	// PresetPermissions are the OpenCode preset defaults DevEx put first.
 	PresetPermissions []OpenCodeRule `json:"preset_permissions,omitempty"`
+	// MCPOwned maps each resolved absolute MCP config destination path to the
+	// MCP server names DevEx manages in that file.
+	MCPOwned map[string][]string `json:"mcp_owned,omitempty"`
+}
+
+func (a AgentManagedState) clone() AgentManagedState {
+	return AgentManagedState{
+		Allow:             slices.Clone(a.Allow),
+		Deny:              slices.Clone(a.Deny),
+		Permissions:       slices.Clone(a.Permissions),
+		PresetPermissions: slices.Clone(a.PresetPermissions),
+		MCPOwned:          cloneMCPOwned(a.MCPOwned),
+	}
 }
 
 // ManagedState is stored at <DEVEX_STATE_DIR>/agents/managed.json.
@@ -43,12 +56,7 @@ func (s ManagedState) clone() ManagedState {
 	out := newManagedState()
 	out.Version = s.Version
 	for k, v := range s.Agents {
-		out.Agents[k] = AgentManagedState{
-			Allow:             slices.Clone(v.Allow),
-			Deny:              slices.Clone(v.Deny),
-			Permissions:       slices.Clone(v.Permissions),
-			PresetPermissions: slices.Clone(v.PresetPermissions),
-		}
+		out.Agents[k] = v.clone()
 	}
 	return out
 }
@@ -157,6 +165,7 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 			Deny:              uniqueStrings(append(a.Deny, b.Deny...)),
 			Permissions:       uniqueOpenCodeRules(append(a.Permissions, b.Permissions...)),
 			PresetPermissions: uniqueOpenCodeRules(append(a.PresetPermissions, b.PresetPermissions...)),
+			MCPOwned:          unionMCPOwned(a.MCPOwned, b.MCPOwned),
 		}
 	}
 	return out
@@ -164,5 +173,91 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 
 func (a AgentManagedState) equal(b AgentManagedState) bool {
 	return slices.Equal(a.Allow, b.Allow) && slices.Equal(a.Deny, b.Deny) &&
-		slices.Equal(a.Permissions, b.Permissions) && slices.Equal(a.PresetPermissions, b.PresetPermissions)
+		slices.Equal(a.Permissions, b.Permissions) && slices.Equal(a.PresetPermissions, b.PresetPermissions) &&
+		mcpOwnedEqual(a.MCPOwned, b.MCPOwned)
+}
+
+func (a AgentManagedState) isEmpty() bool {
+	return len(a.Allow) == 0 && len(a.Deny) == 0 &&
+		len(a.Permissions) == 0 && len(a.PresetPermissions) == 0 &&
+		len(a.MCPOwned) == 0
+}
+
+func cloneMCPOwned(m map[string][]string) map[string][]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(m))
+	for k, v := range m {
+		cleaned := uniqueStrings(v)
+		if len(cleaned) == 0 {
+			continue
+		}
+		out[filepath.Clean(k)] = cleaned
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func unionMCPOwned(a, b map[string][]string) map[string][]string {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	out := cloneMCPOwned(a)
+	if out == nil {
+		out = make(map[string][]string, len(b))
+	}
+	for k, v := range b {
+		cleaned := uniqueStrings(v)
+		if len(cleaned) == 0 {
+			continue
+		}
+		key := filepath.Clean(k)
+		out[key] = uniqueStrings(append(slices.Clone(out[key]), cleaned...))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func mcpOwnedEqual(a, b map[string][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || !slices.Equal(av, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// prevMCPServersForPath returns the MCP server names DevEx previously managed
+// in the resolved absolute MCP config destination path.
+func prevMCPServersForPath(prev AgentManagedState, resolvedPath string) []string {
+	return uniqueStrings(slices.Clone(prev.MCPOwned[filepath.Clean(resolvedPath)]))
+}
+
+// withMCPOwnedForPath returns a copy of base with only resolvedPath updated to
+// owned (deleting the key when owned is empty), preserving every other path.
+func withMCPOwnedForPath(base map[string][]string, resolvedPath string, owned []string) map[string][]string {
+	out := cloneMCPOwned(base)
+	key := filepath.Clean(resolvedPath)
+	cleaned := uniqueStrings(owned)
+	if len(cleaned) == 0 {
+		delete(out, key)
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	if out == nil {
+		out = make(map[string][]string, 1)
+	}
+	out[key] = cleaned
+	return out
 }

@@ -19,13 +19,15 @@ const (
 
 // FilePlan describes the planned change to one native agent file.
 type FilePlan struct {
-	Agent  string
-	Path   string
-	Action fileAction
-	Before string
-	After  string
-	Mode   os.FileMode
-	Exists bool
+	Agent           string
+	Path            string
+	Action          fileAction
+	Before          string
+	After           string
+	Mode            os.FileMode
+	Exists          bool
+	OwnsPermissions bool
+	OwnsMCP         bool
 }
 
 // resolveWriteTarget follows existing symlinks so dotfile-manager links
@@ -47,6 +49,41 @@ func resolveWriteTarget(path string) (string, error) {
 		return filepath.Clean(link), nil
 	}
 	return path, nil
+}
+
+// resolveCanonicalWriteTarget resolves path (including symlinks on existing
+// targets, dangling symlinks, and symlinks on existing ancestor directories)
+// to a cleaned absolute destination path suitable as a persistent state key.
+func resolveCanonicalWriteTarget(path string) (string, error) {
+	resolved, err := resolveWriteTarget(path)
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(resolved)
+	if err != nil {
+		return "", fmt.Errorf("resolve absolute path %q: %w", resolved, err)
+	}
+	if eval, err := filepath.EvalSymlinks(abs); err == nil {
+		return filepath.Clean(eval), nil
+	}
+	return evalExistingAncestors(abs), nil
+}
+
+func evalExistingAncestors(absPath string) string {
+	cur := filepath.Clean(absPath)
+	var suffix []string
+	for {
+		if eval, err := filepath.EvalSymlinks(cur); err == nil {
+			parts := append([]string{eval}, suffix...)
+			return filepath.Clean(filepath.Join(parts...))
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return filepath.Clean(absPath)
+		}
+		suffix = append([]string{filepath.Base(cur)}, suffix...)
+		cur = parent
+	}
 }
 
 func readExistingFile(path string, defaultMode os.FileMode) (content string, exists bool, mode os.FileMode, err error) {
@@ -71,6 +108,10 @@ func readExistingFile(path string, defaultMode os.FileMode) (content string, exi
 // ApplyFilePlan applies one planned file operation, creating a one-time sibling
 // backup before the first modification of an existing file and writing
 // atomically through symlinks.
+// applyFilePlan is the write step applyPlan uses; specs replace it to inject
+// a write failure part-way through an agent's files.
+var applyFilePlan = ApplyFilePlan
+
 func ApplyFilePlan(plan FilePlan) (backupPath string, err error) {
 	if plan.Action == actionUnchanged {
 		return "", nil

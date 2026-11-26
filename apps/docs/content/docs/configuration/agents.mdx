@@ -1,11 +1,11 @@
 ---
 title: Coding Agents (agents.yaml)
-description: Declaratively configure global instructions, models, permission presets, and command rules across coding agents
+description: Declaratively configure global instructions, models, permission presets, command rules, and MCP servers across coding agents
 ---
 
 # Coding Agents Configuration
 
-Create `agents.yaml` in your DevEx user configuration directory (`$DEVEX_CONFIG_DIR/config/agents.yaml`, defaulting to `~/.config/devex/config/agents.yaml`) to declare shared coding-agent instructions, model defaults, conservative permission presets, and allowed/denied shell commands once and render them into each installed harness with `devex agent diff` and `devex agent apply`.
+Create `agents.yaml` in your DevEx user configuration directory (`$DEVEX_CONFIG_DIR/config/agents.yaml`, defaulting to `~/.config/devex/config/agents.yaml`) to declare shared coding-agent instructions, model defaults, conservative permission presets, allowed/denied shell commands, and MCP servers once and render them into each installed harness with `devex agent diff` and `devex agent apply`.
 
 ## Schema
 
@@ -35,6 +35,20 @@ agents:
       model: gemini-2.5-pro
     opencode:
       model: anthropic/claude-sonnet-5-5
+  mcp_servers:
+    - name: github # ^[A-Za-z0-9_-]{1,64}$, unique
+      transport: http # stdio | http
+      url: https://api.githubcopilot.com/mcp/
+      headers:
+        Authorization: "Bearer ${env:GITHUB_TOKEN}"
+      agents: [claude, codex] # optional subset of agents.enabled; default = all enabled
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/me/src"]
+      env:
+        GITHUB_TOKEN: "${env:GITHUB_TOKEN}"
+  devex_mcp: true # optional; adds a stdio server named "devex" running `devex mcp serve` (read-only)
 ```
 
 Validate your file at any time with:
@@ -43,18 +57,39 @@ Validate your file at any time with:
 devex config validate --strict
 ```
 
-Unknown keys, unsupported agent names, empty or multi-line commands, invalid model strings, and skip-permission preset values are all rejected.
+Unknown keys, unsupported agent names, empty or multi-line commands, invalid model strings, skip-permission preset values, invalid MCP server definitions, and literal secrets are all rejected.
 
 ## Supported Agents and Native Files
 
 An enabled agent is rendered when its binary is on `PATH` or its configuration directory already exists. Otherwise it is reported as `skipped (not installed)` and nothing is created for it.
 
-| Agent | Binary | Home Override Env Var | Instructions File | Settings / Rules Files |
-| --- | --- | --- | --- | --- |
-| `claude` (Claude Code) | `claude` | `CLAUDE_CONFIG_DIR` (default `~/.claude`) | `<dir>/CLAUDE.md` | `<dir>/settings.json` |
-| `codex` (OpenAI Codex CLI) | `codex` | `CODEX_HOME` (default `~/.codex`) | `<dir>/AGENTS.md` | `<dir>/config.toml`, `<dir>/rules/devex.rules` |
-| `gemini` (Gemini CLI) | `gemini` | `GEMINI_CLI_HOME` (root containing `.gemini`, default `~`) | `<dir>/GEMINI.md` | `<dir>/settings.json` |
-| `opencode` (OpenCode) | `opencode` | `OPENCODE_CONFIG_DIR` > `$XDG_CONFIG_HOME/opencode` > `~/.config/opencode` | `<dir>/AGENTS.md` | `<dir>/opencode.json` (or existing `opencode.jsonc`) |
+| Agent | Binary | Home Override Env Var | Instructions File | Settings / Rules Files | MCP Configuration |
+| --- | --- | --- | --- | --- | --- |
+| `claude` (Claude Code) | `claude` | `CLAUDE_CONFIG_DIR` (default `~/.claude`) | `<dir>/CLAUDE.md` | `<dir>/settings.json` | `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`) `mcpServers`, applied via `claude mcp add-json/remove --scope user` |
+| `codex` (OpenAI Codex CLI) | `codex` | `CODEX_HOME` (default `~/.codex`) | `<dir>/AGENTS.md` | `<dir>/config.toml`, `<dir>/rules/devex.rules` | `<dir>/config.toml` `[mcp_servers.<name>]` tables |
+| `gemini` (Gemini CLI) | `gemini` | `GEMINI_CLI_HOME` (root containing `.gemini`, default `~`) | `<dir>/GEMINI.md` | `<dir>/settings.json` | `<dir>/settings.json` `mcpServers.<name>` |
+| `opencode` (OpenCode) | `opencode` | `OPENCODE_CONFIG_DIR` > `$XDG_CONFIG_HOME/opencode` > `~/.config/opencode` | `<dir>/AGENTS.md` | `<dir>/opencode.json` (or existing `opencode.jsonc`) | `<dir>/opencode.json(c)` `mcp.<name>` |
+
+## MCP Servers and Secret Policy
+
+Configure MCP servers once under `agents.mcp_servers` (and optionally enable DevEx's own read-only MCP server with `agents.devex_mcp: true`).
+
+- **Transports**:
+  - `stdio`: requires `command`; allows `args` and `env`; forbids `url` and `headers`.
+  - `http`: requires an `http://` or `https://` `url`; allows `headers`; forbids `command`, `args`, and `env`.
+- **Target agents**: omit `agents` to render to every enabled agent, or set `agents: [...]` to a subset of `agents.enabled`.
+- **DevEx's own MCP server (`devex_mcp: true`)**: adds a read-only stdio server named `devex` running `devex mcp serve` (using `"devex"` when `devex` on `PATH` resolves to the running binary, or the absolute binary path otherwise). When `devex_mcp: true`, the name `"devex"` is reserved and cannot also be declared in `mcp_servers`.
+- **Secret references only**:
+  - Values in `env` and `headers` must be environment variable references (`${env:VAR_NAME}`), `Bearer ${env:VAR_NAME}` for an `Authorization` header, or non-secret literals.
+  - DevEx refuses to write literal tokens when a key looks secret (e.g. `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `ACCESS_KEY`, `PRIVATE_KEY`, `CREDENTIAL`, `AUTH`, `PAT`) or when any value, argument, or URL query parameter matches a known token pattern (`ghp_`, `github_pat_`, `glpat-`, `sk-`, `sk-ant-`, `xox*-`, `AKIA...`, `AIza...`, `Bearer <literal>`). Error messages never echo the secret value.
+  - **Keyring lookups are not supported in v1**; export secrets in your shell environment and reference them with `${env:VAR_NAME}`.
+  - During `devex agent diff` and `devex agent apply`, DevEx also scans existing native MCP entries (managed or unmanaged) and prints a warning (without echoing the value) for any literal secret it finds.
+- **Per-agent rendering details**:
+  - **Claude Code**: `devex agent diff` shows a unified diff of only the `mcpServers` object in `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`). `devex agent apply` invokes `claude mcp remove --scope user` and `claude mcp add-json --scope user` with `${VAR_NAME}` references. If the `claude` binary is not on `PATH`, Claude MCP changes are skipped with a hint rather than editing `~/.claude.json` directly.
+  - **Codex**: renders `[mcp_servers.<name>]` tables in `config.toml` using `command`, `args`, `env_vars` (forwarded env var names), `env` (non-secret literals only), `url`, `bearer_token_env_var`, `env_http_headers`, and `http_headers`. Because Codex's `env_vars` only forwards an environment variable under its own name, an `env` mapping whose key differs from the referenced variable (`GH_TOKEN: "${env:GITHUB_TOKEN}"`) returns an error for Codex.
+  - **Gemini CLI**: renders `mcpServers.<name>` in `settings.json` (`command`/`args`/`env` for stdio, `httpUrl`/`headers` for HTTP) with `${VAR_NAME}` references.
+  - **OpenCode**: renders `mcp.<name>` in `opencode.json(c)` (`type: "local"`, `command: [cmd, ...args]`, `environment`, `enabled: true` for stdio; `type: "remote"`, `url`, `headers`, `enabled: true` for HTTP) with `{env:VAR_NAME}` references.
+- **Ownership and conflicts**: DevEx tracks the MCP server names it manages in `$DEVEX_STATE_DIR/agents/managed.json`. Removing a server from `agents.yaml` deletes only entries DevEx manages and preserves all unmanaged servers. If an unmanaged server with the same name already exists, DevEx adopts it when its configuration is identical and returns a conflict error otherwise.
 
 ## Permission Presets
 

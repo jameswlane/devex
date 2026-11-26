@@ -19,6 +19,9 @@ const (
 	PresetStrict   = "strict"
 	PresetBalanced = "balanced"
 
+	MCPTransportStdio = "stdio"
+	MCPTransportHTTP  = "http"
+
 	ErrSkipPermissionsText = "DevEx will not enable unsandboxed or skip-permission modes; set it in the agent's own config yourself"
 )
 
@@ -29,12 +32,24 @@ type Spec struct {
 
 // AgentSpec describes the resolved configuration for one coding agent.
 type AgentSpec struct {
-	Name            string   `json:"name"`
-	Preset          string   `json:"preset,omitempty"`
-	Instructions    string   `json:"instructions,omitempty"`
-	Model           string   `json:"model,omitempty"`
-	AllowedCommands []string `json:"allowed_commands,omitempty"`
-	DeniedCommands  []string `json:"denied_commands,omitempty"`
+	Name            string          `json:"name"`
+	Preset          string          `json:"preset,omitempty"`
+	Instructions    string          `json:"instructions,omitempty"`
+	Model           string          `json:"model,omitempty"`
+	AllowedCommands []string        `json:"allowed_commands,omitempty"`
+	DeniedCommands  []string        `json:"denied_commands,omitempty"`
+	MCPServers      []MCPServerSpec `json:"mcp_servers,omitempty"`
+}
+
+// MCPServerSpec describes one MCP server resolved for an agent.
+type MCPServerSpec struct {
+	Name      string            `json:"name"`
+	Transport string            `json:"transport"`
+	Command   string            `json:"command,omitempty"`
+	Args      []string          `json:"args,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+	URL       string            `json:"url,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
 }
 
 // SupportedAgents returns the canonical list of supported v1 agents.
@@ -156,6 +171,9 @@ func validateAgentSpec(agent AgentSpec) error {
 		return err
 	}
 	if err := validateCommands("denied_commands", agent.DeniedCommands); err != nil {
+		return err
+	}
+	if err := validateMCPServers(agent.MCPServers); err != nil {
 		return err
 	}
 	return nil

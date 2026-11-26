@@ -625,6 +625,8 @@ func loadConfigDirs(homeDir string, configDirs []string, applicationLoader Appli
 	var settings CrossPlatformSettings
 	var catalog []types.CrossPlatformApp
 	var desktops DesktopEnvironmentsConfig
+	var agentsFromYAML AgentsConfig
+	var hasAgentsYAML bool
 	for _, configDir := range configDirs {
 		configDir = devexpaths.ForHome(homeDir).ReadPath(configDir)
 		tier, err := loadLegacyConfigDirectory(configDir)
@@ -637,6 +639,12 @@ func loadConfigDirs(homeDir string, configDirs []string, applicationLoader Appli
 		}
 		for key, value := range tier.AllSettings() {
 			v.Set(key, value)
+		}
+		if tierAgents, ok, err := loadTierAgentsConfig(configDir); err != nil {
+			return CrossPlatformSettings{}, err
+		} else if ok {
+			agentsFromYAML = tierAgents
+			hasAgentsYAML = true
 		}
 		legacyApps, err := loadLegacyInitApplications([]string{configDir})
 		if err != nil {
@@ -681,6 +689,9 @@ func loadConfigDirs(homeDir string, configDirs []string, applicationLoader Appli
 	}
 	if err := v.Unmarshal(&settings); err != nil {
 		return CrossPlatformSettings{}, fmt.Errorf("decode cross-platform settings: %w", err)
+	}
+	if hasAgentsYAML {
+		settings.Agents = agentsFromYAML
 	}
 	settings.ApplicationOverrides = catalog
 	settings.DesktopEnvironments = desktops

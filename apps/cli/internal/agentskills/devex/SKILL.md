@@ -158,6 +158,29 @@ before running either operation; use `--non-interactive` for unattended runs.
 upgrade for the selected packages. Unsupported managers return errors; consult
 `devex update --help` and the CLI README's capability table.
 
+## Coding agent configuration and MCP servers
+
+`devex agent diff` and `devex agent apply` render declarative `agents.yaml`
+settings (instructions, model defaults, conservative permission presets,
+allowed/denied command rules, `mcp_servers`, and optional `devex_mcp: true` for
+`devex mcp serve`) into installed coding agents (`claude`, `codex`, `gemini`,
+`opencode`) via the `tool-agents` plugin:
+
+```bash
+devex agent diff
+devex agent apply --dry-run
+devex agent apply
+devex agent apply --agents claude,codex --preset strict
+```
+
+Always preview with `devex agent diff` (zero writes and zero external CLI
+commands) and get user approval before running `devex agent apply`. Secrets in
+`agents.yaml` must use `${env:VAR_NAME}` references (or `Bearer ${env:VAR_NAME}`
+for `Authorization`); DevEx rejects literal tokens and warns (without printing
+values) if existing native MCP configs contain literal secrets. If an older
+`tool-agents` plugin rejects `mcp_servers`, update it with
+`devex plugin update tool-agents`.
+
 ## Install or update this skill
 
 Ask which agent and user/project scope the user wants. Preview that exact
