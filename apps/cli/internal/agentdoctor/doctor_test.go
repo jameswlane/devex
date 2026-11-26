@@ -13,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentdoctor"
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
+	"github.com/jameswlane/devex/apps/cli/internal/skillpacks"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -721,5 +722,125 @@ fi`)
 		for _, id := range agentdoctor.ValidAgentIDs() {
 			Expect(err.Error()).To(ContainSubstring(id))
 		}
+	})
+
+	It("reports installed skill packs, available catalog updates, and locally edited skills in table and JSON output", func() {
+		home := GinkgoT().TempDir()
+		project := GinkgoT().TempDir()
+
+		// Create one unmodified skill (user scope, outdated SHA) and one locally edited skill.
+		claudeSkillDir := filepath.Join(home, ".claude", "skills", "file-pr")
+		Expect(os.MkdirAll(claudeSkillDir, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(claudeSkillDir, "SKILL.md"), []byte("locally edited content\n"), 0o644)).To(Succeed())
+
+		userLockPath := filepath.Join(home, "state", skillpacks.LockFileName)
+		userLock := skillpacks.NewLockFile()
+		userLock.Skills[skillpacks.DestinationKey(claudeSkillDir)] = skillpacks.InstalledSkill{
+			Pack:        "tstack",
+			Skill:       "file-pr",
+			Agent:       "claude",
+			Scope:       "user",
+			Destination: claudeSkillDir,
+			Source:      "https://github.com/t3dotgg/tstack.git",
+			SkillsPath:  "skills",
+			Ref:         "main",
+			SHA:         "0000000000000000000000000000000000000001",
+			Files: []skillpacks.FileRecord{
+				{Path: "SKILL.md", SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Mode: "0644"},
+			},
+		}
+		Expect(skillpacks.SaveLock(userLockPath, userLock)).To(Succeed())
+
+		// Project lock with codex skill matching the embedded catalog SHA.
+		embedded, err := skillpacks.LoadEmbeddedCatalog()
+		Expect(err).NotTo(HaveOccurred())
+		tstackPack, ok := embedded.Lookup("tstack")
+		Expect(ok).To(BeTrue())
+
+		codexSkillDir := filepath.Join(project, ".agents", "skills", "council")
+		Expect(os.MkdirAll(codexSkillDir, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(codexSkillDir, "SKILL.md"), []byte("clean\n"), 0o644)).To(Succeed())
+		snap, err := skillpacks.SnapshotFromDir(codexSkillDir, "council")
+		Expect(err).NotTo(HaveOccurred())
+
+		projectLockPath := filepath.Join(project, ".devex", skillpacks.LockFileName)
+		projectLock := skillpacks.NewLockFile()
+		projectLock.Skills[skillpacks.DestinationKey(codexSkillDir)] = skillpacks.InstalledSkill{
+			Pack:        "tstack",
+			Skill:       "council",
+			Agent:       "codex",
+			Scope:       "project",
+			Destination: codexSkillDir,
+			Source:      tstackPack.Source,
+			SkillsPath:  "skills",
+			Ref:         "main",
+			SHA:         tstackPack.SHA,
+			Files:       snap.FileRecords(),
+		}
+		// A second codex skill still on an old pin (an update skipped it).
+		staleSkillDir := filepath.Join(project, ".agents", "skills", "sol-loop")
+		Expect(os.MkdirAll(staleSkillDir, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(staleSkillDir, "SKILL.md"), []byte("old\n"), 0o644)).To(Succeed())
+		staleSnap, err := skillpacks.SnapshotFromDir(staleSkillDir, "sol-loop")
+		Expect(err).NotTo(HaveOccurred())
+		projectLock.Skills[skillpacks.DestinationKey(staleSkillDir)] = skillpacks.InstalledSkill{
+			Pack:        "tstack",
+			Skill:       "sol-loop",
+			Agent:       "codex",
+			Scope:       "project",
+			Destination: staleSkillDir,
+			Source:      tstackPack.Source,
+			SkillsPath:  "skills",
+			SHA:         "0000000000000000000000000000000000000002",
+			Files:       staleSnap.FileRecords(),
+		}
+		Expect(skillpacks.SaveLock(projectLockPath, projectLock)).To(Succeed())
+
+		probe := makeOSBackedProbe(home, nil, nil, okSandboxProbe(nil), nil)
+		probe.SkillPackUserLockPath = userLockPath
+		probe.SkillPackProjectLockPath = projectLockPath
+
+		report := agentdoctor.Check(context.Background(), probe, nil)
+		Expect(report.SkillPacks).To(HaveLen(2))
+
+		byKey := map[string]agentdoctor.SkillPackReport{}
+		for _, sp := range report.SkillPacks {
+			byKey[sp.Agent+":"+sp.Scope] = sp
+		}
+
+		claudePack := byKey["claude:user"]
+		Expect(claudePack.Pack).To(Equal("tstack"))
+		Expect(claudePack.PinnedSHA).To(Equal("0000000000000000000000000000000000000001"))
+		Expect(claudePack.CatalogSHA).To(Equal(tstackPack.SHA))
+		Expect(claudePack.UpdateAvailable).To(BeTrue())
+		Expect(claudePack.LocallyEdited).To(Equal([]string{"file-pr"}))
+
+		codexPack := byKey["codex:project"]
+		Expect(codexPack.PinnedSHA).To(Equal("mixed"))
+		Expect(codexPack.PinnedSHAs).To(ConsistOf(tstackPack.SHA, "0000000000000000000000000000000000000002"))
+		Expect(codexPack.UpdateAvailable).To(BeTrue())
+		Expect(codexPack.LocallyEdited).To(BeEmpty())
+
+		table := agentdoctor.FormatTable(report, nil)
+		Expect(table).To(And(
+			ContainSubstring("Skill Packs:"),
+			ContainSubstring("tstack"),
+			ContainSubstring("update available"),
+			ContainSubstring("local edits:"),
+			ContainSubstring("file-pr"),
+		))
+
+		jsonBytes, err := agentdoctor.FormatJSON(report, nil)
+		Expect(err).NotTo(HaveOccurred())
+		var decoded agentdoctor.Report
+		Expect(json.Unmarshal(jsonBytes, &decoded)).To(Succeed())
+		Expect(decoded.SkillPacks).To(HaveLen(2))
+
+		// Filtering to claude returns only claude's skill pack.
+		claudeOnly, err := agentdoctor.FilterAgents([]string{"claude"})
+		Expect(err).NotTo(HaveOccurred())
+		filtered := agentdoctor.Check(context.Background(), probe, claudeOnly)
+		Expect(filtered.SkillPacks).To(HaveLen(1))
+		Expect(filtered.SkillPacks[0].Agent).To(Equal("claude"))
 	})
 })

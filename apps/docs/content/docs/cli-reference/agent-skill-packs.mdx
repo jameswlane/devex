@@ -1,0 +1,212 @@
+---
+title: Agent skill packs
+description: Install, pin, inspect, update, and remove curated third-party agent skill packs for Claude Code, Codex, and Kimi Code.
+---
+
+`devex agent skills` installs and manages third-party [Agent Skills](https://agentskills.io) packs from a curated catalog shipped in the DevEx CLI (starting with [`tstack`](https://github.com/t3dotgg/tstack)) or from an explicit raw Git URL. Every install pins a resolved 40-character Git commit SHA, records per-file SHA-256 hashes in a lock file, resolves dependencies between skills, preserves executable bits on bundled scripts, and protects local edits.
+
+```sh
+# Preview installing all tstack skills for Claude Code
+devex agent skills add tstack --agent claude --scope user --dry-run
+
+# Install all nine tstack skills for Claude Code or Codex
+devex agent skills add tstack --agent claude
+devex agent skills add tstack --agent codex
+
+# Install only full-send and its dependency closure
+devex agent skills add tstack --skill full-send --agent claude --scope user
+
+# List installed skills and check whether any were edited locally
+devex agent skills list
+devex agent skills list --format json
+
+# Preview and apply updates (shows file-level diff and full scripts/ line diff)
+devex agent skills update tstack --dry-run
+devex agent skills update tstack
+
+# Remove a pack or specific skills
+devex agent skills remove tstack --agent claude --scope user
+```
+
+For the bundled DevEx CLI skill itself, see [Agent skill installation](/docs/cli-reference/agent-skills).
+
+## Commands
+
+### `devex agent skills add <pack>[@ref]`
+
+Installs a curated pack from the embedded catalog or a raw `git+https://` repository.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--agent` | *(required)* | Target agent: `claude`, `codex`, or `kimi` |
+| `--scope` | `user` | Installation scope: `user` or `project` |
+| `--project-dir` | current directory | Explicit project root (valid only with `--scope project`) |
+| `--skill` | all catalog skills | Comma-separated or repeated skill names; resolves the full dependency closure for catalog packs |
+| `--dry-run` | `false` | Preview the complete plan, notes, and missing requirements with zero writes |
+| `--overwrite` | `false` | Replace locally edited **DevEx-managed** skills and retain a `.devex-backup-*` sibling |
+| `--adopt` | `false` | Record existing unmanaged copies that hash-match the pinned snapshot into the lock file without rewriting files |
+| `--allow-unreviewed` | `false` | Required to install from a raw `git+https://` source |
+| `--skills-path` | `skills` | Subdirectory containing skills inside a raw `git+https://` repository |
+
+By default, catalog packs install the pinned `sha` recorded in the catalog. Passing `<pack>@<ref>` (branch, tag, or commit SHA) resolves the ref with read-only `git ls-remote` and pins the resulting commit SHA in the lock file.
+
+### `devex agent skills list`
+
+Lists installed DevEx-managed skills from the lock file, reporting `pack`, `skill`, `agent`, `scope`, abbreviated `sha`, and whether on-disk files have local edits (`yes`/`no`).
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--agent` | all | Filter by `claude`, `codex`, or `kimi` |
+| `--scope` | user + cwd project | Filter by `user` or `project` |
+| `--project-dir` | current directory | Project root when inspecting project scope |
+| `--format` | `table` | Output format: `table` or `json` |
+
+### `devex agent skills update [<pack>[@ref]]`
+
+Updates installed skill packs to the current embedded catalog `sha`, or to an explicit `<pack>@<ref>`. Curated packs are always fetched from the catalog source, never from a URL recorded in a lock file. Before writing anything, `update` prints the complete plan (`Planned changes:`), then applies it and prints the result (`Applied:`). The plan contains:
+
+1. A file-level diff (`A` added, `D` removed, `M` modified, including mode changes) for each changed skill.
+2. The full unified line diff for any changed files under `scripts/` (such as `babysit-pr/scripts/pr-wait`).
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--agent` | all | Filter by `claude`, `codex`, or `kimi` |
+| `--scope` | user + cwd project | Filter by `user` or `project` |
+| `--project-dir` | current directory | Project root when updating project scope |
+| `--dry-run` | `false` | Preview diffs and planned actions without writing |
+| `--overwrite` | `false` | Replace locally edited skills and keep a `.devex-backup-*` backup |
+| `--allow-unreviewed` | `false` | Allow updating skills installed from a raw `git+https://` source |
+
+### `devex agent skills remove <pack>`
+
+Removes DevEx-managed skills recorded in the lock file for `--agent` and `--scope`.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--agent` | *(required)* | Target agent: `claude`, `codex`, or `kimi` |
+| `--scope` | `user` | Installation scope: `user` or `project` |
+| `--project-dir` | current directory | Project root (valid only with `--scope project`) |
+| `--skill` | all pack skills | Specific skill(s) to remove |
+| `--force` | `false` | Override dependency checks and move locally edited skills to a `.devex-backup-*` sibling |
+| `--dry-run` | `false` | Preview removals without modifying disk or lock state |
+
+Removal refuses to drop a skill that another installed skill in the same agent and scope still depends on unless `--force` is passed. It also refuses to remove locally edited skills without `--force`; when `--force` is passed, locally edited skills are moved to a `.devex-backup-*` backup rather than deleted. Unmanaged directories are never touched.
+
+## Destinations, adoption, and `~/.codex/skills` vs `~/.agents/skills`
+
+DevEx installs skill packs to each agent's documented skills directory (the same destinations used by [`devex agent install-skill`](/docs/cli-reference/agent-skills)):
+
+| Agent | User scope | Project scope |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills/<skill>/` | `PROJECT/.claude/skills/<skill>/` |
+| Codex | `~/.agents/skills/<skill>/` | `PROJECT/.agents/skills/<skill>/` |
+| Kimi Code | `$KIMI_CODE_HOME/skills/<skill>/` (default `~/.kimi-code/skills/<skill>/`) | `PROJECT/.kimi-code/skills/<skill>/` |
+
+Kimi Code also scans `.agents/skills/`, so a single Codex installation covers both Codex and Kimi Code. When installing for Kimi, DevEx warns and skips any skill already present in `.agents/skills/`; when installing for Codex alongside an existing Kimi copy, DevEx warns with the exact Kimi path to remove.
+
+### Adopting manual copies
+
+If a destination directory already exists and is **not** recorded in the lock file:
+
+- When its files hash-match the pinned snapshot exactly, DevEx reports `matches <pack>@<sha7>; pass --adopt to manage it`. Re-running with `--adopt` records it in the lock file without rewriting files.
+- When its files differ from the pinned snapshot, DevEx reports it as an unmanaged local copy and leaves it untouched — even when `--overwrite` is passed. `--overwrite` applies only to DevEx-managed skills.
+
+### Legacy `~/.codex/skills/` copies
+
+The upstream `tstack` README copies skills into `~/.codex/skills/`, whereas current Codex documentation reads `~/.agents/skills/`. DevEx always installs Codex skills to `~/.agents/skills/`. During `--agent codex --scope user`, DevEx also scans `~/.codex/skills/<skill>` read-only, reports any copies it finds (noting whether each matches the pinned SHA), and leaves them untouched so you can remove them when ready.
+
+## Lock file and local-edit protection
+
+Installed skill packs are tracked in a JSON lock file written atomically with mode `0600`:
+
+- **User scope**: `$DEVEX_STATE_DIR/agent-skills.lock.json` (typically `~/.local/state/devex/agent-skills.lock.json`).
+- **Project scope**: `PROJECT/.devex/agent-skills.lock.json`.
+
+Before `add`, `update`, or `remove` acts on a lock entry, DevEx checks that the entry names exactly the destination it would resolve for that agent, scope, and skill, and that it was read from that scope's lock file. A project lock ships with the checkout, so an entry that points anywhere else is rejected rather than trusted. If a command fails partway, the lock still records the skills that were already installed, updated, or removed.
+
+Entries are keyed by destination path so the same pack can be installed independently for Claude Code, Codex, and Kimi Code. Each entry stores the pack name, skill name, agent, scope, destination path, source URL, ref, pinned commit SHA, installation timestamp, and a sorted list of `{path, sha256, mode}` file records.
+
+Before modifying or removing a managed skill, DevEx hashes the directory on disk and compares file sets, SHA-256 digests, and normalized executable bits (`0755` vs `0644`):
+
+- On `add` and `update`, locally edited skills are skipped and listed unless `--overwrite` is passed, which atomically swaps in the new snapshot and keeps a `.devex-backup-*` sibling.
+- On `remove`, locally edited skills are refused unless `--force` is passed, which moves them to a `.devex-backup-*` sibling instead of deleting them.
+
+> **Keeping personal customizations clean:** Following `tstack`'s own recommendation, keep personal preferences — such as which models sit on your council — in your `CLAUDE.md` or `AGENTS.md` rather than editing installed skill files directly, so future pack updates apply cleanly without conflicts.
+
+## Requirements and `tstack` notes
+
+Catalog entries can declare external prerequisites and skill-specific notes:
+
+- **Requirements**: `tstack` declares an authenticated GitHub CLI (`gh auth status`) for the pack and `python3` for `babysit-pr`'s `scripts/pr-wait`. DevEx checks requirements whose skill filter intersects the selected closure (using `PATH` lookup and silent bounded command checks) and prints missing requirements with install/login hints. During `--dry-run`, only the `PATH` lookups run: check commands such as `gh auth status` can contact the network, so they are skipped. DevEx never installs requirements silently.
+- **Multi-provider subagents (`council` and `sol-loop`)**: Both `council` and `sol-loop` require subagents running on other providers' models (for example T3 Code's `delegate_task` or an equivalent harness). DevEx does not configure that harness; this note is printed in `--dry-run` plans and normal installs whenever either skill is selected.
+
+## Diagnostics in `devex agent doctor`
+
+[`devex agent doctor`](/docs/cli-reference/agent-doctor) inspects both the user lock file and any project lock file in the current working directory (without making network calls). In both table and JSON output it reports:
+
+- Installed packs per agent and scope
+- Pinned commit SHA (every distinct pin, when an update skipped some skills; `pinned_sha` is then `mixed`)
+- Whether an update is available compared to the embedded catalog SHA
+- Which installed skills have local edits
+
+## Trust model and security
+
+Agent skills are **instructions plus executable scripts** that your coding agent will read and run in your environment. Always review a skill pack before installing or updating it:
+
+- **Curated catalog packs** pin a reviewed commit SHA in `apps/cli/config/skill-packs/`.
+- **Raw `git+https://` sources** are rejected unless you explicitly pass `--allow-unreviewed` (on both `add` and `update`), print a prominent unreviewed-source warning, skip dependency resolution (installing only the requested skills), and pin the resolved commit SHA in the lock file.
+- **Safe fetching and staging**: DevEx fetches into a temporary directory with `GIT_TERMINAL_PROMPT=0` and Git hooks disabled (`core.hooksPath` pointed at the null device), verifies `HEAD` equals the pinned SHA, rejects symlinks, non-regular files, and path traversal (`..`), and publishes skills atomically through `os.Root`.
+
+## Catalog format
+
+Curated packs live as one YAML file per pack in `apps/cli/config/skill-packs/`:
+
+```yaml
+name: tstack
+description: Daily-use agent workflow skills from t3dotgg/tstack (PR lifecycle, multi-model review, and takeover)
+source: https://github.com/t3dotgg/tstack.git
+path: skills
+license: MIT
+ref: main
+sha: 11e37a74d0a6868c121cd0910ab2b3bd9873b92a
+requirements:
+  - command: gh
+    check: [gh, auth, status]
+    hint: "Install GitHub CLI (https://cli.github.com) and run: gh auth login"
+  - command: python3
+    skills: [babysit-pr]
+    hint: "Install Python 3 (sudo apt install python3)"
+skills:
+  full-send:
+    depends: [sol-loop, file-pr, babysit-pr]
+  full-stop:
+    depends: [full-send]
+  takeover:
+    depends: [modernize, file-pr, babysit-pr, leaving-pr-comments]
+  file-pr:
+    depends: [leaving-pr-comments]
+  babysit-pr:
+    depends: [leaving-pr-comments]
+  modernize:
+    depends: [leaving-pr-comments]
+  leaving-pr-comments: {}
+  council:
+    notes:
+      - "Needs subagents on other providers' models (T3 Code delegate_task or an equivalent harness). DevEx does not configure that."
+  sol-loop:
+    notes:
+      - "Needs subagents on other providers' models (T3 Code delegate_task or an equivalent harness). DevEx does not configure that."
+```
+
+## How to bump the `tstack` pin
+
+Because `tstack` has no tagged releases, updates are delivered through explicit catalog pin bumps:
+
+1. Inspect upstream changes between the current pinned SHA and the target commit in a local clone of `https://github.com/t3dotgg/tstack.git`:
+   ```sh
+   git diff <old-sha>..<new-sha> -- skills/
+   ```
+   Review every prompt change and every script change (especially under `skills/*/scripts/`).
+2. Update `sha` (and any changed `skills`, `depends`, `notes`, or `requirements`) in `apps/cli/config/skill-packs/tstack.yaml`, and update the catalog spec and vendored fixture snapshot if needed.
+3. Open a catalog update pull request that updates `sha` and includes the upstream `git diff <old-sha>..<new-sha> -- skills/` output in the PR body so reviewers can audit every instruction and script change before merging.
+4. Once released, users run `devex agent skills update tstack --dry-run` to review file and script diffs locally before applying the update.
