@@ -759,51 +759,34 @@ func openCodeRuleToJSON(r OpenCodeRule) *jsonObject {
 	}
 }
 
-// mergeOpenCodePermissions keeps user-added rules intact while placing broad
-// DevEx preset defaults before user rules and explicit DevEx allow/deny rules
-// after user rules (matching OpenCode V2's last-match-wins evaluation order).
+// mergeOpenCodePermissions keeps user rules in their own order, because
+// OpenCode V2 uses the last matching rule. DevEx preset defaults go first,
+// unless the user already has the same rule, whose position then wins. DevEx
+// allow/deny rules go last so they take effect; an identical user rule earlier
+// in the list is dropped rather than left to shadow nothing.
 func mergeOpenCodePermissions(existing []jsonValue, prevManaged, presetRules, allowRules, denyRules []OpenCodeRule) []jsonValue {
-	prevSet := make(map[OpenCodeRule]bool, len(prevManaged))
-	for _, r := range prevManaged {
-		prevSet[r] = true
-	}
-
+	explicit := append(slices.Clone(allowRules), denyRules...)
 	userItems := make([]jsonValue, 0, len(existing))
+	userRules := make([]OpenCodeRule, 0, len(existing))
 	for _, item := range existing {
-		if parsed, ok := openCodeRuleFromJSON(item); ok && prevSet[parsed] {
-			continue
+		if parsed, ok := openCodeRuleFromJSON(item); ok {
+			if slices.Contains(prevManaged, parsed) || slices.Contains(explicit, parsed) {
+				continue
+			}
+			userRules = append(userRules, parsed)
 		}
 		userItems = append(userItems, item)
 	}
 
-	out := make([]jsonValue, 0, len(presetRules)+len(userItems)+len(allowRules)+len(denyRules))
-	seen := make(map[OpenCodeRule]bool)
-
-	appendRule := func(r OpenCodeRule) {
-		if seen[r] {
-			return
-		}
-		seen[r] = true
-		out = append(out, openCodeRuleToJSON(r))
-	}
-
+	out := make([]jsonValue, 0, len(presetRules)+len(userItems)+len(explicit))
 	for _, r := range presetRules {
-		appendRule(r)
-	}
-	for _, item := range userItems {
-		if parsed, ok := openCodeRuleFromJSON(item); ok {
-			if seen[parsed] {
-				continue
-			}
-			seen[parsed] = true
+		if !slices.Contains(userRules, r) {
+			out = append(out, openCodeRuleToJSON(r))
 		}
-		out = append(out, item)
 	}
-	for _, r := range allowRules {
-		appendRule(r)
-	}
-	for _, r := range denyRules {
-		appendRule(r)
+	out = append(out, userItems...)
+	for _, r := range uniqueOpenCodeRules(explicit) {
+		out = append(out, openCodeRuleToJSON(r))
 	}
 	return out
 }

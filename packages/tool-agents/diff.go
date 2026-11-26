@@ -97,7 +97,11 @@ func splitDiffLines(s string) []string {
 	if s == "" {
 		return nil
 	}
-	return strings.SplitAfter(s, "\n")
+	lines := strings.SplitAfter(s, "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 func computeLineDiff(a, b []string) []diffOp {

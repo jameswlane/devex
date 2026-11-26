@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -59,7 +60,7 @@ var _ = Describe("Managed entry ownership", func() {
 		Expect(string(data)).To(ContainSubstring(`"make *"`))
 	})
 
-	It("records the entries of agents that finished when a later agent fails to write", func() {
+	It("still removes DevEx entries after an apply failed part-way through", func() {
 		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 			Skip("needs POSIX directory permissions enforced for the current user")
 		}
@@ -69,16 +70,44 @@ var _ = Describe("Managed entry ownership", func() {
 		Expect(os.Chmod(geminiDir, 0o500)).To(Succeed())
 		DeferCleanup(func() { _ = os.Chmod(geminiDir, 0o700) })
 
-		spec := Spec{Agents: []AgentSpec{
+		withCommands := Spec{Agents: []AgentSpec{
 			{Name: AgentClaude, AllowedCommands: []string{"go test"}},
 			{Name: AgentGemini, AllowedCommands: []string{"go test"}},
 		}}
-		Expect(apply(env, spec)).To(HaveOccurred())
+		Expect(apply(env, withCommands)).To(HaveOccurred())
+		Expect(os.Chmod(geminiDir, 0o700)).To(Succeed())
 
-		state, err := LoadManagedState(filepath.Join(home, ".local", "state", "devex", "agents", "managed.json"))
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentClaude}, {Name: AgentGemini}}})).To(Succeed())
+		data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(state.Agents[AgentClaude].Allow).To(Equal([]string{"Bash(go test *)"}))
-		Expect(state.Agents).NotTo(HaveKey(AgentGemini))
+		Expect(string(data)).NotTo(ContainSubstring("go test"))
+	})
+
+	It("puts a declared OpenCode deny after a user allow for the same command and keeps user rule order", func() {
+		env := newTestEnv(home, nil, "opencode")
+		config := filepath.Join(home, ".config", "opencode", "opencode.json")
+		Expect(os.MkdirAll(filepath.Dir(config), 0o700)).To(Succeed())
+		Expect(os.WriteFile(config, []byte(`{"permissions": [
+  {"action": "shell", "resource": "git push *", "effect": "deny"},
+  {"action": "shell", "resource": "git push *", "effect": "allow"},
+  {"action": "shell", "resource": "ls *", "effect": "allow"},
+  {"action": "shell", "resource": "ls *", "effect": "allow"}
+]}`), 0o600)).To(Succeed())
+
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentOpenCode, DeniedCommands: []string{"git push"}}}})).To(Succeed())
+
+		doc, err := os.ReadFile(config)
+		Expect(err).NotTo(HaveOccurred())
+		var parsed struct {
+			Permissions []OpenCodeRule `json:"permissions"`
+		}
+		Expect(json.Unmarshal(doc, &parsed)).To(Succeed())
+		Expect(parsed.Permissions).To(Equal([]OpenCodeRule{
+			{Action: "shell", Resource: "git push *", Effect: "allow"},
+			{Action: "shell", Resource: "ls *", Effect: "allow"},
+			{Action: "shell", Resource: "ls *", Effect: "allow"},
+			{Action: "shell", Resource: "git push *", Effect: "deny"},
+		}))
 	})
 
 	It("refuses to replace or delete a Codex devex.rules file DevEx did not write", func() {
