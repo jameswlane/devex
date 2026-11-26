@@ -47,6 +47,8 @@ func validateMCPConfig(probe Probe, spec MCPConfigSpec, resolvedPath string) MCP
 	switch spec.Format {
 	case MCPFormatJSON:
 		parseErr = parseJSONMCP(data, spec.ServersKey)
+	case MCPFormatJSONC:
+		parseErr = parseJSONMCP(stripJSONC(data), spec.ServersKey)
 	case MCPFormatTOML:
 		parseErr = parseTOMLMCP(data, spec.ServersKey)
 	case MCPFormatYAML:
@@ -157,4 +159,74 @@ func offsetToLineCol(data []byte, offset int64) (int, int) {
 		}
 	}
 	return line, col
+}
+
+// stripJSONC blanks comments and trailing commas outside strings with spaces,
+// keeping newlines so parser error positions still match the original file.
+func stripJSONC(data []byte) []byte {
+	out := make([]byte, len(data))
+	copy(out, data)
+	inString := false
+	for i := 0; i < len(out); i++ {
+		c := out[i]
+		if inString {
+			switch c {
+			case '\\':
+				i++
+			case '"':
+				inString = false
+			}
+			continue
+		}
+		switch {
+		case c == '"':
+			inString = true
+		case c == '/' && i+1 < len(out) && out[i+1] == '/':
+			for ; i < len(out) && out[i] != '\n'; i++ {
+				out[i] = ' '
+			}
+		case c == '/' && i+1 < len(out) && out[i+1] == '*':
+			out[i], out[i+1] = ' ', ' '
+			for i += 2; i < len(out); i++ {
+				if out[i] == '*' && i+1 < len(out) && out[i+1] == '/' {
+					out[i], out[i+1] = ' ', ' '
+					i++
+					break
+				}
+				if out[i] != '\n' {
+					out[i] = ' '
+				}
+			}
+		case c == ',':
+			if next := nextSignificant(out, i+1); next == '}' || next == ']' {
+				out[i] = ' '
+			}
+		}
+	}
+	return out
+}
+
+// nextSignificant returns the next byte after start that is not whitespace or
+// the start of a comment, or 0 at end of input.
+func nextSignificant(data []byte, start int) byte {
+	for i := start; i < len(data); i++ {
+		switch data[i] {
+		case ' ', '\t', '\r', '\n':
+			continue
+		case '/':
+			if i+1 < len(data) && data[i+1] == '/' {
+				for ; i < len(data) && data[i] != '\n'; i++ {
+				}
+				continue
+			}
+			if i+1 < len(data) && data[i+1] == '*' {
+				for i += 2; i+1 < len(data) && (data[i] != '*' || data[i+1] != '/'); i++ {
+				}
+				i++
+				continue
+			}
+		}
+		return data[i]
+	}
+	return 0
 }

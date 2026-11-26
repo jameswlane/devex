@@ -55,7 +55,10 @@ func DefaultProbe() Probe {
 		Run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			cmdCtx, cancel := context.WithTimeout(ctx, commandTimeout)
 			defer cancel()
-			return exec.CommandContext(cmdCtx, name, args...).CombinedOutput()
+			cmd := exec.CommandContext(cmdCtx, name, args...)
+			// Stop waiting for output pipes held open by grandchildren after kill.
+			cmd.WaitDelay = time.Second
+			return cmd.CombinedOutput()
 		},
 		EvalSymlinks: filepath.EvalSymlinks,
 		UserHomeDir:  os.UserHomeDir,
@@ -413,13 +416,16 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 		cmdCtx, cancel := context.WithTimeout(ctx, commandTimeout)
 		// Deliberately discard stdout/stderr — only inspect exit status.
 		_, err := probe.Run(cmdCtx, ar.ResolvedPath, spec.LoginStatusArgs...)
+		// A killed subprocess reports "signal: killed", not DeadlineExceeded,
+		// so the context decides whether the status command timed out.
+		timedOut := cmdCtx.Err() != nil
 		cancel()
 		cmdDesc := spec.Binary + " " + strings.Join(spec.LoginStatusArgs, " ")
 		switch {
 		case err == nil:
 			ar.LoginState = LoginStateLoggedIn
 			ar.LoginDetail = cmdDesc + " exited 0"
-		case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+		case timedOut || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
 			ar.LoginState = LoginStateUnknown
 			ar.LoginDetail = cmdDesc + " timed out"
 		default:

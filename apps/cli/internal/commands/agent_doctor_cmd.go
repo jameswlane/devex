@@ -93,7 +93,7 @@ gemini) return guidance for environment variables or the vendor's own flow.`, st
 			}
 			binaryPath, installed := agentdoctor.FindBinary(probe, spec.Binary)
 			if !installed {
-				return fmt.Errorf("%s (%s) is not installed; install it first with \"devex install %q\"", spec.Name, spec.Binary, spec.Name)
+				return fmt.Errorf("%s (%s) is not installed; install it first with: devex install %q", spec.Name, spec.Binary, spec.Name)
 			}
 			if len(spec.LoginArgs) == 0 {
 				guidance := spec.NoLoginGuidance

@@ -23,6 +23,9 @@ const (
 	MCPFormatJSON MCPFormat = "json"
 	MCPFormatTOML MCPFormat = "toml"
 	MCPFormatYAML MCPFormat = "yaml"
+	// MCPFormatJSONC is JSON with // and /* */ comments and trailing commas,
+	// which OpenCode accepts in opencode.jsonc.
+	MCPFormatJSONC MCPFormat = "jsonc"
 )
 
 // PathTemplate describes how to resolve a user-level file path from the
@@ -269,6 +272,15 @@ var knownAgentDefs = []AgentSpec{
 					XDGSubPath:    "opencode/opencode.json",
 				},
 				Format:     MCPFormatJSON,
+				ServersKey: "mcp",
+			},
+			{
+				Path: PathTemplate{
+					XDGEnvVar:     "XDG_CONFIG_HOME",
+					DefaultXDGDir: ".config",
+					XDGSubPath:    "opencode/opencode.jsonc",
+				},
+				Format:     MCPFormatJSONC,
 				ServersKey: "mcp",
 			},
 		},

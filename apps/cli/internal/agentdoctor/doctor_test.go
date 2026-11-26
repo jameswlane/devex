@@ -342,6 +342,56 @@ exit 0`)
 		Expect(goose.MCPConfigs[0].Error).NotTo(ContainSubstring("sk-never-echo-yaml"))
 	})
 
+	It("reports unknown login state, not logged out, when the status command times out", func() {
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		sleepPath, err := exec.LookPath("sleep")
+		Expect(err).NotTo(HaveOccurred())
+		writeFakeBinary(binDir, "codex", `
+if [ "$1" = "--version" ]; then echo "codex-cli 0.172.0"; exit 0; fi
+exec `+sleepPath+` 5`)
+
+		probe := makeOSBackedProbe(home, []string{binDir}, nil, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"codex"})
+		Expect(err).NotTo(HaveOccurred())
+
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		report := agentdoctor.Check(ctx, probe, specs)
+
+		codex := findAgentReport(report, "codex")
+		Expect(codex.LoginState).To(Equal(agentdoctor.LoginStateUnknown))
+		Expect(codex.LoginDetail).To(ContainSubstring("timed out"))
+		Expect(codex.Problems).To(BeEmpty())
+		Expect(time.Since(start)).To(BeNumerically("<", 3*time.Second))
+	})
+
+	It("accepts comments and trailing commas in OpenCode's opencode.jsonc and reports positions when it is broken", func() {
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		writeFakeBinary(binDir, "opencode", `echo "opencode v2.0.26"`)
+		configDir := filepath.Join(home, ".config", "opencode")
+		Expect(os.MkdirAll(configDir, 0o700)).To(Succeed())
+		jsonc := filepath.Join(configDir, "opencode.jsonc")
+		Expect(os.WriteFile(jsonc, []byte("{\n  // servers\n  \"mcp\": {\n    \"devex\": {\"type\": \"local\", \"url\": \"http://x//y\"}, /* inline */\n  },\n}\n"), 0o600)).To(Succeed())
+
+		probe := makeOSBackedProbe(home, []string{binDir}, nil, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"opencode"})
+		Expect(err).NotTo(HaveOccurred())
+
+		opencode := findAgentReport(agentdoctor.Check(context.Background(), probe, specs), "opencode")
+		Expect(opencode.MCPConfigs).To(HaveLen(1))
+		Expect(opencode.MCPConfigs[0].Path).To(Equal(jsonc))
+		Expect(opencode.MCPConfigs[0].Status).To(Equal(agentdoctor.MCPStatusOK))
+
+		Expect(os.WriteFile(jsonc, []byte("{\n  // servers\n  \"mcp\": {\"sk-never-echo-jsonc\" }\n}\n"), 0o600)).To(Succeed())
+		opencode = findAgentReport(agentdoctor.Check(context.Background(), probe, specs), "opencode")
+		Expect(opencode.MCPConfigs[0].Status).To(Equal(agentdoctor.MCPStatusInvalid))
+		Expect(opencode.MCPConfigs[0].Error).To(ContainSubstring("line 3"))
+		Expect(opencode.MCPConfigs[0].Error).NotTo(ContainSubstring("sk-never-echo-jsonc"))
+	})
+
 	It("runs the sandbox probe at most once across multiple agents declaring sandbox prerequisites", func() {
 		home := GinkgoT().TempDir()
 		binDir := filepath.Join(home, "bin")
