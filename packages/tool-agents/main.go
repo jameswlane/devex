@@ -248,7 +248,7 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 				}
 				wrotePending = true
 			}
-			backupPath, err := ApplyFilePlan(fp)
+			backupPath, err := applyFilePlan(fp)
 			if err != nil {
 				_, _ = io.WriteString(p.out, status.String())
 				if wrotePending {

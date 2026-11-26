@@ -108,6 +108,10 @@ func readExistingFile(path string, defaultMode os.FileMode) (content string, exi
 // ApplyFilePlan applies one planned file operation, creating a one-time sibling
 // backup before the first modification of an existing file and writing
 // atomically through symlinks.
+// applyFilePlan is the write step applyPlan uses; specs replace it to inject
+// a write failure part-way through an agent's files.
+var applyFilePlan = ApplyFilePlan
+
 func ApplyFilePlan(plan FilePlan) (backupPath string, err error) {
 	if plan.Action == actionUnchanged {
 		return "", nil

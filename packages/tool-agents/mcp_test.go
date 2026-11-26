@@ -1145,17 +1145,18 @@ http_headers = { Authorization = "Bearer %s" }
 		})
 
 		It("persists partial ownership checkpoints when a later write or Claude MCP command fails within the same agent", func() {
-			if os.Geteuid() == 0 {
-				Skip("root ignores directory permissions, so the read-only rules directory cannot force a write failure")
-			}
-			// Part A: Codex writes config.toml (MCP server) then fails writing rules/devex.rules
-			// because the rules directory is read-only (0500).
+			// Part A: Codex writes config.toml (MCP server) then fails writing rules/devex.rules.
 			envCodex := newTestEnv(home, nil, "codex")
 			codexDir := filepath.Join(home, ".codex")
-			rulesDir := filepath.Join(codexDir, "rules")
-			Expect(os.MkdirAll(rulesDir, 0o700)).To(Succeed())
-			Expect(os.Chmod(rulesDir, 0o500)).To(Succeed())
-			DeferCleanup(func() { _ = os.Chmod(rulesDir, 0o700) })
+			Expect(os.MkdirAll(codexDir, 0o700)).To(Succeed())
+			failRules := true
+			applyFilePlan = func(plan FilePlan) (string, error) {
+				if failRules && filepath.Base(plan.Path) == "devex.rules" {
+					return "", fmt.Errorf("injected write failure")
+				}
+				return ApplyFilePlan(plan)
+			}
+			DeferCleanup(func() { applyFilePlan = ApplyFilePlan })
 
 			codexSpec := Spec{
 				Agents: []AgentSpec{{
@@ -1175,8 +1176,8 @@ http_headers = { Authorization = "Bearer %s" }
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(writtenCodex)).To(ContainSubstring("[mcp_servers.github]"))
 
-			// Restore rules/ permissions and remove github from spec: github must be removed because config.toml succeeded!
-			Expect(os.Chmod(rulesDir, 0o700)).To(Succeed())
+			// Stop failing and remove github from spec: github must be removed because config.toml succeeded!
+			failRules = false
 			_, err = runPlugin(envCodex, "apply", Spec{Agents: []AgentSpec{{Name: AgentCodex}}})
 			Expect(err).NotTo(HaveOccurred())
 			codexData, err := os.ReadFile(filepath.Join(codexDir, "config.toml"))
