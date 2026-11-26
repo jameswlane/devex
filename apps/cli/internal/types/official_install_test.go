@@ -43,6 +43,18 @@ var _ = Describe("Shipped catalog official Linux install methods", func() {
 		Entry("Ghostty on Ubuntu 26.04", "ghostty", "ubuntu", "26.04", "apt", "debian"),
 	)
 
+	It("adds no third-party APT repository for Ghostty on older Debian and Ubuntu", func() {
+		app := load("ghostty")
+		for _, detected := range []platform.DetectionResult{
+			{Distribution: "debian", Version: "12", Architecture: "amd64"},
+			{Distribution: "ubuntu", DistributionLike: []string{"debian"}, Version: "22.04", Architecture: "amd64"},
+		} {
+			config := app.LinuxConfigForPlatform(detected)
+			Expect(config.InstallMethod).To(Equal("apt"), detected.Distribution)
+			Expect(config.AptSources).To(BeEmpty(), detected.Distribution)
+		}
+	})
+
 	It("adds the COPR before installing Ghostty and LazyGit on Fedora", func() {
 		fedora := platform.DetectionResult{Distribution: "fedora", Version: "44", Architecture: "amd64"}
 		for name, copr := range map[string]string{
