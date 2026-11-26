@@ -43,6 +43,19 @@ var _ = Describe("Shipped catalog official Linux install methods", func() {
 		Entry("Ghostty on Ubuntu 26.04", "ghostty", "ubuntu", "26.04", "apt", "debian"),
 	)
 
+	It("adds the openSUSE Go repository for LazyGit at the path each release publishes", func() {
+		app := load("lazygit")
+		for distro, repo := range map[string]string{
+			"opensuse-tumbleweed": "/openSUSE_Factory/devel:languages:go.repo",
+			"opensuse-leap":       "/$VERSION_ID/devel:languages:go.repo",
+		} {
+			config := app.LinuxConfigForPlatform(platform.DetectionResult{Distribution: distro, DistributionLike: []string{"suse", "opensuse"}, Version: "16.0", Architecture: "amd64"})
+			Expect(config.InstallMethod).To(Equal("zypper"), distro)
+			Expect(config.PreInstall).NotTo(BeEmpty(), distro)
+			Expect(config.PreInstall[0].Shell).To(ContainSubstring(repo), distro)
+		}
+	})
+
 	It("adds no third-party APT repository for Ghostty on older Debian and Ubuntu", func() {
 		app := load("ghostty")
 		for _, detected := range []platform.DetectionResult{

@@ -92,10 +92,18 @@ linux:
       official_support: true
       platform_requirements:
         - os: opensuse-tumbleweed
+      pre_install:
+        - shell: sudo zypper ar https://download.opensuse.org/repositories/devel:/languages:/go/openSUSE_Factory/devel:languages:go.repo
+        - shell: sudo zypper --non-interactive --gpg-auto-import-keys ref
+    - install_method: zypper
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
         - os: opensuse-leap
       pre_install:
         - shell: source /etc/os-release && sudo zypper ar https://download.opensuse.org/repositories/devel:/languages:/go/$VERSION_ID/devel:languages:go.repo
-        - shell: sudo zypper ref
+        - shell: sudo zypper --non-interactive --gpg-auto-import-keys ref
     - install_method: emerge
       install_command: dev-vcs/lazygit
       uninstall_command: dev-vcs/lazygit
