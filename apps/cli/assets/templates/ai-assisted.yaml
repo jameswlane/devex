@@ -65,8 +65,8 @@ inputs:
 lifecycle:
   install:
     - id: mise
-      order: 10
-      description: Install mise for agents managed through mise runtimes
+      order: 5
+      description: Install mise, which the mise-based agents need before `devex install` runs
       if: |-
         (platform("linux") && (contains(inputs.agents, "codex")
         || contains(inputs.agents, "gemini-cli") || contains(inputs.agents, "goose")
@@ -79,28 +79,19 @@ lifecycle:
       plugin:
         name: package-manager-mise
         command: ensure-installed
-    - id: bubblewrap
-      order: 20
-      description: Install Bubblewrap for Linux coding agent sandboxes
-      if: |-
-        platform("linux") && (contains(inputs.agents, "claude-code")
-        || contains(inputs.agents, "codex") || contains(inputs.agents, "copilot-cli"))
-      app:
-        ref: Bubblewrap
-    - id: socat
-      order: 25
-      description: Install socat for Claude Code Linux sandbox network proxying
-      if: platform("linux") && contains(inputs.agents, "claude-code")
-      app:
-        ref: socat
+    # `devex install` resolves each agent from the catalog, so it also installs
+    # the agent's Linux sandbox prerequisites (Bubblewrap, socat), mise when the
+    # agent needs it, and the agent's user-scope installer settings.
     - id: claude-code
-      order: 30
-      depends_on:
-        - bubblewrap
-        - socat
+      order: 10
+      description: Install Claude Code and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "claude-code")
-      app:
-        ref: Claude Code
+      shell:
+        command: devex
+        args:
+          - install
+          - Claude Code
+          - --non-interactive
       resources:
         - type: tool
           name: claude-code
@@ -108,13 +99,17 @@ lifecycle:
           metadata:
             agent_id: claude
     - id: codex
-      order: 40
       depends_on:
         - mise
-        - bubblewrap
+      order: 20
+      description: Install Codex CLI and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "codex")
-      app:
-        ref: Codex CLI
+      shell:
+        command: devex
+        args:
+          - install
+          - Codex CLI
+          - --non-interactive
       resources:
         - type: tool
           name: codex
@@ -122,12 +117,17 @@ lifecycle:
           metadata:
             agent_id: codex
     - id: gemini-cli
-      order: 50
       depends_on:
         - mise
+      order: 30
+      description: Install Gemini CLI and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "gemini-cli")
-      app:
-        ref: Gemini CLI
+      shell:
+        command: devex
+        args:
+          - install
+          - Gemini CLI
+          - --non-interactive
       resources:
         - type: tool
           name: gemini-cli
@@ -135,12 +135,15 @@ lifecycle:
           metadata:
             agent_id: gemini
     - id: copilot-cli
-      order: 60
-      depends_on:
-        - bubblewrap
+      order: 40
+      description: Install GitHub Copilot CLI and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "copilot-cli")
-      app:
-        ref: GitHub Copilot CLI
+      shell:
+        command: devex
+        args:
+          - install
+          - GitHub Copilot CLI
+          - --non-interactive
       resources:
         - type: tool
           name: copilot-cli
@@ -148,10 +151,15 @@ lifecycle:
           metadata:
             agent_id: copilot
     - id: opencode
-      order: 70
+      order: 50
+      description: Install OpenCode and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "opencode") && !platform("windows")
-      app:
-        ref: OpenCode
+      shell:
+        command: devex
+        args:
+          - install
+          - OpenCode
+          - --non-interactive
       resources:
         - type: tool
           name: opencode
@@ -159,12 +167,17 @@ lifecycle:
           metadata:
             agent_id: opencode
     - id: goose
-      order: 80
       depends_on:
         - mise
+      order: 60
+      description: Install Goose and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "goose") && !platform("windows")
-      app:
-        ref: Goose
+      shell:
+        command: devex
+        args:
+          - install
+          - Goose
+          - --non-interactive
       resources:
         - type: tool
           name: goose
@@ -172,12 +185,17 @@ lifecycle:
           metadata:
             agent_id: goose
     - id: aider
-      order: 90
       depends_on:
         - mise
+      order: 70
+      description: Install Aider and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "aider")
-      app:
-        ref: Aider
+      shell:
+        command: devex
+        args:
+          - install
+          - Aider
+          - --non-interactive
       resources:
         - type: tool
           name: aider
@@ -185,12 +203,17 @@ lifecycle:
           metadata:
             agent_id: aider
     - id: kimi-code
-      order: 100
       depends_on:
         - mise
+      order: 80
+      description: Install Kimi Code and its sandbox prerequisites from the DevEx catalog
       if: contains(inputs.agents, "kimi-code")
-      app:
-        ref: Kimi Code
+      shell:
+        command: devex
+        args:
+          - install
+          - Kimi Code
+          - --non-interactive
       resources:
         - type: tool
           name: kimi-code
@@ -198,7 +221,7 @@ lifecycle:
           metadata:
             agent_id: kimi
     - id: configure-agents
-      order: 110
+      order: 90
       description: Write a minimal agents.yaml when absent and apply harness defaults without changing permission modes
       depends_on:
         - claude-code
@@ -219,7 +242,7 @@ lifecycle:
           - --agents
           - "{{ inputs.agents }}"
     - id: configure-agents-preset
-      order: 110
+      order: 90
       description: Write minimal agents.yaml with selected preset if absent and apply defaults
       depends_on:
         - claude-code

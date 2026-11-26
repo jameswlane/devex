@@ -12,7 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/assets"
-	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -29,25 +28,10 @@ var starterAnswers = map[string][]string{
 	"web-development":  {},
 }
 
-func catalogAppResolver(goos string) templates.AppResolver {
-	DeferCleanup(types.PinCatalogOSForTesting(goos))
-	DeferCleanup(types.PinCatalogArchForTesting("amd64"))
-	configDir, err := filepath.Abs("../../config")
-	Expect(err).NotTo(HaveOccurred())
-	apps, err := (config.FileApplicationLoader{}).LoadApplications([]string{configDir})
-	Expect(err).NotTo(HaveOccurred())
-	settings := config.CrossPlatformSettings{ApplicationOverrides: apps}
-	return templates.NewAppResolver(settings.GetApplicationByName)
-}
-
 func planStarter(id string, action templates.LifecycleAction, goos string, answers []string, known map[string]templates.ResourceDeclaration, available func(context.Context, string) bool) (*templates.ExecutionPlan, error) {
-	var resolver templates.AppResolver = testAppResolver{}
-	if id == "ai-assisted" {
-		resolver = catalogAppResolver(goos)
-	}
 	planner := templates.TemplatePlanner{
 		Manager:         templates.NewTemplateManager(GinkgoT().TempDir()),
-		AppResolver:     resolver,
+		AppResolver:     testAppResolver{},
 		PluginAvailable: available,
 		System:          map[string]string{"os": goos},
 	}
@@ -368,11 +352,12 @@ applications:
 			Expect(err).To(MatchError(ContainSubstring("required input 'targets'")))
 		})
 
-		It("defaults ai-assisted to Claude Code with Linux sandbox prerequisites and unchanged preset", func() {
+		It("defaults ai-assisted to Claude Code installed from the catalog with an unchanged preset", func() {
 			linuxPlan, err := planStarter("ai-assisted", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(stepIDs(linuxPlan)).To(Equal([]string{"bubblewrap", "socat", "claude-code", "configure-agents"}))
-			Expect(plannedStep(linuxPlan, "claude-code").DependsOn).To(Equal([]string{"bubblewrap", "socat"}))
+			Expect(stepIDs(linuxPlan)).To(Equal([]string{"claude-code", "configure-agents"}))
+			// `devex install` resolves the catalog entry, which adds the sandbox prerequisites.
+			Expect(plannedStep(linuxPlan, "claude-code").Request.Args).To(Equal([]string{"install", "Claude Code", "--non-interactive"}))
 			Expect(plannedStep(linuxPlan, "configure-agents").Request.Args).To(Equal([]string{"agent", "apply", "--init", "--agents", "claude-code"}))
 
 			macosPlan, err := planStarter("ai-assisted", templates.LifecycleInstall, "darwin", []string{"agents=claude-code,codex", "preset=strict"}, nil, allPluginsAvailable)

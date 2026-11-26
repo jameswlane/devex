@@ -11,7 +11,7 @@ DevEx provides opt-in installation, Linux sandbox prerequisites, declarative cro
 
 You can install AI coding agents in three ways:
 
-1. **Guided setup (`devex setup`)**: Select agents in the optional **AI Coding Agents** step (grouped into Agent CLIs, and future AI editors and local models). If you select a harness supported by `agents.yaml` (`Claude Code`, `Codex CLI`, `Gemini CLI`, or `OpenCode`), setup also offers a conservative permission preset (`Leave permission modes unchanged`, `balanced`, or `strict`), writes a minimal `agents.yaml` only if none exists, applies it, and prints `devex agent doctor` output with login next steps.
+1. **Guided setup (`devex setup`)**: Select agents in the optional **AI Coding Agents** step (grouped into Agent CLIs, and future AI editors and local models). If you select a harness supported by `agents.yaml` (`Claude Code`, `Codex CLI`, `Gemini CLI`, or `OpenCode`), setup also offers a conservative permission preset (`Leave permission modes unchanged`, `balanced`, or `strict`), writes and applies a minimal `agents.yaml` only if no agents configuration exists yet (an existing one is neither changed nor applied; run `devex agent diff` and `devex agent apply` yourself), and prints `devex agent doctor` output with login next steps.
    - For non-interactive runs, pass `--ai-agents` and `--ai-agents-preset`, set `DEVEX_SETUP_AI_AGENTS_APPS` / `DEVEX_SETUP_AI_AGENTS_PRESET`, or configure `setup.ai_agents.apps` and `setup.ai_agents.preset` (see [`devex setup`](/docs/cli-reference/setup)).
 2. **Lifecycle template (`ai-assisted`)**: Install selected agents, Linux sandbox prerequisites (`Bubblewrap`, `socat`), and declarative harness defaults together:
    ```sh

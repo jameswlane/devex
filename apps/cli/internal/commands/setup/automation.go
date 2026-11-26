@@ -217,6 +217,14 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	if err := tui.AuthorizeInstallation(ctx, apps, false); err != nil {
 		return err
 	}
+
+	// The root command defers plugin initialization to setup, and the automated
+	// flow has no plugin step, so register the plugin installers before
+	// installing. Finalization reuses the same bootstrap.
+	if err := initializeAutomatedPlugins(ctx, model); err != nil {
+		log.Warn("Plugin initialization failed", "error", err)
+		model.installation.addError(fmt.Sprintf("Plugin setup: %v", err))
+	}
 	// Use the regular installer system for non-interactive mode
 	model.beginSystemUndo()
 	errors, err := installAutomatedApps(ctx, apps, model.selections.alreadyInstalled, model.installation.outcomeRecorder(), settings, repo)
@@ -242,6 +250,13 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	model.logCompletion()
 
 	return model.CompletionError()
+}
+
+// initializeAutomatedPlugins bootstraps plugins and registers their installers
+// for automated setup; tests replace it.
+var initializeAutomatedPlugins = func(ctx context.Context, model *SetupModel) error {
+	_, err := model.initializePlugins(ctx)
+	return err
 }
 
 // installAutomatedApp installs one app after the batch; tests replace it.

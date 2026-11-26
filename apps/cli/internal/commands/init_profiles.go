@@ -72,6 +72,11 @@ func templateInstallTools(spec templates.TemplateSpec) []string {
 	seen := map[string]bool{}
 	for _, step := range spec.Lifecycle[templates.LifecycleInstall] {
 		if step.App == nil {
+			// A `devex install <app>` shell step installs a catalog app too.
+			if shell := step.Shell; shell != nil && shell.Command == "devex" && len(shell.Args) >= 2 && shell.Args[0] == "install" && !seen[shell.Args[1]] {
+				seen[shell.Args[1]] = true
+				tools = append(tools, shell.Args[1])
+			}
 			continue
 		}
 		name := step.App.Name

@@ -344,51 +344,64 @@ func (m *SetupModel) handleAIAgentsConfiguration(ctx context.Context, pluginBoot
 	}
 
 	if harnessIDs := m.succeededHarnessIDs(); len(harnessIDs) > 0 {
-		userConfigDir := m.userConfigDir()
-		agentsPath, created, err := agentapply.WriteDefaultAgentsYAMLIfMissing(userConfigDir, harnessIDs, m.selections.aiAgentPreset)
-		switch {
-		case err != nil:
-			log.Warn("Could not write agents.yaml", "path", agentsPath, "error", err)
-			m.installation.addAIAgentWarning(fmt.Sprintf("Could not write %s: %v", agentsPath, err))
-		case created:
-			change := fmt.Sprintf("Wrote %s (enabled: %s)", agentsPath, strings.Join(harnessIDs, ", "))
-			if m.selections.aiAgentPreset != "" {
-				change += fmt.Sprintf(", preset: %s", m.selections.aiAgentPreset)
-			}
-			m.installation.addChange(change)
-			cfg := config.AgentsConfig{
-				Enabled: harnessIDs,
-				Preset:  m.selections.aiAgentPreset,
-			}
-			if applyErr := applyAIAgentsConfig(ctx, pluginBootstrap, cfg); applyErr != nil {
-				log.Warn("Could not apply agents.yaml", "error", applyErr)
-				m.installation.addAIAgentWarning(fmt.Sprintf("Could not apply agents.yaml: %v (run 'devex agent apply' later)", applyErr))
-			} else {
-				m.installation.addChange("Applied agents.yaml via tool-agents")
-			}
-		default:
-			m.installation.addChange("kept your existing agents.yaml; run devex agent diff")
-			existingCfg, _, loadErr := agentapply.LoadAgentsYAML(agentsPath)
-			if loadErr != nil {
-				log.Warn("Could not read existing agents.yaml", "path", agentsPath, "error", loadErr)
-				m.installation.addAIAgentWarning(fmt.Sprintf("Could not read existing %s: %v", agentsPath, loadErr))
-			} else {
-				if !existingCfg.IsConfigured() && m.settings.Agents.IsConfigured() {
-					existingCfg = m.settings.Agents
-				}
-				if len(existingCfg.Enabled) > 0 {
-					if applyErr := applyAIAgentsConfig(ctx, pluginBootstrap, existingCfg); applyErr != nil {
-						log.Warn("Could not apply existing agents.yaml", "error", applyErr)
-						m.installation.addAIAgentWarning(fmt.Sprintf("Could not apply existing agents.yaml: %v (run 'devex agent apply' later)", applyErr))
-					} else {
-						m.installation.addChange("Applied existing agents.yaml via tool-agents")
-					}
-				}
-			}
-		}
+		m.writeAndApplyDefaultAgentsConfig(ctx, pluginBootstrap, harnessIDs)
 	}
 
 	m.collectAIAgentsDoctorSummary(ctx, selectedApps)
+}
+
+// keptAgentsConfigNote tells the user setup left their agents configuration alone.
+const keptAgentsConfigNote = "Kept your existing agents.yaml; review it with 'devex agent diff' and apply it with 'devex agent apply'"
+
+// hasExistingAgentsConfig reports whether agents are already configured, either
+// in any loaded configuration tier or in the user's agents.yaml.
+func (m *SetupModel) hasExistingAgentsConfig() (bool, error) {
+	if m.settings.Agents.IsConfigured() {
+		return true, nil
+	}
+	agentsPath := filepath.Join(m.userConfigDir(), "agents.yaml")
+	if _, err := os.Stat(agentsPath); err == nil {
+		return true, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, fmt.Errorf("inspect %s: %w", agentsPath, err)
+	}
+	return false, nil
+}
+
+// writeAndApplyDefaultAgentsConfig writes and applies a minimal agents.yaml.
+// Existing agents configuration is never modified or applied by setup.
+func (m *SetupModel) writeAndApplyDefaultAgentsConfig(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap, harnessIDs []string) {
+	existing, err := m.hasExistingAgentsConfig()
+	if err != nil {
+		m.installation.addAIAgentWarning(err.Error())
+		return
+	}
+	if existing {
+		m.installation.addChange(keptAgentsConfigNote)
+		return
+	}
+	agentsPath, created, err := agentapply.WriteDefaultAgentsYAMLIfMissing(m.userConfigDir(), harnessIDs, m.selections.aiAgentPreset)
+	if err != nil {
+		log.Warn("Could not write agents.yaml", "path", agentsPath, "error", err)
+		m.installation.addAIAgentWarning(fmt.Sprintf("Could not write %s: %v", agentsPath, err))
+		return
+	}
+	if !created {
+		m.installation.addChange(keptAgentsConfigNote)
+		return
+	}
+	change := fmt.Sprintf("Wrote %s (enabled: %s)", agentsPath, strings.Join(harnessIDs, ", "))
+	if m.selections.aiAgentPreset != "" {
+		change += fmt.Sprintf(", preset: %s", m.selections.aiAgentPreset)
+	}
+	m.installation.addChange(change)
+	cfg := config.AgentsConfig{Enabled: harnessIDs, Preset: m.selections.aiAgentPreset}
+	if applyErr := applyAIAgentsConfig(ctx, pluginBootstrap, cfg); applyErr != nil {
+		log.Warn("Could not apply agents.yaml", "error", applyErr)
+		m.installation.addAIAgentWarning(fmt.Sprintf("Could not apply agents.yaml: %v (run 'devex agent apply' later)", applyErr))
+		return
+	}
+	m.installation.addChange("Applied agents.yaml via tool-agents")
 }
 
 func (m *SetupModel) collectAIAgentsDoctorSummary(ctx context.Context, selectedApps []types.CrossPlatformApp) {
@@ -464,12 +477,13 @@ func (m *SetupModel) renderAIAgentsPreview() string {
 	}
 	agentsPath := filepath.Join(m.userConfigDir(), "agents.yaml")
 	var b strings.Builder
-	if _, err := os.Stat(agentsPath); err == nil {
-		fmt.Fprintf(&b, "  • Keep existing %s unchanged; run 'devex agent diff' to review\n", agentsPath)
-		b.WriteString("  • Apply existing agents.yaml via tool-agents\n")
+	existing, err := m.hasExistingAgentsConfig()
+	if err != nil {
+		fmt.Fprintf(&b, "  • %v\n", err)
 		return b.String()
-	} else if !errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintf(&b, "  • Inspect %s: %v\n", agentsPath, err)
+	}
+	if existing {
+		fmt.Fprintf(&b, "  • Keep existing agents configuration unchanged; review it with 'devex agent diff' and apply it with 'devex agent apply'\n")
 		return b.String()
 	}
 

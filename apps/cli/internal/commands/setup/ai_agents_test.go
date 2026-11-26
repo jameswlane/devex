@@ -420,9 +420,25 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			after, err := os.ReadFile(agentsPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(after)).To(Equal(original))
-			Expect(model.installation.getChanges()).To(ContainElement("kept your existing agents.yaml; run devex agent diff"))
-			Expect(applyCalls).To(HaveLen(1))
-			Expect(applyCalls[0].Instructions).To(Equal("Keep my custom instructions"))
+			Expect(model.installation.getChanges()).To(ContainElement(keptAgentsConfigNote))
+			Expect(applyCalls).To(BeEmpty())
+		})
+
+		It("neither writes nor applies agents.yaml when another tier already configures agents", func() {
+			newAgentDoctorProbe = func() agentdoctor.Probe { return fakeProbeWithSecret("") }
+
+			tierSettings := settings
+			tierSettings.Agents = config.AgentsConfig{Enabled: []string{"codex"}}
+			model := NewSetupModel(repo, tierSettings, platform.DetectionResult{OS: "linux"})
+			model.selections.selectedAIAgents["Claude Code"] = true
+
+			Expect(model.renderAIAgentsPreview()).To(ContainSubstring("Keep existing agents configuration unchanged"))
+			model.handleAIAgentsConfiguration(context.Background(), nil)
+
+			_, statErr := os.Stat(filepath.Join(tierSettings.GetUserConfigDir(), "agents.yaml"))
+			Expect(os.IsNotExist(statErr)).To(BeTrue())
+			Expect(applyCalls).To(BeEmpty())
+			Expect(model.installation.getChanges()).To(ContainElement(keptAgentsConfigNote))
 		})
 
 		It("reports tool-agents apply failures as warnings without failing setup", func() {

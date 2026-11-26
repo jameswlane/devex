@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -129,41 +130,41 @@ func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings
 
 	userConfigDir := settings.GetUserConfigDir()
 	agentsPath := filepath.Join(userConfigDir, "agents.yaml")
-	existingCfg, exists, err := agentapply.LoadAgentsYAML(agentsPath)
-	if err != nil {
-		return err
+	exists := settings.Agents.IsConfigured()
+	if !exists {
+		if _, err := os.Stat(agentsPath); err == nil {
+			exists = true
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect %s: %w", agentsPath, err)
+		}
 	}
 
-	if !exists {
-		if len(harnessIDs) == 0 {
-			cmd.Printf("No configurable harness agents selected; skipping agents.yaml creation.\n")
-			return nil
-		}
+	if exists {
+		// The loaded settings already merge every configuration tier, so apply
+		// them as they are instead of re-reading one file.
+		cmd.Printf("Kept your existing agents configuration (%s); run 'devex agent diff' to review.\n", agentsPath)
 		if dryRun {
-			data, renderErr := agentapply.RenderMinimalAgentsYAML(harnessIDs, preset)
-			if renderErr != nil {
-				return renderErr
-			}
-			cmd.Printf("Would write %s:\n%s", agentsPath, string(data))
 			return nil
-		}
-		if _, _, err := agentapply.WriteDefaultAgentsYAMLIfMissing(userConfigDir, harnessIDs, preset); err != nil {
-			return err
-		}
-		settings.Agents = config.AgentsConfig{
-			Enabled: harnessIDs,
-			Preset:  preset,
 		}
 		return runAgentPluginCommand(cmd, settings, executor, "", "", false)
 	}
 
-	cmd.Printf("Kept your existing agents.yaml (%s); run 'devex agent diff' to review.\n", agentsPath)
-	if dryRun {
+	if len(harnessIDs) == 0 {
+		cmd.Printf("No configurable harness agents selected; skipping agents.yaml creation.\n")
 		return nil
 	}
-	if existingCfg.IsConfigured() {
-		settings.Agents = existingCfg
+	if dryRun {
+		data, renderErr := agentapply.RenderMinimalAgentsYAML(harnessIDs, preset)
+		if renderErr != nil {
+			return renderErr
+		}
+		cmd.Printf("Would write %s:\n%s", agentsPath, string(data))
+		return nil
 	}
+	if _, _, err := agentapply.WriteDefaultAgentsYAMLIfMissing(userConfigDir, harnessIDs, preset); err != nil {
+		return err
+	}
+	settings.Agents = config.AgentsConfig{Enabled: harnessIDs, Preset: preset}
 	return runAgentPluginCommand(cmd, settings, executor, "", "", false)
 }
 

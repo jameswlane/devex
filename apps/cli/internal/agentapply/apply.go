@@ -227,24 +227,6 @@ func WriteDefaultAgentsYAMLIfMissing(userConfigDir string, enabled []string, pre
 	return agentsPath, true, nil
 }
 
-// LoadAgentsYAML reads an agents.yaml file from disk when present.
-func LoadAgentsYAML(agentsPath string) (config.AgentsConfig, bool, error) {
-	data, err := os.ReadFile(agentsPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return config.AgentsConfig{}, false, nil
-	}
-	if err != nil {
-		return config.AgentsConfig{}, false, fmt.Errorf("read %s: %w", agentsPath, err)
-	}
-	var wrapper struct {
-		Agents config.AgentsConfig `yaml:"agents"`
-	}
-	if err := yaml.Unmarshal(data, &wrapper); err != nil {
-		return config.AgentsConfig{}, true, fmt.Errorf("parse %s: %w", agentsPath, err)
-	}
-	return wrapper.Agents, true, nil
-}
-
 // BuildResolvedSpec expands declarative AgentsConfig into the per-agent JSON
 // spec consumed by the tool-agents plugin.
 func BuildResolvedSpec(

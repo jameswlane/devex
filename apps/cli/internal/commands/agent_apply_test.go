@@ -396,16 +396,36 @@ var _ = Describe("Agent apply and diff commands", func() {
 		Expect(string(written)).NotTo(ContainSubstring("aider"))
 		Expect(string(written)).To(ContainSubstring("preset: balanced"))
 
-		// Second --init keeps existing file untouched.
+		// Second --init keeps the existing file untouched and applies the loaded
+		// settings, which merge every configuration tier.
 		fake2 := &fakeAgentPluginExecutor{}
-		keepCmd := NewAgentCmdWithDeps(emptySettings, nil, agentsandbox.Probe{}, fake2)
+		loadedSettings := emptySettings
+		loadedSettings.Agents = config.AgentsConfig{Enabled: []string{"claude", "codex"}, Preset: "balanced"}
+		keepCmd := NewAgentCmdWithDeps(loadedSettings, nil, agentsandbox.Probe{}, fake2)
 		var keepOut bytes.Buffer
 		keepCmd.SetOut(&keepOut)
 		keepCmd.SetArgs([]string{"apply", "--init", "--agents", "gemini-cli", "--preset", "strict"})
 		Expect(keepCmd.Execute()).To(Succeed())
-		Expect(keepOut.String()).To(ContainSubstring("Kept your existing agents.yaml"))
+		Expect(keepOut.String()).To(ContainSubstring("Kept your existing agents configuration"))
+		Expect(fake2.called).To(BeTrue())
 		after, readErr := os.ReadFile(agentsPath)
 		Expect(readErr).NotTo(HaveOccurred())
 		Expect(string(after)).To(Equal(string(written)))
+	})
+
+	It("does not write a user agents.yaml with --init when another tier already configures agents", func() {
+		tierSettings := config.CrossPlatformSettings{HomeDir: home, Agents: config.AgentsConfig{Enabled: []string{"codex"}}}
+		agentsPath := filepath.Join(tierSettings.GetUserConfigDir(), "agents.yaml")
+		viper.Set("dry-run", false)
+		tierFake := &fakeAgentPluginExecutor{}
+		cmd := NewAgentCmdWithDeps(tierSettings, nil, agentsandbox.Probe{}, tierFake)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"apply", "--init", "--agents", "claude-code"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Kept your existing agents configuration"))
+		Expect(tierFake.called).To(BeTrue())
+		_, statErr := os.Stat(agentsPath)
+		Expect(os.IsNotExist(statErr)).To(BeTrue())
 	})
 })
