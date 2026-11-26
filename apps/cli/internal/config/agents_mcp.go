@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	mcpServerNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	mcpServerNameRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$`)
 	mcpEnvVarNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	mcpEnvRefRe     = regexp.MustCompile(`^\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}$`)
 	mcpHeaderNameRe = regexp.MustCompile(`^[!#$%&'*+\-.^_` + "`" + `|~0-9A-Za-z]+$`)
@@ -53,7 +53,7 @@ func validateAgentMCPServers(
 		}
 
 		if !mcpServerNameRe.MatchString(srv.Name) {
-			add(prefix+".name", fmt.Sprintf("MCP server name %q must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", srv.Name))
+			add(prefix+".name", fmt.Sprintf("MCP server name %q must match ^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$", srv.Name))
 		} else {
 			if seenNames[srv.Name] {
 				add(prefix+".name", fmt.Sprintf("duplicate MCP server name %q", srv.Name))
@@ -259,7 +259,27 @@ func IsMCPSecretKey(key string) bool {
 			return true
 		}
 	}
-	return mcpSecretPATRe.MatchString(upper)
+	if mcpSecretPATRe.MatchString(upper) {
+		return true
+	}
+	return hasMCPSecretAuthToken(upper)
+}
+
+func hasMCPSecretAuthToken(upper string) bool {
+	tokens := strings.Split(upper, "_")
+	for i, tok := range tokens {
+		if tok != "AUTH" {
+			continue
+		}
+		if i+1 < len(tokens) {
+			switch tokens[i+1] {
+			case "MODE", "TYPE", "METHOD", "PROVIDER", "URL", "ENABLED", "DISABLED":
+				continue
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // LooksLikeMCPSecretValue reports whether val matches a known literal secret or

@@ -640,13 +640,11 @@ func loadConfigDirs(homeDir string, configDirs []string, applicationLoader Appli
 		for key, value := range tier.AllSettings() {
 			v.Set(key, value)
 		}
-		if tierAgents, ok, err := loadAgentsConfigFile(filepath.Join(configDir, "agents.yaml")); err != nil {
+		if tierAgents, ok, err := loadTierAgentsConfig(configDir); err != nil {
 			return CrossPlatformSettings{}, err
 		} else if ok {
 			agentsFromYAML = tierAgents
 			hasAgentsYAML = true
-		} else if tier.IsSet("agents") {
-			hasAgentsYAML = false
 		}
 		legacyApps, err := loadLegacyInitApplications([]string{configDir})
 		if err != nil {

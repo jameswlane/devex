@@ -369,16 +369,56 @@ var _ = Describe("Agents configuration schema and validation", func() {
 		}
 	})
 
-	It("rejects MCP server names starting with a hyphen or underscore", func() {
+	It("rejects MCP server names starting with a hyphen and allows a leading underscore", func() {
 		errs := ValidateAgentsConfig(AgentsConfig{
 			Enabled: []string{AgentClaude},
 			MCPServers: []AgentMCPServerConfig{
 				{Name: "-bad", Transport: MCPTransportStdio, Command: "mcp"},
 				{Name: "--scope", Transport: MCPTransportStdio, Command: "mcp"},
-				{Name: "_bad", Transport: MCPTransportStdio, Command: "mcp"},
+				{Name: "_good", Transport: MCPTransportStdio, Command: "mcp"},
 			},
 		}, "agents.yaml")
-		Expect(errs).To(HaveLen(3))
+		Expect(errs).To(HaveLen(2))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[0].name")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[1].name")))
+	})
+
+	It("rejects literal values for AUTH secret keys while allowing AUTH_MODE/TYPE/METHOD/PROVIDER/URL/ENABLED/DISABLED", func() {
+		errs := ValidateAgentsConfig(AgentsConfig{
+			Enabled: []string{AgentClaude},
+			MCPServers: []AgentMCPServerConfig{
+				{
+					Name:      "auth-keys",
+					Transport: MCPTransportStdio,
+					Command:   "mcp",
+					Env: map[string]string{
+						"AUTH":          "lit-auth-1",
+						"X_AUTH":        "lit-auth-2",
+						"AUTH_KEY":      "lit-auth-3",
+						"BASIC_AUTH":    "lit-auth-4",
+						"AUTH_MODE":     "oauth",
+						"AUTH_TYPE":     "pkce",
+						"AUTH_METHOD":   "device",
+						"AUTH_PROVIDER": "github",
+						"AUTH_URL":      "https://auth.example.com",
+						"AUTH_ENABLED":  "true",
+						"AUTH_DISABLED": "false",
+					},
+				},
+			},
+		}, "agents.yaml")
+		Expect(errs).To(HaveLen(4))
+		for _, field := range []string{
+			"agents.mcp_servers[0].env.AUTH",
+			"agents.mcp_servers[0].env.X_AUTH",
+			"agents.mcp_servers[0].env.AUTH_KEY",
+			"agents.mcp_servers[0].env.BASIC_AUTH",
+		} {
+			Expect(errs).To(ContainElement(HaveField("Field", field)))
+		}
+		for _, e := range errs {
+			Expect(e.Message).NotTo(ContainSubstring("lit-auth-"))
+		}
 	})
 
 	It("does not override agents config when agents.yaml has no agents key", func() {
@@ -418,5 +458,51 @@ var _ = Describe("Agents configuration schema and validation", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loaded.Agents.Enabled).To(Equal([]string{"codex"}))
 		Expect(loaded.Agents.Preset).To(Equal("balanced"))
+	})
+
+	It("clears lower-tier agents when a higher-tier dotfiles.yaml defines an empty agents mapping", func() {
+		teamDir := settings.GetTeamConfigDir()
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(teamDir, "agents.yaml"), []byte(`agents:
+  enabled: [claude]
+  preset: strict
+`), 0o600)).To(Succeed())
+
+		userDir := settings.GetUserConfigDir()
+		Expect(os.MkdirAll(userDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(userDir, "dotfiles.yaml"), []byte("agents: {}\n"), 0o600)).To(Succeed())
+
+		loaded, err := LoadCrossPlatformSettings(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.Agents.IsConfigured()).To(BeFalse())
+		Expect(loaded.Agents.Enabled).To(BeEmpty())
+		Expect(loaded.Agents.Preset).To(BeEmpty())
+	})
+
+	It("preserves env and header key case when agents are defined in a higher-tier dotfiles.yaml", func() {
+		teamDir := settings.GetTeamConfigDir()
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(teamDir, "agents.yaml"), []byte(`agents:
+  enabled: [claude]
+`), 0o600)).To(Succeed())
+
+		userDir := settings.GetUserConfigDir()
+		Expect(os.MkdirAll(userDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(userDir, "dotfiles.yaml"), []byte(`agents:
+  enabled: [codex]
+  mcp_servers:
+    - name: github
+      transport: stdio
+      command: github-mcp
+      env:
+        GITHUB_TOKEN: "${env:GITHUB_TOKEN}"
+`), 0o600)).To(Succeed())
+
+		loaded, err := LoadCrossPlatformSettings(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.Agents.Enabled).To(Equal([]string{"codex"}))
+		Expect(loaded.Agents.MCPServers).To(HaveLen(1))
+		Expect(loaded.Agents.MCPServers[0].Env).To(HaveKeyWithValue("GITHUB_TOKEN", "${env:GITHUB_TOKEN}"))
+		Expect(loaded.Agents.MCPServers[0].Env).NotTo(HaveKey("github_token"))
 	})
 })
