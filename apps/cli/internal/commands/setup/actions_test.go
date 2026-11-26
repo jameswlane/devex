@@ -5,8 +5,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,15 +48,18 @@ var _ = Describe("Dynamic desktop installation", func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	It("runs each selected app and its lifecycle hooks once through the wizard", func() {
-		if runtime.GOOS == "windows" {
-			Skip("generic POSIX shell hook execution requires sh/bash")
+		if _, err := exec.LookPath("bash"); err != nil {
+			Skip("lifecycle hooks with shell operators run through bash")
 		}
 		recorder := filepath.Join(settings.HomeDir, "calls")
+		// Hooks run through bash, which treats Windows backslashes as escapes.
+		// Use forward slashes and quote the path so the hook writes to the temp home.
+		shellRecorder := strconv.Quote(filepath.ToSlash(recorder))
 		for i := range 2 {
 			cfg := &settings.ApplicationOverrides[i].AllPlatforms
 			name := settings.ApplicationOverrides[i].Name
-			cfg.PreInstall = []types.InstallCommand{{Shell: "echo pre-" + name + " >> " + recorder}}
-			cfg.PostInstall = []types.InstallCommand{{Shell: "echo post-" + name + " >> " + recorder}}
+			cfg.PreInstall = []types.InstallCommand{{Shell: "echo pre-" + name + " >> " + shellRecorder}}
+			cfg.PostInstall = []types.InstallCommand{{Shell: "echo post-" + name + " >> " + shellRecorder}}
 		}
 		model := newModel()
 		calls := 0
