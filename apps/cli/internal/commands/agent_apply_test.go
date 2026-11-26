@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
@@ -126,7 +127,10 @@ var _ = Describe("Agent apply and diff commands", func() {
 		Expect(fake.args).To(HaveLen(3))
 		Expect(fake.args[0]).To(Equal("apply"))
 		Expect(fake.args[1]).To(Equal("--config"))
-		Expect(fake.specMode).To(Equal(os.FileMode(0o600)))
+		if runtime.GOOS != "windows" {
+			// Windows does not map Unix permission bits onto files.
+			Expect(fake.specMode).To(Equal(os.FileMode(0o600)))
+		}
 
 		var spec resolvedAgentPluginSpec
 		Expect(json.Unmarshal(fake.specBytes, &spec)).To(Succeed())

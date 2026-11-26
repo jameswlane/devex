@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// maxDiffCells bounds the line-diff table (about 32 MiB of ints).
+const maxDiffCells = 4 << 20
+
 type diffOp struct {
 	kind byte // ' ', '-', '+'
 	line string
@@ -124,6 +127,21 @@ func computeLineDiff(a, b []string) []diffOp {
 	midA := a[prefix : n-suffix]
 	midB := b[prefix : m-suffix]
 	na, nb := len(midA), len(midB)
+
+	// The LCS table costs na*nb cells; past maxDiffCells, show the changed
+	// middle as one removal and one addition instead of exhausting memory.
+	if na > 0 && nb > maxDiffCells/na {
+		for _, line := range midA {
+			ops = append(ops, diffOp{kind: '-', line: line})
+		}
+		for _, line := range midB {
+			ops = append(ops, diffOp{kind: '+', line: line})
+		}
+		for k := n - suffix; k < n; k++ {
+			ops = append(ops, diffOp{kind: ' ', line: a[k]})
+		}
+		return ops
+	}
 
 	dp := make([][]int, na+1)
 	for i := range dp {

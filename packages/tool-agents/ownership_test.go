@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -206,3 +208,16 @@ var _ = Describe("Managed entry ownership", func() {
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
+var _ = Describe("UnifiedDiff", func() {
+	It("falls back to a whole-block replacement for very large changes", func() {
+		var before, after strings.Builder
+		for i := 0; i < 3000; i++ {
+			fmt.Fprintf(&before, "old %d\n", i)
+			fmt.Fprintf(&after, "new %d\n", i)
+		}
+		diff := UnifiedDiff("big.md", before.String(), after.String())
+		Expect(strings.Count(diff, "\n-old ")).To(Equal(3000))
+		Expect(strings.Count(diff, "\n+new ")).To(Equal(3000))
+	})
+})
