@@ -1,0 +1,39 @@
+name: Gemini CLI
+description: Google's open-source terminal AI coding agent
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Homebrew's gemini-cli formula is deprecated (disable date 2026-12-18).
+  # mise installs npm:@google/gemini-cli in an isolated user-managed runtime.
+  install_method: mise
+  install_command: node@lts npm:@google/gemini-cli@latest
+  uninstall_command: npm:@google/gemini-cli
+  self_updating: true
+  official_support: true
+  dependencies:
+    - Node.js
+windows:
+  install_method: mise
+  install_command: node@lts npm:@google/gemini-cli@latest
+  uninstall_command: npm:@google/gemini-cli
+  self_updating: true
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # mise installs npm:@google/gemini-cli without sudo npm -g. Node
+  # is installed in the same mise call because the npm backend needs it.
+  # Marked self_updating so DevEx never upgrades it: Gemini CLI auto-updates by
+  # default (general.enableAutoUpdate) and treats this path as a global npm
+  # install. Known limitation: its updater runs npm install -g, which writes a
+  # second copy into the mise Node prefix instead of updating this one, and
+  # then warns that the active binary was not updated (#654).
+  install_method: mise
+  install_command: node@lts npm:@google/gemini-cli@latest
+  uninstall_command: npm:@google/gemini-cli
+  self_updating: true
+  official_support: true
+  dependencies:
+    - Node.js

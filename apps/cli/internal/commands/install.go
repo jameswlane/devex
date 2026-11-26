@@ -645,9 +645,13 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 		}
 		configfiles.Apply(ctx, app.Name, app.GetOSConfig().ConfigFiles, true, func(message string) { fmt.Fprintln(out, message) })
 
-		pluginName := "package-manager-" + app.GetOSConfig().InstallMethod
+		osConfig := app.GetOSConfig()
+		pluginName := "package-manager-" + osConfig.InstallMethod
 		installArgs := []string{"install"}
-		if request, reqErr := types.ResolvePackageInstall(app.GetOSConfig().InstallMethod, app.GetOSConfig().InstallCommand, app.GetOSConfig().Packages, app.GetOSConfig().Options); reqErr == nil {
+		if osConfig.InstallMethod == "curlpipe" && osConfig.InstallScope == "user" {
+			installArgs = append(installArgs, "--user")
+		}
+		if request, reqErr := types.ResolvePackageInstall(osConfig.InstallMethod, osConfig.InstallCommand, osConfig.Packages, osConfig.Options); reqErr == nil {
 			installArgs = append(installArgs, request.Options...)
 		}
 		privilege := sdk.PluginOperationPrivilege(plugins[pluginName].PluginInfo, installArgs)

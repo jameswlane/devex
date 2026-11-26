@@ -1,0 +1,58 @@
+name: Kimi Code
+description: Moonshot AI's terminal coding agent CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Unpinned bootstrap script: Moonshot AI updates install.sh on release and
+  # publishes no checksum for the script itself. The script fetches
+  # manifest.json from code.kimi.com and verifies the downloaded kimi binary's
+  # SHA-256 checksum before installing into $HOME/.kimi-code/bin/kimi.
+  install_method: curlpipe
+  download_url: https://code.kimi.com/kimi-code/install.sh
+  install_scope: user
+  installed_binary: kimi
+  self_updating: false
+  uninstall_command: rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@lts npm:@moonshot-ai/kimi-code@latest
+      uninstall_command: npm:@moonshot-ai/kimi-code
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  # Kimi Code also needs Git for Windows (it runs commands in Git Bash); the
+  # catalog has no Windows Git entry to depend on yet.
+  install_method: mise
+  install_command: node@lts npm:@moonshot-ai/kimi-code@latest
+  uninstall_command: npm:@moonshot-ai/kimi-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Unpinned bootstrap script: Moonshot AI updates install.sh on release and
+  # publishes no checksum for the script itself. The script fetches
+  # manifest.json from code.kimi.com and verifies the downloaded kimi binary's
+  # SHA-256 checksum before installing into $HOME/.kimi-code/bin/kimi.
+  # Uninstall removes only the binary/backup shim and leaves ~/.kimi-code
+  # credentials and config intact.
+  install_method: curlpipe
+  download_url: https://code.kimi.com/kimi-code/install.sh
+  install_scope: user
+  installed_binary: kimi
+  self_updating: false
+  uninstall_command: rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@lts npm:@moonshot-ai/kimi-code@latest
+      uninstall_command: npm:@moonshot-ai/kimi-code
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js

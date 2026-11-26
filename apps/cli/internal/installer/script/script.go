@@ -34,6 +34,9 @@ func DefaultConfig() Config {
 			"get.docker.com",
 			"download.docker.com",
 			"raw.githubusercontent.com",
+			"claude.ai",
+			"opencode.ai",
+			"code.kimi.com",
 		},
 	}
 }

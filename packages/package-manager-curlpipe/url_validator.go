@@ -21,6 +21,9 @@ var trustedDomains = []string{
 	"sh.brew.sh",
 	"deno.land",
 	"bun.sh",
+	"claude.ai",
+	"opencode.ai",
+	"code.kimi.com",
 }
 
 // GetTrustedDomains returns the list of trusted domains

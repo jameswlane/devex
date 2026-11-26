@@ -333,6 +333,7 @@ func (p *OrgPolicy) CheckAppConfig(app types.AppConfig) error {
 	}
 	return p.CheckApp(types.CrossPlatformApp{Name: app.Name, AllPlatforms: types.OSConfig{
 		InstallMethod: app.InstallMethod, InstallCommand: app.InstallCommand,
+		InstallScope: app.InstallScope, SelfUpdating: app.SelfUpdating,
 		UninstallCommand: app.UninstallCommand, Packages: app.Packages, Options: app.Options,
 		Dependencies: app.Dependencies, PreInstall: app.PreInstall, PostInstall: app.PostInstall,
 		ConfigFiles: app.ConfigFiles, Themes: app.Themes, AptSources: app.AptSources, CleanupFiles: app.CleanupFiles,

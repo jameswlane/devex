@@ -117,6 +117,9 @@ var (
 		"get.docker.com",
 		"download.docker.com",
 		"raw.githubusercontent.com", // For official GitHub-hosted scripts only
+		"claude.ai",
+		"opencode.ai",
+		"code.kimi.com",
 	}
 )
 
@@ -1012,8 +1015,18 @@ func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app typ
 	if si.apt.has(si.apt.batchInstalled, app.Name) {
 		return nil
 	}
-	if osConfig.InstallMethod == "deb" || osConfig.InstallMethod == "appimage" {
-		return installers.InstallArtifact(ctx, types.AppConfig{InstallMethod: osConfig.InstallMethod, InstallCommand: osConfig.InstallCommand, DownloadURL: osConfig.DownloadURL, Packages: osConfig.Packages, Options: osConfig.Options, Verification: osConfig.Verification})
+	// User-scope scripts go through the curlpipe plugin, which runs them as
+	// the invoking user even when DevEx itself is elevated. Release archives
+	// keep the archive installer, as on the plain install path.
+	userScript := osConfig.InstallMethod == "curlpipe" && osConfig.InstallScope == "user" && !installers.IsReleaseArchive(osConfig.DownloadURL)
+	if osConfig.InstallMethod == "deb" || osConfig.InstallMethod == "appimage" || userScript {
+		timeout := si.config.InstallationTimeout
+		if timeout <= 0 {
+			timeout = DefaultInstallerConfig().InstallationTimeout
+		}
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return installers.InstallArtifact(ctx, types.AppConfig{InstallMethod: osConfig.InstallMethod, InstallCommand: osConfig.InstallCommand, InstallScope: osConfig.InstallScope, SelfUpdating: osConfig.SelfUpdating, DownloadURL: osConfig.DownloadURL, Packages: osConfig.Packages, Options: osConfig.Options, Verification: osConfig.Verification})
 	}
 	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
 		command, err := osConfig.ShellPackageArguments()

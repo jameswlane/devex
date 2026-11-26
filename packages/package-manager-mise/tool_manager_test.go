@@ -156,6 +156,29 @@ var _ = Describe("Tool Manager", func() {
 				}))
 			})
 
+			It("passes backend tool specs through install, is-installed, and remove", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				GinkgoT().Setenv("MISE_LOCAL", "0")
+				recorder.Script("mise", []string{"where", "aqua:aaif-goose/goose"}, sdktest.Response{
+					ExitCode: 0,
+					Stdout:   "/home/devex-test-user/.local/share/mise/installs/aqua-aaif-goose-goose/1.61.0\n",
+				})
+
+				Expect(plugin.HandleInstall(context.Background(), []string{"aqua:aaif-goose/goose@latest"})).To(Succeed())
+				Expect(plugin.HandleIsInstalled(context.Background(), []string{"aqua:aaif-goose/goose"})).To(Succeed())
+				Expect(plugin.HandleRemove(context.Background(), []string{"aqua:aaif-goose/goose"})).To(Succeed())
+				Expect(plugin.HandleInstall(context.Background(), []string{"pipx:aider-chat[python=3.12]@latest"})).To(Succeed())
+				Expect(plugin.HandleRemove(context.Background(), []string{"pipx:aider-chat"})).To(Succeed())
+
+				Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+					{Args: []string{"use", "--global", "aqua:aaif-goose/goose@latest"}},
+					{Args: []string{"where", "aqua:aaif-goose/goose"}},
+					{Args: []string{"unuse", "--global", "aqua:aaif-goose/goose"}},
+					{Args: []string{"use", "--global", "pipx:aider-chat[python=3.12]@latest"}},
+					{Args: []string{"unuse", "--global", "pipx:aider-chat"}},
+				}))
+			})
+
 			It("passes a version alias such as node@lts through to mise where", func() {
 				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
 				recorder.Script("mise", []string{"where", "node@lts"}, sdktest.Response{
@@ -184,6 +207,23 @@ var _ = Describe("Tool Manager", func() {
 				Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
 					{Args: []string{"where", "node@24"}},
 				}))
+			})
+
+			It("reports the tool missing when only its runtime is still installed", func() {
+				recorder := sdktest.NewRecorder(GinkgoT(), "mise")
+				recorder.Script("mise", []string{"where", "uv@latest"}, sdktest.Response{
+					ExitCode: 0,
+					Stdout:   "/home/devex-test-user/.local/share/mise/installs/uv/0.13.10\n",
+				})
+				recorder.Script("mise", []string{"where", "pipx:aider-chat[python=3.12]@latest"}, sdktest.Response{
+					ExitCode: 1,
+					Stderr:   "mise ERROR pipx:aider-chat@latest not installed\n",
+				})
+
+				err := plugin.HandleIsInstalled(context.Background(), []string{"uv@latest", "pipx:aider-chat[python=3.12]@latest"})
+				var notInstalled *sdk.NotInstalledError
+				Expect(errors.As(err, &notInstalled)).To(BeTrue())
+				Expect(notInstalled.Packages).To(Equal([]string{"pipx:aider-chat[python=3.12]@latest"}))
 			})
 
 			It("returns a wrapped error when mise where fails for another reason", func() {

@@ -1,0 +1,31 @@
+name: Claude Code
+description: Anthropic's agentic coding CLI for the terminal
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: claude-code
+  uninstall_command: claude-code
+  brew_cask: true
+  self_updating: false
+  official_support: true
+windows:
+  install_method: winget
+  install_command: Anthropic.ClaudeCode
+  uninstall_command: Anthropic.ClaudeCode
+  self_updating: false
+  official_support: true
+linux:
+  # Unpinned bootstrap script: Anthropic updates install.sh on release and does
+  # not publish a checksum for the script itself. The script downloads
+  # manifest.json from downloads.claude.ai and verifies the downloaded claude
+  # binary's SHA-256 checksum before installing.
+  install_method: curlpipe
+  download_url: https://claude.ai/install.sh
+  install_scope: user
+  installed_binary: claude
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"
+  official_support: true

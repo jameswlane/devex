@@ -24,6 +24,9 @@ devex install rustup nodejs deno
 # Install specific binary releases
 devex package-manager curlpipe install https://github.com/user/repo/releases/latest
 
+# Install a user-scoped script without sudo
+devex package-manager curlpipe install --user https://claude.ai/install.sh
+
 # Verify download integrity
 devex package-manager curlpipe verify checksum.sha256
 

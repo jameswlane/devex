@@ -1,0 +1,24 @@
+name: Goose
+description: Open-source extensible AI coding agent CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: block-goose-cli
+  uninstall_command: block-goose-cli
+  self_updating: false
+  official_support: true
+linux:
+  # Installed via mise's aqua backend from the canonical aaif-goose/goose
+  # repository (block/goose redirects to aaif-goose/goose), avoiding
+  # download_cli.sh's interactive goose configure prompt. Windows is omitted:
+  # the aqua package only covers Linux and macOS.
+  install_method: mise
+  install_command: aqua:aaif-goose/goose@latest
+  uninstall_command: aqua:aaif-goose/goose
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise

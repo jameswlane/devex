@@ -26,4 +26,20 @@ var _ = Describe("Unattended curlpipe execution", func() {
 		var manual *sdk.ManualRemovalRequiredError
 		Expect(plugin.Execute("remove", []string{"example"})).To(BeAssignableToTypeOf(manual))
 	})
+
+	It("runs the downloaded script at user scope without sudo when --user is passed", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "curl", "bash")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		GinkgoT().Setenv("TMPDIR", GinkgoT().TempDir())
+		plugin := main.NewCurlpipePlugin()
+		const url = "https://claude.ai/install.sh"
+		Expect(plugin.Execute("install", []string{"--user", url})).To(Succeed())
+		calls := recorder.Calls("curl")
+		Expect(calls).To(HaveLen(1))
+		Expect(calls[0].Args).To(HaveLen(5))
+		script := calls[0].Args[2]
+		Expect(calls).To(Equal([]sdktest.Call{{Args: []string{"-fsSL", "-o", script, "--", url}}}))
+		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{script}, ElevationRequested: false}}))
+	})
 })

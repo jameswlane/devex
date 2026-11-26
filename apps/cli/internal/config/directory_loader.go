@@ -283,6 +283,8 @@ func CrossPlatformAppFromLegacy(legacy types.AppConfig) types.CrossPlatformApp {
 		AllPlatforms: types.OSConfig{
 			InstallMethod:      legacy.InstallMethod,
 			InstallCommand:     legacy.InstallCommand,
+			InstallScope:       legacy.InstallScope,
+			SelfUpdating:       legacy.SelfUpdating,
 			Packages:           legacy.Packages,
 			Options:            legacy.Options,
 			UninstallCommand:   legacy.UninstallCommand,

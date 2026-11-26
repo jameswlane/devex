@@ -255,14 +255,56 @@ func main() {
 		Expect(cmd.Execute()).NotTo(Succeed())
 		Expect(initialized).To(BeZero())
 	})
+	It("skips self-updating applications for both update and upgrade without failing", func() {
+		claude := types.CrossPlatformApp{
+			Name:     "Claude Code",
+			Category: "AI Coding Agents",
+			Default:  false,
+			AllPlatforms: types.OSConfig{
+				InstallMethod: "curlpipe",
+				DownloadURL:   "https://claude.ai/install.sh",
+				InstallScope:  "user",
+				SelfUpdating:  true,
+			},
+		}
+		settings.Terminal.Utilities = append(settings.Terminal.Utilities, claude)
+
+		Expect(run("update", "Claude Code")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Claude Code manages its own updates; skipped\n"))
+		Expect(recorder.calls).To(BeEmpty())
+		Expect(initialized).To(BeZero())
+
+		out.Reset()
+		diagnostics.Reset()
+		Expect(run("upgrade", "Claude Code")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Claude Code manages its own updates; skipped\n"))
+		Expect(recorder.calls).To(BeEmpty())
+		Expect(initialized).To(BeZero())
+
+		out.Reset()
+		diagnostics.Reset()
+		Expect(run("upgrade", "Claude Code", "Git")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Claude Code manages its own updates; skipped\n"))
+		Expect(recorder.calls).To(Equal([]string{"package-manager-apt upgrade-packages git"}))
+
+		out.Reset()
+		diagnostics.Reset()
+		recorder.calls = nil
+		Expect(run("update", "Claude Code", "Git", "--dry-run")).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Claude Code manages its own updates; skipped\n"))
+		Expect(out.String()).To(ContainSubstring(`devex-plugin-package-manager-apt "update"`))
+		Expect(recorder.calls).To(BeEmpty())
+	})
 	It("rejects shell commands and empty identifiers without a global upgrade", func() {
-		plan, failures := planPackageMaintenance("upgrade", []types.CrossPlatformApp{app("bad", "apt", "git; touch marker"), app("empty", "dnf", "")})
+		plan, skipped, failures := planPackageMaintenance("upgrade", []types.CrossPlatformApp{app("bad", "apt", "git; touch marker"), app("empty", "dnf", "")})
 		Expect(plan).To(BeEmpty())
+		Expect(skipped).To(BeEmpty())
 		Expect(failures).To(HaveLen(2))
 	})
 	It("rejects snap update because it upgrades packages instead of metadata", func() {
-		plan, failures := planPackageMaintenance("update", []types.CrossPlatformApp{app("snap", "snap", "example")})
+		plan, skipped, failures := planPackageMaintenance("update", []types.CrossPlatformApp{app("snap", "snap", "example")})
 		Expect(plan).To(BeEmpty())
+		Expect(skipped).To(BeEmpty())
 		Expect(failures).To(HaveLen(1))
 	})
 })

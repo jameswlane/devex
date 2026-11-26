@@ -79,7 +79,10 @@ func newPackageMaintenanceCmd(action string, settings config.CrossPlatformSettin
 		if err != nil {
 			return err
 		}
-		plan, failures := planPackageMaintenance(action, apps)
+		plan, skipped, failures := planPackageMaintenance(action, apps)
+		for _, name := range skipped {
+			cmd.Printf("%s manages its own updates; skipped\n", name)
+		}
 		for _, failure := range failures {
 			cmd.PrintErrln(failure)
 		}
@@ -147,11 +150,16 @@ type maintenanceGroupKey struct {
 	scope   string
 }
 
-func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]packageMaintenanceOperation, []error) {
+func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]packageMaintenanceOperation, []string, []error) {
 	grouped := map[maintenanceGroupKey][]string{}
+	var skipped []string
 	var failures []error
 	for _, app := range apps {
 		c := app.GetOSConfig()
+		if c.SelfUpdating {
+			skipped = append(skipped, app.Name)
+			continue
+		}
 		supported := false
 		switch c.InstallMethod {
 		case "apt", "dnf", "zypper", "xbps", "eopkg", "winget":
@@ -219,7 +227,7 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 		}
 		plan = append(plan, packageMaintenanceOperation{manager: key.manager, args: args})
 	}
-	return plan, failures
+	return plan, skipped, failures
 }
 
 // maintenancePackages resolves identifiers the way installation does, from

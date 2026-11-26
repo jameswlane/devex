@@ -258,6 +258,11 @@ func (rsi *RefactoredStreamingInstaller) executeCurlPipeInstall(ctx context.Cont
 		rsi.sendLog("INFO", fmt.Sprintf("Installing release archive %s", osConfig.DownloadURL))
 		return installers.InstallReleaseArchive(ctx, releaseArchiveConfig(app, osConfig))
 	}
+	if osConfig.InstallScope == "user" {
+		// The curlpipe plugin runs user-scope scripts as the invoking user even
+		// when DevEx itself is elevated.
+		return installers.InstallArtifact(ctx, types.AppConfig{InstallMethod: osConfig.InstallMethod, InstallCommand: osConfig.InstallCommand, InstallScope: osConfig.InstallScope, DownloadURL: osConfig.DownloadURL, Packages: osConfig.Packages, Options: osConfig.Options, Verification: osConfig.Verification})
+	}
 	rsi.sendLog("INFO", fmt.Sprintf("Downloading and validating script for %s", app.Name))
 
 	// Download and validate script
