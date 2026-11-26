@@ -44,9 +44,15 @@ type InstallHookPolicy struct {
 type HookPolicyError struct {
 	AppName string
 	Err     error
+	// Command marks a rejected legacy `command:` hook, whose installer-side
+	// checks security.yaml cannot override.
+	Command bool
 }
 
 func (e *HookPolicyError) Error() string {
+	if e.Command {
+		return fmt.Sprintf("install hook policy rejected command for app %q: %v", e.AppName, e.Err)
+	}
 	return fmt.Sprintf("install hook policy rejected shell for app %q: %v; review the hook and security.yaml level or app_overrides before retrying", e.AppName, e.Err)
 }
 

@@ -385,14 +385,32 @@ func sanitizeUserInput(input string) string {
 	return strings.TrimSpace(sanitized.String())
 }
 
+// CommandRejectedError reports a command refused before it started, by the
+// security validator or by the installer's dangerous-pattern list. Hooks treat
+// it as a policy rejection, never as an optional runtime failure.
+type CommandRejectedError struct {
+	Command string
+	Reason  string
+	Err     error
+}
+
+func (e *CommandRejectedError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("command validation failed: %v", e.Err)
+	}
+	return fmt.Sprintf("command %q rejected: %s; rewrite the command without that construct or move it to a shell hook", e.Command, e.Reason)
+}
+
+func (e *CommandRejectedError) Unwrap() error { return e.Err }
+
 // parseCommand safely parses a command string into executable parts
 // Returns (executable, args, needsShell) where needsShell indicates if shell execution is required
 // SECURITY: This function allows shell execution for pipes but validates patterns first
-func parseCommand(command string) (string, []string, bool) {
+func parseCommand(command string) (string, []string, bool, error) {
 	// Trim whitespace
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return "", nil, false
+		return "", nil, false, &CommandRejectedError{Command: command, Reason: "empty command"}
 	}
 
 	// SECURITY: Check against dangerous patterns using our specific regex list
@@ -403,7 +421,7 @@ func parseCommand(command string) (string, []string, bool) {
 				continue // Allow redirections to /dev/null
 			}
 			// SECURITY: Reject commands matching dangerous patterns
-			return "", nil, false
+			return "", nil, false, &CommandRejectedError{Command: command, Reason: fmt.Sprintf("matches dangerous pattern %s", pattern.String())}
 		}
 	}
 
@@ -419,17 +437,14 @@ func parseCommand(command string) (string, []string, bool) {
 
 	if needsShell {
 		// Return shell execution for complex commands
-		return "bash", []string{"-c", command}, true
+		return "bash", []string{"-c", command}, true, nil
 	}
 
 	// Split command into parts for direct execution
 	parts := strings.Fields(command)
-	if len(parts) == 0 {
-		return "", nil, false
-	}
 
 	// Only allow direct execution of validated commands
-	return parts[0], parts[1:], false
+	return parts[0], parts[1:], false, nil
 }
 
 // CommandExecutor defines the interface for command execution, allowing for better testing and modularity
@@ -454,11 +469,14 @@ func NewDefaultCommandExecutor() *DefaultCommandExecutor {
 func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
 	// Validate command first
 	if err := ce.ValidateCommand(command); err != nil {
-		return nil, fmt.Errorf("command validation failed: %w", err)
+		return nil, &CommandRejectedError{Command: command, Err: err}
 	}
 
 	// Parse and execute using safest method
-	executable, args, needsShell := parseCommand(command)
+	executable, args, needsShell, err := parseCommand(command)
+	if err != nil {
+		return nil, err
+	}
 	if !needsShell && executable == "sudo" {
 		if len(args) > 0 && args[0] == "-n" {
 			args = args[1:]
@@ -512,11 +530,14 @@ func NewSecureCommandExecutor(level security.SecurityLevel, apps []types.CrossPl
 func (sce *SecureCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
 	// Validate command using pattern-based approach
 	if err := sce.validator.ValidateCommand(command); err != nil {
-		return nil, fmt.Errorf("command validation failed: %w", err)
+		return nil, &CommandRejectedError{Command: command, Err: err}
 	}
 
 	// Parse and execute using safest method
-	executable, args, needsShell := parseCommand(command)
+	executable, args, needsShell, err := parseCommand(command)
+	if err != nil {
+		return nil, err
+	}
 
 	var cmd *exec.Cmd
 	if needsShell {
@@ -1403,6 +1424,10 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 				appName = policies[0].AppName
 			}
 			if err := utils.GuardHookScope(appName, func() error { return si.executeCommandStream(ctx, cmd.Command) }); err != nil {
+				var rejected *CommandRejectedError
+				if errors.As(err, &rejected) {
+					return &utils.HookPolicyError{AppName: appName, Err: err, Command: true}
+				}
 				return err
 			}
 		}

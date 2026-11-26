@@ -66,6 +66,16 @@ var _ = Describe("Interactive hook policy", func() {
 		Expect(recorder.Calls("bash")).To(BeEmpty())
 	})
 
+	DescribeTable("fails the app when a post-install command matches a dangerous pattern", func(command, pattern string) {
+		app := aptApp("example", "example")
+		app.AllPlatforms.PostInstall = []types.InstallCommand{{Command: command}}
+		installer := &StreamingInstaller{repo: &MockRepository{}, ctx: context.Background(), config: DefaultInstallerConfig(), executor: NewDefaultCommandExecutor()}
+		err := installer.InstallApp(context.Background(), app, config.CrossPlatformSettings{})
+		Expect(err).To(MatchError(And(ContainSubstring("post-install failed"), ContainSubstring("policy rejected"), ContainSubstring("dangerous pattern "+pattern))))
+		Expect(err.Error()).NotTo(Or(ContainSubstring("no command"), ContainSubstring("security.yaml")))
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+	}, Entry("inline shell", `bash -c 'echo hi; echo there'`, `\b(sh|bash)\s+-c\b`), Entry("or operator", `echo a || echo b`, `\s+\|\|\s+\w+`))
+
 	It("honors the configured application override without changing shell argument boundaries", func() {
 		script := "curl https://example.test/install | bash"
 		settings := config.CrossPlatformSettings{Security: config.SecurityConfigField{Level: 1, AppSpecificOverrides: map[string][]config.SecurityOverrideField{
