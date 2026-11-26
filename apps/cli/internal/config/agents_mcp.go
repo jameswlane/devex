@@ -290,27 +290,35 @@ func hasMCPSecretAuthToken(upper string) bool {
 
 // mcpURLPathOrFragmentHasSecret reports whether a decoded path segment or a
 // parameter-style fragment (#access_token=...) carries a literal credential.
+// Segments and pairs are split in their escaped form and decoded one by one,
+// so escaped delimiters stay inside a value and one malformed escape does not
+// hide the other pairs.
 func mcpURLPathOrFragmentHasSecret(u *url.URL) bool {
-	for _, segment := range strings.Split(u.Path, "/") {
-		if LooksLikeMCPSecretValue(segment) {
+	for _, segment := range strings.Split(u.EscapedPath(), "/") {
+		if LooksLikeMCPSecretValue(lenientUnescape(segment, url.PathUnescape)) {
 			return true
 		}
 	}
+	fragment := u.EscapedFragment()
 	if LooksLikeMCPSecretValue(u.Fragment) {
 		return true
 	}
-	params, err := url.ParseQuery(u.Fragment)
-	if err != nil {
-		return false
-	}
-	for key, values := range params {
-		for _, v := range values {
-			if (IsMCPSecretKey(key) && strings.TrimSpace(v) != "") || LooksLikeMCPSecretValue(v) {
-				return true
-			}
+	for _, pair := range strings.FieldsFunc(fragment, func(r rune) bool { return r == '&' || r == ';' }) {
+		rawKey, rawValue, _ := strings.Cut(pair, "=")
+		key := lenientUnescape(rawKey, url.QueryUnescape)
+		value := lenientUnescape(rawValue, url.QueryUnescape)
+		if (IsMCPSecretKey(key) && strings.TrimSpace(value) != "") || LooksLikeMCPSecretValue(value) {
+			return true
 		}
 	}
 	return false
+}
+
+func lenientUnescape(s string, unescape func(string) (string, error)) string {
+	if decoded, err := unescape(s); err == nil {
+		return decoded
+	}
+	return s
 }
 
 // LooksLikeMCPSecretValue reports whether val matches a known literal secret or

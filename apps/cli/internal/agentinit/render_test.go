@@ -217,6 +217,10 @@ var _ = Describe("Agent init rendering", func() {
 			Entry("token-shaped path segment", "https://mcp.example.com/ghp_abcdefghijklmnop1234/mcp"),
 			Entry("bearer value in a path segment", "https://mcp.example.com/Bearer%20opaque-example/mcp"),
 			Entry("credential key in a fragment", "https://mcp.example.com/mcp#access_token=opaque-example"),
+			Entry("escaped semicolon inside a fragment value", "https://mcp.example.com/mcp#access_token=opaque-example%3Bmore"),
+			Entry("escaped ampersand inside a fragment value", "https://mcp.example.com/mcp#state=x%26y&access_token=opaque-example"),
+			Entry("malformed sibling fragment pair", "https://mcp.example.com/mcp#a=1;b=2&access_token=opaque-example"),
+			Entry("bearer value starting with an escaped slash", "https://mcp.example.com/Bearer%20%2Fopaque-example/mcp"),
 		)
 
 		It("rejects invalid agents config with a literal secret", func() {
