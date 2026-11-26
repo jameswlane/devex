@@ -544,16 +544,24 @@ type UpdateOptions struct {
 	Overwrite  bool
 	// AllowUnreviewed permits updating skills installed from raw sources.
 	AllowUnreviewed bool
+	// ExpectedTargets maps UpdatePackResult.ID to the commit SHA a dry run
+	// showed. A group that now resolves to another commit fails before it is
+	// fetched, so the applied files are always the ones the plan displayed.
+	ExpectedTargets map[string]string
 }
 
 // UpdatePackResult summarizes update results for one pack within one lock scope.
 type UpdatePackResult struct {
-	Pack     string
-	Source   string
-	Scope    string
-	LockPath string
-	Target   string
-	Items    []SkillPlanItem
+	// ID identifies the update group; pass it in UpdateOptions.ExpectedTargets
+	// to apply exactly the commit a previous dry run planned.
+	ID         string
+	Unreviewed bool
+	Pack       string
+	Source     string
+	Scope      string
+	LockPath   string
+	Target     string
+	Items      []SkillPlanItem
 }
 
 // UpdateResult summarizes Manager.Update across all matched packs/scopes.
@@ -677,6 +685,18 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 	result := &UpdateResult{DryRun: opts.DryRun}
 	now := mgr.Now().UTC()
 
+	// saveDirtyLocks keeps each lock in step with the skills already changed
+	// before err stopped the update.
+	saveDirtyLocks := func(err error) error {
+		if opts.DryRun {
+			return err
+		}
+		for lp, lb := range locks {
+			err = saveAfterFailure(lp, lb.lock, lb.dirty, err)
+		}
+		return err
+	}
+
 	for _, gk := range groupOrder {
 		entries := groups[gk]
 		var targetSHA, targetRef string
@@ -689,7 +709,7 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			targetRef = overrideRef
 			targetSHA, err = mgr.Fetcher.ResolveRef(ctx, gk.source, overrideRef)
 			if err != nil {
-				return nil, err
+				return nil, saveDirtyLocks(err)
 			}
 		} else if catPack, ok := mgr.Catalog.Lookup(gk.pack); ok && !gk.unreviewed {
 			targetSHA = catPack.SHA
@@ -705,21 +725,30 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			targetRef = ref
 			targetSHA, err = mgr.Fetcher.ResolveRef(ctx, gk.source, ref)
 			if err != nil {
-				return nil, err
+				return nil, saveDirtyLocks(err)
 			}
+		}
+
+		groupID := strings.Join([]string{gk.lockPath, gk.pack, gk.scope, gk.source, gk.ref}, "\x00")
+		if expected, ok := opts.ExpectedTargets[groupID]; opts.ExpectedTargets != nil && !ok {
+			return nil, saveDirtyLocks(fmt.Errorf("%s (%s scope) was not in the planned update; re-run the update to review it", gk.pack, gk.scope))
+		} else if ok && expected != targetSHA {
+			return nil, saveDirtyLocks(fmt.Errorf("%s now resolves to %s, not the planned %s; re-run the update to review the new changes", gk.pack, ShortSHA(targetSHA), ShortSHA(expected)))
 		}
 
 		checkoutDir, cleanup, err := mgr.Fetcher.Fetch(ctx, gk.source, targetSHA)
 		if err != nil {
-			return nil, err
+			return nil, saveDirtyLocks(err)
 		}
 
 		packResult := UpdatePackResult{
-			Pack:     gk.pack,
-			Source:   gk.source,
-			Scope:    gk.scope,
-			LockPath: gk.lockPath,
-			Target:   targetSHA,
+			ID:         groupID,
+			Pack:       gk.pack,
+			Source:     gk.source,
+			Scope:      gk.scope,
+			LockPath:   gk.lockPath,
+			Target:     targetSHA,
+			Unreviewed: gk.unreviewed,
 		}
 
 		lb := locks[gk.lockPath]
@@ -805,12 +834,7 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			return nil
 		}()
 		if updateErr != nil {
-			if !opts.DryRun {
-				for lp, lb := range locks {
-					updateErr = saveAfterFailure(lp, lb.lock, lb.dirty, updateErr)
-				}
-			}
-			return nil, updateErr
+			return nil, saveDirtyLocks(updateErr)
 		}
 		result.Packs = append(result.Packs, packResult)
 	}
@@ -1093,7 +1117,9 @@ func validateRecord(entry InstalledSkill, lockPath, projectDir string) (skillins
 	if err != nil {
 		return skillinstall.Destination{}, err
 	}
-	if DestinationKey(resolved.Path()) != DestinationKey(entry.Destination) {
+	// Exact match: a cleaned comparison would accept "a/../b" style paths
+	// whose symlinked segments resolve somewhere else on disk.
+	if entry.Destination != resolved.Path() {
 		return invalid(fmt.Sprintf("expected destination %q", resolved.Path()))
 	}
 	return resolved, nil

@@ -783,6 +783,82 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		_, err = mgr.Update(context.Background(), skillpacks.UpdateOptions{Scope: "project", ProjectDir: projectDir, Overwrite: true})
 		Expect(err).To(MatchError(ContainSubstring("invalid entry")))
 		Expect(os.ReadFile(filepath.Join(victim, "SKILL.md"))).To(Equal([]byte("keep me\n")))
+
+		// A path that only matches after cleaning is rejected too: its segments
+		// could pass through a symlink to somewhere else.
+		resolved := filepath.Join(projectDir, ".claude", "skills", "council")
+		unclean := filepath.Join(projectDir, ".claude", "skills") + string(filepath.Separator) + "x" + string(filepath.Separator) + ".." + string(filepath.Separator) + "council"
+		Expect(filepath.Clean(unclean)).To(Equal(resolved))
+		forged = skillpacks.NewLockFile()
+		forged.Skills[skillpacks.DestinationKey(resolved)] = skillpacks.InstalledSkill{
+			Pack: "tstack", Skill: "council", Agent: "claude", Scope: "project",
+			Destination: unclean, Source: testSourceURL, SkillsPath: "skills",
+			SHA: sha1, Files: snap.FileRecords(),
+		}
+		Expect(skillpacks.SaveLock(lockPath, forged)).To(Succeed())
+		_, err = mgr.Remove(skillpacks.RemoveOptions{Pack: "tstack", Agent: "claude", Scope: "project", ProjectDir: projectDir, Force: true})
+		Expect(err).To(MatchError(ContainSubstring("invalid entry")))
+	})
+
+	It("applies only the commits a plan showed and keeps the lock in step when a later group fails", func() {
+		rawURL := "https://example.test/owner/custom-pack.git"
+		rewrite := func(source string) string {
+			if source == testSourceURL || source == rawURL {
+				return "file://" + repoDir
+			}
+			return source
+		}
+		mgr := fixtureManager(repoDir, sha1, allPresentReqs())
+		mgr.Fetcher = &skillpacks.GitFetcher{RewriteSource: rewrite}
+		_, err := mgr.Add(context.Background(), skillpacks.AddOptions{PackSpec: "tstack", Skills: []string{"council"}, Agent: "claude", Scope: "user"})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = mgr.Add(context.Background(), skillpacks.AddOptions{PackSpec: "git+" + rawURL + "@main", Skills: []string{"takeover"}, Agent: "claude", Scope: "user", AllowUnreviewed: true})
+		Expect(err).NotTo(HaveOccurred())
+
+		for _, skill := range []string{"council", "takeover"} {
+			p := filepath.Join(repoDir, "skills", skill, "SKILL.md")
+			data, readErr := os.ReadFile(p)
+			Expect(readErr).NotTo(HaveOccurred())
+			Expect(os.WriteFile(p, append(data, []byte("\nchanged upstream\n")...), 0o644)).To(Succeed())
+		}
+		runFixtureGit(repoDir, "add", "-A")
+		runFixtureGit(repoDir, "commit", "-m", "change two skills")
+		sha2 := runFixtureGit(repoDir, "rev-parse", "HEAD")
+		updater := fixtureManager(repoDir, sha2, allPresentReqs())
+		updater.Fetcher = &skillpacks.GitFetcher{RewriteSource: rewrite}
+
+		plan, err := updater.Update(context.Background(), skillpacks.UpdateOptions{Scope: "user", AllowUnreviewed: true, DryRun: true})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(plan.Packs).To(HaveLen(2))
+
+		// A target that moved since the plan is refused before anything changes.
+		moved := map[string]string{}
+		for _, p := range plan.Packs {
+			moved[p.ID] = sha1
+		}
+		_, err = updater.Update(context.Background(), skillpacks.UpdateOptions{Scope: "user", AllowUnreviewed: true, ExpectedTargets: moved})
+		Expect(err).To(MatchError(ContainSubstring("not the planned")))
+		entries, err := updater.List(skillpacks.ListOptions{Scope: "user"})
+		Expect(err).NotTo(HaveOccurred())
+		for _, e := range entries {
+			Expect(e.SHA).To(Equal(sha1))
+		}
+
+		// The second group's fetch fails after the first group was applied.
+		updater.Fetcher = &failingSecondFetch{inner: &skillpacks.GitFetcher{RewriteSource: rewrite}}
+		_, err = updater.Update(context.Background(), skillpacks.UpdateOptions{Scope: "user", AllowUnreviewed: true})
+		Expect(err).To(MatchError(ContainSubstring("injected fetch failure")))
+		entries, err = updater.List(skillpacks.ListOptions{Scope: "user"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(entries).To(HaveLen(2))
+		updated := 0
+		for _, e := range entries {
+			Expect(e.Edited).To(BeFalse(), "lock out of step with %s", e.Skill)
+			if e.SHA == sha2 {
+				updated++
+			}
+		}
+		Expect(updated).To(Equal(1))
 	})
 
 	It("records completed removals in the lock when a later removal fails", func() {
@@ -861,3 +937,21 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		Expect(treeSnapshot(home)).To(Equal(beforeHome))
 	})
 })
+
+// failingSecondFetch fails every Fetch after the first one.
+type failingSecondFetch struct {
+	inner skillpacks.Fetcher
+	calls int
+}
+
+func (f *failingSecondFetch) ResolveRef(ctx context.Context, source, ref string) (string, error) {
+	return f.inner.ResolveRef(ctx, source, ref)
+}
+
+func (f *failingSecondFetch) Fetch(ctx context.Context, source, sha string) (string, func(), error) {
+	f.calls++
+	if f.calls > 1 {
+		return "", nil, errors.New("injected fetch failure")
+	}
+	return f.inner.Fetch(ctx, source, sha)
+}

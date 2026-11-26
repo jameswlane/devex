@@ -218,8 +218,10 @@ var _ = Describe("Agent skills CLI commands", func() {
 		// Updating an unreviewed install needs the same explicit opt-in.
 		_, _, err = runAgentSkillsCmd(mgr, "update", "--agent", "claude", "--scope", "user")
 		Expect(err).To(MatchError(ContainSubstring("--allow-unreviewed")))
-		_, _, err = runAgentSkillsCmd(mgr, "update", "--agent", "claude", "--scope", "user", "--allow-unreviewed")
+		updOut, updErr, err := runAgentSkillsCmd(mgr, "update", "--agent", "claude", "--scope", "user", "--allow-unreviewed")
 		Expect(err).NotTo(HaveOccurred())
+		Expect(updOut).To(ContainSubstring("from https://example.test/raw/pack.git [unreviewed]"))
+		Expect(updErr).To(ContainSubstring(`unreviewed source "https://example.test/raw/pack.git"`))
 	})
 
 	It("runs list from the production root without initializing plugin state", func() {

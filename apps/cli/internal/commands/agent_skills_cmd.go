@@ -168,6 +168,12 @@ which retains a .devex-backup-* backup.`,
 			}
 			cmd.Println("Planned changes:")
 			renderSkillPackUpdateResult(cmd, plan, true)
+			// Apply exactly the commits the plan showed, even if a branch or
+			// tag moves in the meantime.
+			runOpts.ExpectedTargets = make(map[string]string, len(plan.Packs))
+			for _, pack := range plan.Packs {
+				runOpts.ExpectedTargets[pack.ID] = pack.Target
+			}
 			res, err := manager.Update(cmd.Context(), runOpts)
 			if err != nil {
 				return err
@@ -282,7 +288,14 @@ func renderSkillPackUpdateResult(cmd *cobra.Command, res *skillpacks.UpdateResul
 		return
 	}
 	for _, pack := range res.Packs {
-		cmd.Printf("Pack: %s -> %s (%s scope)\n", pack.Pack, skillpacks.ShortSHA(pack.Target), pack.Scope)
+		if pack.Unreviewed && showDiffs {
+			cmd.PrintErrf("Warning: unreviewed source %q — skills contain instructions and scripts your coding agent may run; review the changes below before use.\n", pack.Source)
+		}
+		suffix := ""
+		if pack.Unreviewed {
+			suffix = " [unreviewed]"
+		}
+		cmd.Printf("Pack: %s -> %s (%s scope) from %s%s\n", pack.Pack, skillpacks.ShortSHA(pack.Target), pack.Scope, pack.Source, suffix)
 		for _, item := range pack.Items {
 			cmd.Printf("  %-22s %-22s %s", formatActionLabel(item.Action, res.DryRun), item.Skill, item.Destination)
 			if item.Reason != "" {

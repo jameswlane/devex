@@ -140,6 +140,19 @@ var _ = Describe("Agent skill installer", func() {
 		Expect(filepath.Join(home, ".kimi-code")).NotTo(BeADirectory())
 	})
 
+	It("treats a reinstall that differs only in executable bits as already installed", func() {
+		if runtime.GOOS == "windows" {
+			Skip("executable bits are not tracked on Windows")
+		}
+		destination := filepath.Join(home, ".claude", "skills", "devex")
+		_, _, err := runAgentCommand("install-skill", "--agent", "claude", "--scope", "user")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.Chmod(filepath.Join(destination, "SKILL.md"), 0o755)).To(Succeed())
+		stdout, _, err := runAgentCommand("install-skill", "--agent", "claude", "--scope", "user")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stdout).To(ContainSubstring("Already installed: " + destination))
+	})
+
 	It("leaves an identical reinstall and unrelated skills untouched", func() {
 		destination := filepath.Join(home, ".claude", "skills", "devex")
 		unrelated := filepath.Join(home, ".claude", "skills", "other", "SKILL.md")
