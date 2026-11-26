@@ -160,6 +160,7 @@ main() {
 	cp "$DOCKERFILE" "$context/Dockerfile"
 	mkdir -p "$context/testdata/catalog"
 	cp "$CLI_DIR/config/applications/development/docker.yaml" "$context/testdata/catalog/docker.yaml"
+	cp "$CLI_DIR/config/applications/development/build-essential.yaml" "$context/testdata/catalog/build-essential.yaml"
 
 	local image="devex-e2e:$DISTRO"
 	local artifacts="$CLI_DIR/artifacts/e2e/$DISTRO"
