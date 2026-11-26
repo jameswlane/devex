@@ -191,6 +191,8 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 		}
 		status, err := writeAgentFiles(ctx, ap)
 		if err != nil {
+			// Still report the files (and backups) written before the failure.
+			_, _ = io.WriteString(p.out, status)
 			if stateChanges {
 				if saveErr := SaveManagedState(plan.StatePath, committed); saveErr != nil {
 					return fmt.Errorf("%w; also failed to restore managed state: %v", err, saveErr)
