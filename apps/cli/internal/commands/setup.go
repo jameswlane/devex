@@ -117,6 +117,11 @@ Run 'devex setup' to begin the guided installation process.`,
 			if err := setup.ValidateAIAgentSelection(settings, detectedPlatform); err != nil {
 				return err
 			}
+			// Explicit application lists install through a path without the AI
+			// agents step, so reject the combination before any change.
+			if !setup.IsInteractiveMode() && viper.IsSet("applications") && len(viper.GetStringSlice("setup.ai_agents.apps")) > 0 {
+				return fmt.Errorf("setup.ai_agents.apps/--ai-agents cannot be combined with an applications list; add the agents to applications and run 'devex agent apply --init --agents <ids>'")
+			}
 
 			prerequisites, err := winprereq.ParseSelection(viper.GetStringSlice("setup.windows.prerequisites"))
 			if err != nil {
@@ -153,9 +158,6 @@ Run 'devex setup' to begin the guided installation process.`,
 			if !setup.IsInteractiveMode() {
 				log.Info("Running in non-interactive automated mode")
 				if viper.IsSet("applications") {
-					if len(viper.GetStringSlice("setup.ai_agents.apps")) > 0 {
-						return fmt.Errorf("setup.ai_agents.apps/--ai-agents cannot be combined with an applications list; add the agents to applications and run 'devex agent apply --init --agents <ids>'")
-					}
 					installErr := executeInstallWithOutput(ctx, nil, nil, verbose, viper.GetBool("dry-run"), repo, settings, cmd.OutOrStdout(), nil)
 					if installErr != nil || viper.GetBool("dry-run") {
 						return installErr

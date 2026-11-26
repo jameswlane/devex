@@ -391,19 +391,29 @@ func isUnknownMCPFieldError(err error, stderr string) bool {
 }
 
 // EnsureUserBinDirsOnPath appends the user-scope binary directories that agent
-// installers write to (~/.local/bin and mise shims) to PATH when they exist and
-// are missing, so a just-installed agent is found before the shell reloads.
+// installers write to (~/.local/bin, OpenCode's ~/.opencode/bin and mise shims)
+// to PATH when they exist and are missing, so a just-installed agent is found
+// before the shell reloads.
 func EnsureUserBinDirsOnPath(home string) {
 	if strings.TrimSpace(home) == "" {
 		return
 	}
 	miseData := os.Getenv("MISE_DATA_DIR")
 	if miseData == "" {
-		miseData = filepath.Join(home, ".local", "share", "mise")
+		dataHome := os.Getenv("XDG_DATA_HOME")
+		if dataHome == "" {
+			dataHome = filepath.Join(home, ".local", "share")
+		}
+		miseData = filepath.Join(dataHome, "mise")
 	}
 	path := os.Getenv("PATH")
 	entries := filepath.SplitList(path)
-	for _, dir := range []string{filepath.Join(home, ".local", "bin"), filepath.Join(miseData, "shims")} {
+	candidates := []string{
+		filepath.Join(home, ".local", "bin"),
+		filepath.Join(home, ".opencode", "bin"),
+		filepath.Join(miseData, "shims"),
+	}
+	for _, dir := range candidates {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() || slices.Contains(entries, dir) { //nolint:gosec // only checks that a PATH candidate directory exists
 			continue
 		}

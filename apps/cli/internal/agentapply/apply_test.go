@@ -18,6 +18,7 @@ var _ = Describe("agentapply helpers", func() {
 		Expect(os.MkdirAll(localBin, 0o750)).To(Succeed())
 		GinkgoT().Setenv("PATH", "/usr/bin")
 		GinkgoT().Setenv("MISE_DATA_DIR", "")
+		GinkgoT().Setenv("XDG_DATA_HOME", "")
 
 		agentapply.EnsureUserBinDirsOnPath(home)
 		agentapply.EnsureUserBinDirsOnPath(home)
@@ -25,6 +26,35 @@ var _ = Describe("agentapply helpers", func() {
 		entries := filepath.SplitList(os.Getenv("PATH"))
 		Expect(entries).To(Equal([]string{"/usr/bin", localBin}))
 		Expect(strings.Contains(os.Getenv("PATH"), "shims")).To(BeFalse())
+	})
+
+	It("adds OpenCode's install directory and mise shims under XDG_DATA_HOME", func() {
+		home := GinkgoT().TempDir()
+		dataHome := filepath.Join(home, "data")
+		openCodeBin := filepath.Join(home, ".opencode", "bin")
+		shims := filepath.Join(dataHome, "mise", "shims")
+		Expect(os.MkdirAll(openCodeBin, 0o750)).To(Succeed())
+		Expect(os.MkdirAll(shims, 0o750)).To(Succeed())
+		GinkgoT().Setenv("PATH", "/usr/bin")
+		GinkgoT().Setenv("MISE_DATA_DIR", "")
+		GinkgoT().Setenv("XDG_DATA_HOME", dataHome)
+
+		agentapply.EnsureUserBinDirsOnPath(home)
+
+		Expect(filepath.SplitList(os.Getenv("PATH"))).To(Equal([]string{"/usr/bin", openCodeBin, shims}))
+	})
+
+	It("prefers MISE_DATA_DIR for mise shims", func() {
+		home := GinkgoT().TempDir()
+		miseData := filepath.Join(home, "custom-mise")
+		Expect(os.MkdirAll(filepath.Join(miseData, "shims"), 0o750)).To(Succeed())
+		GinkgoT().Setenv("PATH", "/usr/bin")
+		GinkgoT().Setenv("MISE_DATA_DIR", miseData)
+		GinkgoT().Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+
+		agentapply.EnsureUserBinDirsOnPath(home)
+
+		Expect(filepath.SplitList(os.Getenv("PATH"))).To(Equal([]string{"/usr/bin", filepath.Join(miseData, "shims")}))
 	})
 
 	It("reports the agents tool-agents skipped", func() {
