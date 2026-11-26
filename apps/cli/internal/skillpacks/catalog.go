@@ -336,12 +336,18 @@ func ParseRawSource(raw string) (sourceURL, ref, packName string, err error) {
 		return "", "", "", fmt.Errorf("raw source %q must begin with git+https://", DisplaySource(raw))
 	}
 	rest := strings.TrimPrefix(raw, "git+")
+	if strings.ContainsAny(rest, "?#") {
+		return "", "", "", fmt.Errorf("raw source %q must not contain a query or fragment", DisplaySource(raw))
+	}
 	if lastSlash := strings.LastIndex(rest, "/"); lastSlash >= 0 {
 		if at := strings.LastIndex(rest, "@"); at > lastSlash {
 			ref = rest[at+1:]
 			rest = rest[:at]
 			if strings.TrimSpace(ref) == "" {
 				return "", "", "", fmt.Errorf("empty ref after '@' in source %q", DisplaySource(raw))
+			}
+			if !validRawRef(ref) {
+				return "", "", "", fmt.Errorf("ref in source %q may contain only letters, digits, '.', '_', '-' and '/'", DisplaySource(raw))
 			}
 		}
 	}
@@ -367,7 +373,7 @@ func DisplaySource(source string) string {
 		prefix, source = "git+", strings.TrimPrefix(source, "git+")
 	}
 	parsed, err := url.Parse(source)
-	if err != nil {
+	if err != nil || parsed.Opaque != "" || parsed.Host == "" {
 		return "<invalid URL>"
 	}
 	parsed.User = nil
@@ -410,4 +416,15 @@ func validateRelativeSkillsPath(p string) error {
 		return fmt.Errorf("must not escape repository root")
 	}
 	return nil
+}
+
+func validRawRef(ref string) bool {
+	for _, r := range ref {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-', r == '/':
+		default:
+			return false
+		}
+	}
+	return !strings.HasPrefix(ref, "-")
 }

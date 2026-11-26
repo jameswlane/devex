@@ -64,8 +64,13 @@ func (f *GitFetcher) ResolveRef(ctx context.Context, source, ref string) (string
 	if IsFullSHA(ref) {
 		return strings.ToLower(ref), nil
 	}
+	// Refs come from user input and lock files; never let one reach git as
+	// an option or carry anything but a plain ref name.
+	if ref != "" && !validRawRef(ref) {
+		return "", fmt.Errorf("ref may contain only letters, digits, '.', '_', '-' and '/', and must not start with '-'")
+	}
 	src := f.effectiveSource(source)
-	args := []string{"-c", "core.hooksPath=" + os.DevNull, "ls-remote", src}
+	args := []string{"-c", "core.hooksPath=" + os.DevNull, "ls-remote", "--", src}
 	if ref == "" || ref == "HEAD" {
 		args = append(args, "HEAD")
 	} else {

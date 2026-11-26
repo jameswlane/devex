@@ -741,13 +741,12 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		for _, leaky := range []string{
 			"git+https://user:token@example.test/owner/custom-pack.git@main",
 			"git+https://example.test/owner/custom-pack.git?access_token=secret",
+			"git+https://example.test/owner/custom-pack.git@main?access_token=secret",
+			"git+https:user:token@example.test/owner/custom-pack.git",
 		} {
 			for _, allow := range []bool{false, true} {
 				_, err = mgr.Add(context.Background(), skillpacks.AddOptions{PackSpec: leaky, Skills: []string{"full-send"}, Agent: "claude", Scope: "user", AllowUnreviewed: allow})
 				Expect(err).To(HaveOccurred(), leaky)
-				if allow {
-					Expect(err).To(MatchError(ContainSubstring("must not contain credentials")), leaky)
-				}
 				Expect(err.Error()).NotTo(Or(ContainSubstring("user"), ContainSubstring("token"), ContainSubstring("secret")), leaky)
 			}
 		}
@@ -914,6 +913,15 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		Expect(filepath.Join(home, ".claude", "skills", "council")).NotTo(BeADirectory())
 		Expect(lock.Skills).NotTo(HaveKey(skillpacks.DestinationKey(filepath.Join(home, ".claude", "skills", "council"))))
 		Expect(lock.Skills).To(HaveKey(skillpacks.DestinationKey(filepath.Join(home, ".claude", "skills", "full-stop"))))
+	})
+
+	It("refuses refs that git could read as options", func() {
+		f := &skillpacks.GitFetcher{RewriteSource: func(string) string { return "file://" + repoDir }}
+		_, err := f.ResolveRef(context.Background(), testSourceURL, "--upload-pack=touch pwned")
+		Expect(err).To(MatchError(ContainSubstring("must not start with '-'")))
+		sha, err := f.ResolveRef(context.Background(), testSourceURL, "main")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sha).To(Equal(sha1))
 	})
 
 	It("returns an actionable error when git is missing from PATH", func() {
