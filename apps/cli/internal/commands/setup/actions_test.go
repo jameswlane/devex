@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,6 +17,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -49,6 +51,12 @@ var _ = Describe("Dynamic desktop installation", func() {
 	It("runs each selected app and its lifecycle hooks once through the wizard", func() {
 		if _, err := exec.LookPath("bash"); err != nil {
 			Skip("lifecycle hooks with shell operators run through bash")
+		}
+		if runtime.GOOS == "windows" && sdk.NewPrivilegeResolver().Elevated {
+			// The hooks are user-scope. An elevated Windows process (such as
+			// GitHub Actions windows-latest) cannot de-elevate by security
+			// policy. Linux, macOS, and non-elevated Windows runs cover this.
+			Skip("user-scope lifecycle hooks require a non-elevated Windows process")
 		}
 		recorder := filepath.Join(settings.HomeDir, "calls")
 		// Hooks run through bash, which treats Windows backslashes as escapes.
