@@ -202,7 +202,9 @@ func writeAgentSkill(cmd *cobra.Command, destination skillinstall.Destination, o
 		if readErr != nil {
 			return fmt.Errorf("read installed skill: %w", readErr)
 		}
-		identical = reflect.DeepEqual(expected, actual)
+		// The embedded skill has no executable files; compare content and
+		// structure only, as install-skill always has.
+		identical = reflect.DeepEqual(withoutExecutableBits(expected), withoutExecutableBits(actual))
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("inspect skill destination %q: %w", destination.Path(), err)
 	}
@@ -231,4 +233,12 @@ func writeAgentSkill(cmd *cobra.Command, destination skillinstall.Destination, o
 		cmd.Printf("Installed: %s\n", destination.Path())
 	}
 	return nil
+}
+
+func withoutExecutableBits(entries map[string]skillinstall.BundleEntry) map[string]skillinstall.BundleEntry {
+	for name, entry := range entries {
+		entry.Executable = false
+		entries[name] = entry
+	}
+	return entries
 }

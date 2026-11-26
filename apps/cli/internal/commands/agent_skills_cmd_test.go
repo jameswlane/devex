@@ -136,7 +136,8 @@ var _ = Describe("Agent skills CLI commands", func() {
 		}
 		mgr1 := newFixtureSkillPackManager(repoDir, sha1, allOK)
 
-		stdout, _, err := runAgentSkillsCmd(mgr1, "add", "tstack", "--skill", "babysit-pr", "--agent", "claude", "--scope", "user")
+		// --scope defaults to user, so the #413 commands work as written.
+		stdout, _, err := runAgentSkillsCmd(mgr1, "add", "tstack", "--skill", "babysit-pr", "--agent", "claude")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(stdout).To(And(ContainSubstring("Installed"), ContainSubstring("babysit-pr"), ContainSubstring("leaving-pr-comments")))
 
@@ -178,6 +179,16 @@ var _ = Describe("Agent skills CLI commands", func() {
 			ContainSubstring("+# cli update diff test"),
 			ContainSubstring("Skipped (edited)"),
 		))
+		// The plan, with its diffs, is printed before anything is applied.
+		planned, applied, found := strings.Cut(updOut, "\nApplied:")
+		Expect(found).To(BeTrue(), updOut)
+		Expect(planned).To(And(
+			ContainSubstring("Planned changes:"),
+			ContainSubstring("Would replace"),
+			ContainSubstring("+# cli update diff test"),
+		))
+		Expect(applied).To(ContainSubstring("Replaced"))
+		Expect(applied).NotTo(ContainSubstring("+# cli update diff test"))
 
 		// Remove pack with --force backs up edited skill and cleans lock.
 		rmOut, _, err := runAgentSkillsCmd(mgr2, "remove", "tstack", "--agent", "claude", "--scope", "user", "--force")
@@ -203,6 +214,12 @@ var _ = Describe("Agent skills CLI commands", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(stderr).To(ContainSubstring("unreviewed source"))
 		Expect(stdout).To(ContainSubstring("[unreviewed]"))
+
+		// Updating an unreviewed install needs the same explicit opt-in.
+		_, _, err = runAgentSkillsCmd(mgr, "update", "--agent", "claude", "--scope", "user")
+		Expect(err).To(MatchError(ContainSubstring("--allow-unreviewed")))
+		_, _, err = runAgentSkillsCmd(mgr, "update", "--agent", "claude", "--scope", "user", "--allow-unreviewed")
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("runs list from the production root without initializing plugin state", func() {

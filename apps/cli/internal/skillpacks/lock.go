@@ -68,11 +68,6 @@ func UserLockPath() (string, error) {
 	return filepath.Join(dirs.State, LockFileName), nil
 }
 
-// UserLockPathForHome returns the user-scope lock file path for an explicit home directory.
-func UserLockPathForHome(home string) string {
-	return filepath.Join(devexpaths.ForHome(home).State, LockFileName)
-}
-
 // ProjectLockPath returns PROJECT/.devex/agent-skills.lock.json for projectDir
 // (or the current working directory when projectDir is empty).
 func ProjectLockPath(projectDir string) (string, error) {

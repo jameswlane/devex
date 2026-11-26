@@ -688,7 +688,11 @@ func FormatTable(r Report, secrets []string) string {
 	if len(r.SkillPacks) > 0 {
 		b.WriteString("\nSkill Packs:\n")
 		for _, sp := range r.SkillPacks {
-			status := fmt.Sprintf("pinned %s", skillpacks.ShortSHA(sp.PinnedSHA))
+			pins := make([]string, 0, len(sp.PinnedSHAs))
+			for _, sha := range sp.PinnedSHAs {
+				pins = append(pins, skillpacks.ShortSHA(sha))
+			}
+			status := "pinned " + strings.Join(pins, ", ")
 			if sp.UpdateAvailable {
 				status += fmt.Sprintf(" (update available: %s)", skillpacks.ShortSHA(sp.CatalogSHA))
 			}

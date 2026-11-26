@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -35,21 +34,6 @@ type Manager struct {
 	Fetcher      Fetcher
 	Requirements RequirementChecker
 	Now          func() time.Time
-}
-
-// NewDefaultManager constructs a Manager backed by the embedded catalog and the
-// host git and PATH environment.
-func NewDefaultManager() (*Manager, error) {
-	cat, err := LoadEmbeddedCatalog()
-	if err != nil {
-		return nil, err
-	}
-	return &Manager{
-		Catalog:      cat,
-		Fetcher:      DefaultFetcher(),
-		Requirements: DefaultRequirementChecker(),
-		Now:          time.Now,
-	}, nil
 }
 
 func (m *Manager) withDefaults() (*Manager, error) {
@@ -316,6 +300,11 @@ func (m *Manager) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 
 		key := DestinationKey(dest.Path())
 		locked, isManaged := lock.Skills[key]
+		if isManaged {
+			if _, err := validateRecord(locked, lockPath, opts.ProjectDir); err != nil {
+				return nil, err
+			}
+		}
 
 		root, rootExists, err := skillinstall.OpenRoot(dest, opts.Scope, true)
 		if err != nil {
@@ -402,7 +391,7 @@ func (m *Manager) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 	}
 
 	if len(packReqs) > 0 {
-		result.MissingRequirements = CheckRequirements(ctx, mgr.Requirements, packReqs, selectedSkills)
+		result.MissingRequirements = CheckRequirements(ctx, mgr.Requirements, packReqs, selectedSkills, !opts.DryRun)
 	}
 
 	if opts.DryRun {
@@ -420,17 +409,17 @@ func (m *Manager) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 		case ActionInstall, ActionReplace:
 			root, _, err := skillinstall.OpenRoot(w.dest, opts.Scope, false)
 			if err != nil {
-				return nil, err
+				return nil, saveAfterFailure(lockPath, lock, lockDirty, err)
 			}
 			if err := skillinstall.ValidatePath(root, w.dest.Relative); err != nil {
 				_ = root.Close()
-				return nil, err
+				return nil, saveAfterFailure(lockPath, lock, lockDirty, err)
 			}
 			existing := w.item.Action == ActionReplace
 			backupPath, err := skillinstall.StageAndPublish(ctx, root, w.dest, w.snap.FS(), existing, w.item.KeepBackup)
 			_ = root.Close()
 			if err != nil {
-				return nil, err
+				return nil, saveAfterFailure(lockPath, lock, lockDirty, err)
 			}
 			w.item.BackupPath = backupPath
 			lock.Skills[DestinationKey(w.dest.Path())] = InstalledSkill{
@@ -553,6 +542,8 @@ type UpdateOptions struct {
 	ProjectDir string
 	DryRun     bool
 	Overwrite  bool
+	// AllowUnreviewed permits updating skills installed from raw sources.
+	AllowUnreviewed bool
 }
 
 // UpdatePackResult summarizes update results for one pack within one lock scope.
@@ -611,11 +602,13 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 	}
 
 	type groupKey struct {
-		lockPath string
-		pack     string
-		source   string
-		skills   string
-		scope    string
+		lockPath   string
+		pack       string
+		source     string
+		skills     string
+		scope      string
+		ref        string
+		unreviewed bool
 	}
 	type lockBundle struct {
 		lock  *LockFile
@@ -642,12 +635,30 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			if filterPack != "" && entry.Pack != filterPack {
 				continue
 			}
-			gk := groupKey{
-				lockPath: lp,
-				pack:     entry.Pack,
-				source:   entry.Source,
-				skills:   entry.SkillsPath,
-				scope:    entry.Scope,
+			if _, err := validateRecord(entry, lp, opts.ProjectDir); err != nil {
+				return nil, err
+			}
+			// Never trust the source recorded in a lock file on its own: curated
+			// packs fetch from the catalog, and raw sources need the same
+			// explicit opt-in as `add`.
+			gk := groupKey{lockPath: lp, pack: entry.Pack, scope: entry.Scope}
+			if entry.Unreviewed {
+				if !opts.AllowUnreviewed {
+					return nil, fmt.Errorf("skill %q was installed from unreviewed source %q; review it and re-run with --allow-unreviewed", entry.Skill, entry.Source)
+				}
+				if err := validateHTTPSURL(entry.Source); err != nil {
+					return nil, fmt.Errorf("lock entry for %q has an invalid source %q: %w", entry.Destination, entry.Source, err)
+				}
+				if err := validateRelativeSkillsPath(entry.SkillsPath); err != nil {
+					return nil, fmt.Errorf("lock entry for %q has an invalid skills path %q: %w", entry.Destination, entry.SkillsPath, err)
+				}
+				gk.source, gk.skills, gk.ref, gk.unreviewed = entry.Source, entry.SkillsPath, entry.Ref, true
+			} else {
+				catPack, ok := mgr.Catalog.Lookup(entry.Pack)
+				if !ok {
+					return nil, fmt.Errorf("skill %q belongs to pack %q, which is not in the catalog", entry.Skill, entry.Pack)
+				}
+				gk.source, gk.skills = catPack.Source, catPack.Path
 			}
 			if _, seen := groups[gk]; !seen {
 				groupOrder = append(groupOrder, gk)
@@ -680,17 +691,14 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			if err != nil {
 				return nil, err
 			}
-		} else if catPack, ok := mgr.Catalog.Lookup(gk.pack); ok {
+		} else if catPack, ok := mgr.Catalog.Lookup(gk.pack); ok && !gk.unreviewed {
 			targetSHA = catPack.SHA
 			targetRef = catPack.Ref
 			if targetRef == "" {
 				targetRef = catPack.SHA
 			}
-			if catPack.Path != "" {
-				skillsPath = catPack.Path
-			}
 		} else {
-			ref := entries[0].Ref
+			ref := gk.ref
 			if ref == "" {
 				ref = "HEAD"
 			}
@@ -764,7 +772,7 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 				}
 
 				if !opts.DryRun && (item.Action == ActionInstall || item.Action == ActionReplace) {
-					dest, destErr := destinationForInstalled(entry, opts.ProjectDir)
+					dest, destErr := validateRecord(entry, gk.lockPath, opts.ProjectDir)
 					if destErr != nil {
 						return destErr
 					}
@@ -783,6 +791,8 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 					}
 					item.BackupPath = backupPath
 					updated := entry
+					updated.Source = gk.source
+					updated.SkillsPath = skillsPath
 					updated.Ref = targetRef
 					updated.SHA = targetSHA
 					updated.InstalledAt = now
@@ -795,6 +805,11 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			return nil
 		}()
 		if updateErr != nil {
+			if !opts.DryRun {
+				for lp, lb := range locks {
+					updateErr = saveAfterFailure(lp, lb.lock, lb.dirty, updateErr)
+				}
+			}
 			return nil, updateErr
 		}
 		result.Packs = append(result.Packs, packResult)
@@ -865,6 +880,9 @@ func (m *Manager) Remove(opts RemoveOptions) (*RemoveResult, error) {
 	installedSet := map[string]bool{}
 	for _, entry := range lock.SortedEntries() {
 		if entry.Pack == packName && entry.Agent == opts.Agent && entry.Scope == opts.Scope {
+			if _, err := validateRecord(entry, lockPath, opts.ProjectDir); err != nil {
+				return nil, err
+			}
 			installedBySkill[entry.Skill] = entry
 			installedSet[entry.Skill] = true
 		}
@@ -947,6 +965,7 @@ func (m *Manager) Remove(opts RemoveOptions) (*RemoveResult, error) {
 		DryRun:   opts.DryRun,
 	}
 
+	removed := false
 	for _, s := range targetSkills {
 		entry := installedBySkill[s]
 		edited := editedSkills[s]
@@ -961,38 +980,39 @@ func (m *Manager) Remove(opts RemoveOptions) (*RemoveResult, error) {
 			item.Reason = "locally edited; moved to backup rather than deleted"
 		}
 		if !opts.DryRun {
-			dest, destErr := destinationForInstalled(entry, opts.ProjectDir)
+			dest, destErr := validateRecord(entry, lockPath, opts.ProjectDir)
 			if destErr != nil {
-				return nil, destErr
+				return nil, saveAfterFailure(lockPath, lock, removed, destErr)
 			}
 			_, statErr := os.Lstat(entry.Destination)
 			if statErr == nil {
 				root, _, openErr := skillinstall.OpenRoot(dest, entry.Scope, false)
 				if openErr != nil {
-					return nil, openErr
+					return nil, saveAfterFailure(lockPath, lock, removed, openErr)
 				}
 				if err := skillinstall.ValidatePath(root, dest.Relative); err != nil {
 					_ = root.Close()
-					return nil, err
+					return nil, saveAfterFailure(lockPath, lock, removed, err)
 				}
 				if edited {
 					backupPath, backupErr := skillinstall.BackupExisting(root, dest)
 					_ = root.Close()
 					if backupErr != nil {
-						return nil, backupErr
+						return nil, saveAfterFailure(lockPath, lock, removed, backupErr)
 					}
 					item.BackupPath = backupPath
 				} else {
 					rmErr := root.RemoveAll(dest.Relative)
 					_ = root.Close()
 					if rmErr != nil {
-						return nil, fmt.Errorf("remove skill %q: %w", entry.Destination, rmErr)
+						return nil, saveAfterFailure(lockPath, lock, removed, fmt.Errorf("remove skill %q: %w", entry.Destination, rmErr))
 					}
 				}
 			} else if !errors.Is(statErr, os.ErrNotExist) {
-				return nil, fmt.Errorf("inspect skill %q: %w", entry.Destination, statErr)
+				return nil, saveAfterFailure(lockPath, lock, removed, fmt.Errorf("inspect skill %q: %w", entry.Destination, statErr))
 			}
 			delete(lock.Skills, DestinationKey(entry.Destination))
+			removed = true
 		}
 		result.Items = append(result.Items, item)
 	}
@@ -1040,23 +1060,53 @@ func resolveScopeLockPaths(scope, projectDir string) ([]string, error) {
 	}
 }
 
-func destinationForInstalled(entry InstalledSkill, projectDir string) (skillinstall.Destination, error) {
-	if resolved, err := skillinstall.ResolveDestination(entry.Agent, entry.Scope, projectDir, entry.Skill); err == nil {
-		if DestinationKey(resolved.Path()) == DestinationKey(entry.Destination) {
-			return resolved, nil
-		}
+// validateRecord checks that a lock entry describes exactly the destination
+// DevEx would resolve for its agent, scope and skill, and that it was read from
+// the lock file of that scope. A project lock comes from a checkout and is not
+// trusted on its own: a record that names any other path is rejected, so update
+// and remove never act on directories outside the resolved skill destination.
+func validateRecord(entry InstalledSkill, lockPath, projectDir string) (skillinstall.Destination, error) {
+	invalid := func(reason string) (skillinstall.Destination, error) {
+		return skillinstall.Destination{}, fmt.Errorf("lock file %q has an invalid entry for %q: %s; remove the entry or reinstall the skill", lockPath, entry.Destination, reason)
 	}
-	// Fall back to anchoring at the parent of the skills/ directory so custom
-	// project paths or changed KIMI_CODE_HOME still validate safely via os.Root.
-	clean := filepath.Clean(entry.Destination)
-	skillsDir := filepath.Dir(clean)
-	rootDir := filepath.Dir(skillsDir)
-	rel, err := filepath.Rel(rootDir, clean)
+	if err := skillinstall.ValidateAgent(entry.Agent); err != nil {
+		return invalid(err.Error())
+	}
+	if err := skillinstall.ValidateSkillName(entry.Skill); err != nil {
+		return invalid(err.Error())
+	}
+	if entry.Scope != "user" && entry.Scope != "project" {
+		return invalid(fmt.Sprintf("unsupported scope %q", entry.Scope))
+	}
+	scopeProjectDir := ""
+	if entry.Scope == "project" {
+		scopeProjectDir = projectDir
+	}
+	expectedLock, err := LockPath(entry.Scope, scopeProjectDir)
 	if err != nil {
-		return skillinstall.Destination{}, fmt.Errorf("resolve root for %q: %w", entry.Destination, err)
+		return skillinstall.Destination{}, err
 	}
-	return skillinstall.Destination{
-		Root:     rootDir,
-		Relative: filepath.ToSlash(rel),
-	}, nil
+	if DestinationKey(expectedLock) != DestinationKey(lockPath) {
+		return invalid(fmt.Sprintf("%s-scope entries belong in %q", entry.Scope, expectedLock))
+	}
+	resolved, err := skillinstall.ResolveDestination(entry.Agent, entry.Scope, scopeProjectDir, entry.Skill)
+	if err != nil {
+		return skillinstall.Destination{}, err
+	}
+	if DestinationKey(resolved.Path()) != DestinationKey(entry.Destination) {
+		return invalid(fmt.Sprintf("expected destination %q", resolved.Path()))
+	}
+	return resolved, nil
+}
+
+// saveAfterFailure records the changes that completed before err so the lock
+// keeps matching the skill directories on disk, then returns err.
+func saveAfterFailure(lockPath string, lock *LockFile, dirty bool, err error) error {
+	if !dirty {
+		return err
+	}
+	if saveErr := SaveLock(lockPath, lock); saveErr != nil {
+		return errors.Join(err, fmt.Errorf("record completed changes in %q: %w", lockPath, saveErr))
+	}
+	return err
 }

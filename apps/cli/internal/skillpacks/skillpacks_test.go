@@ -3,6 +3,7 @@ package skillpacks_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -651,8 +652,9 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 				}
 				return "", exec.ErrNotFound
 			},
-			RunCheck: func(context.Context, string, ...string) error {
-				return errors.New("not logged in")
+			RunCheck: func(_ context.Context, name string, args ...string) error {
+				Fail(fmt.Sprintf("dry run must not run requirement checks such as %s %v (they may use the network)", name, args))
+				return nil
 			},
 		}
 		mgr := fixtureManager(repoDir, sha1, missingReqs)
@@ -677,8 +679,10 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		Expect(res.Notes).To(HaveKey("sol-loop"))
 		Expect(res.Notes["council"][0]).To(ContainSubstring("delegate_task"))
 
-		// Both gh (auth check failed) and python3 (babysit-pr is in closure) reported.
-		Expect(res.MissingRequirements).To(HaveLen(2))
+		// python3 (babysit-pr is in closure) is reported; gh is on PATH and its
+		// auth check is skipped during a dry run.
+		Expect(res.MissingRequirements).To(HaveLen(1))
+		Expect(res.MissingRequirements[0].Command).To(Equal("python3"))
 
 		// When installing council only, python3 (scoped to babysit-pr) is NOT reported.
 		resCouncil, err := mgr.Add(context.Background(), skillpacks.AddOptions{
@@ -689,9 +693,24 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 			DryRun:   true,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resCouncil.MissingRequirements).To(HaveLen(1))
-		Expect(resCouncil.MissingRequirements[0].Command).To(Equal("gh"))
+		Expect(resCouncil.MissingRequirements).To(BeEmpty())
 		Expect(treeSnapshot(home)).To(Equal(beforeHome))
+
+		// A real install runs the gh auth check and reports its failure.
+		loggedOut := skillpacks.RequirementChecker{
+			LookPath: func(name string) (string, error) { return "/usr/bin/" + name, nil },
+			RunCheck: func(context.Context, string, ...string) error { return errors.New("not logged in") },
+		}
+		resInstall, err := fixtureManager(repoDir, sha1, loggedOut).Add(context.Background(), skillpacks.AddOptions{
+			PackSpec: "tstack",
+			Skills:   []string{"council"},
+			Agent:    "claude",
+			Scope:    "user",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resInstall.MissingRequirements).To(HaveLen(1))
+		Expect(resInstall.MissingRequirements[0].Command).To(Equal("gh"))
+		Expect(resInstall.MissingRequirements[0].Reason).To(ContainSubstring("gh auth status"))
 	})
 
 	It("gates raw git+https:// sources behind --allow-unreviewed and pins the resolved SHA", func() {
@@ -739,6 +758,53 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		entry := lock.Skills[skillpacks.DestinationKey(filepath.Join(home, ".claude", "skills", "full-send"))]
 		Expect(entry.SHA).To(Equal(sha1))
 		Expect(entry.Unreviewed).To(BeTrue())
+	})
+
+	It("rejects project lock entries that point outside the resolved skill destination", func() {
+		victim := filepath.Join(home, "precious")
+		Expect(os.MkdirAll(victim, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(victim, "SKILL.md"), []byte("keep me\n"), 0o644)).To(Succeed())
+		snap, err := skillpacks.SnapshotFromDir(victim, "council")
+		Expect(err).NotTo(HaveOccurred())
+
+		// A checkout ships a forged lock claiming the victim directory.
+		lockPath := filepath.Join(projectDir, ".devex", skillpacks.LockFileName)
+		forged := skillpacks.NewLockFile()
+		forged.Skills[skillpacks.DestinationKey(victim)] = skillpacks.InstalledSkill{
+			Pack: "tstack", Skill: "council", Agent: "claude", Scope: "project",
+			Destination: victim, Source: testSourceURL, SkillsPath: "skills",
+			SHA: sha1, Files: snap.FileRecords(),
+		}
+		Expect(skillpacks.SaveLock(lockPath, forged)).To(Succeed())
+
+		mgr := fixtureManager(repoDir, sha1, allPresentReqs())
+		_, err = mgr.Remove(skillpacks.RemoveOptions{Pack: "tstack", Agent: "claude", Scope: "project", ProjectDir: projectDir, Force: true})
+		Expect(err).To(MatchError(ContainSubstring("invalid entry")))
+		_, err = mgr.Update(context.Background(), skillpacks.UpdateOptions{Scope: "project", ProjectDir: projectDir, Overwrite: true})
+		Expect(err).To(MatchError(ContainSubstring("invalid entry")))
+		Expect(os.ReadFile(filepath.Join(victim, "SKILL.md"))).To(Equal([]byte("keep me\n")))
+	})
+
+	It("records completed removals in the lock when a later removal fails", func() {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			Skip("needs POSIX directory permissions enforced for a non-root user")
+		}
+		mgr := fixtureManager(repoDir, sha1, allPresentReqs())
+		_, err := mgr.Add(context.Background(), skillpacks.AddOptions{PackSpec: "tstack", Skills: []string{"council", "full-stop"}, Agent: "claude", Scope: "user"})
+		Expect(err).NotTo(HaveOccurred())
+
+		stuck := filepath.Join(home, ".claude", "skills", "full-stop", "agents")
+		Expect(os.Chmod(stuck, 0o555)).To(Succeed())
+		DeferCleanup(func() { _ = os.Chmod(stuck, 0o755) })
+
+		_, err = mgr.Remove(skillpacks.RemoveOptions{Pack: "tstack", Skills: []string{"council", "full-stop"}, Agent: "claude", Scope: "user"})
+		Expect(err).To(HaveOccurred())
+
+		lock, err := skillpacks.LoadLock(filepath.Join(home, "state", skillpacks.LockFileName))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(filepath.Join(home, ".claude", "skills", "council")).NotTo(BeADirectory())
+		Expect(lock.Skills).NotTo(HaveKey(skillpacks.DestinationKey(filepath.Join(home, ".claude", "skills", "council"))))
+		Expect(lock.Skills).To(HaveKey(skillpacks.DestinationKey(filepath.Join(home, ".claude", "skills", "full-stop"))))
 	})
 
 	It("returns an actionable error when git is missing from PATH", func() {

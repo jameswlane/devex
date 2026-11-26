@@ -55,8 +55,10 @@ type MissingRequirement struct {
 }
 
 // CheckRequirements evaluates pack requirements whose skill filter intersects
-// selectedSkills (an empty skill filter applies to the whole pack).
-func CheckRequirements(ctx context.Context, checker RequirementChecker, reqs []Requirement, selectedSkills []string) []MissingRequirement {
+// selectedSkills (an empty skill filter applies to the whole pack). When
+// runChecks is false (dry runs), only PATH lookups run: check commands such as
+// `gh auth status` may contact the network, so they are skipped.
+func CheckRequirements(ctx context.Context, checker RequirementChecker, reqs []Requirement, selectedSkills []string, runChecks bool) []MissingRequirement {
 	checker = checker.withDefaults()
 	var missing []MissingRequirement
 	for _, req := range reqs {
@@ -71,7 +73,7 @@ func CheckRequirements(ctx context.Context, checker RequirementChecker, reqs []R
 			})
 			continue
 		}
-		if len(req.Check) > 0 {
+		if runChecks && len(req.Check) > 0 {
 			if err := checker.RunCheck(ctx, req.Check[0], req.Check[1:]...); err != nil {
 				missing = append(missing, MissingRequirement{
 					Command: req.Command,

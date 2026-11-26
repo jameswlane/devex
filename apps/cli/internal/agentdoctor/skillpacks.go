@@ -11,10 +11,13 @@ import (
 
 // SkillPackReport summarizes one installed skill pack for a given agent and scope.
 type SkillPackReport struct {
-	Pack            string   `json:"pack"`
-	Agent           string   `json:"agent"`
-	Scope           string   `json:"scope"`
+	Pack  string `json:"pack"`
+	Agent string `json:"agent"`
+	Scope string `json:"scope"`
+	// PinnedSHA is the pin shared by every skill in the group, or "mixed"
+	// when an update skipped some skills (see PinnedSHAs).
 	PinnedSHA       string   `json:"pinned_sha"`
+	PinnedSHAs      []string `json:"pinned_shas"`
 	CatalogSHA      string   `json:"catalog_sha,omitempty"`
 	UpdateAvailable bool     `json:"update_available"`
 	Skills          []string `json:"skills"`
@@ -44,7 +47,7 @@ func checkSkillPacks(probe Probe, agents []AgentSpec) []SkillPackReport {
 		scope string
 	}
 	type groupState struct {
-		pinnedSHA     string
+		pinnedSHAs    map[string]bool
 		unreviewed    bool
 		skills        []string
 		locallyEdited []string
@@ -79,12 +82,15 @@ func checkSkillPacks(probe Probe, agents []AgentSpec) []SkillPackReport {
 			st, ok := groups[gk]
 			if !ok {
 				st = &groupState{
-					pinnedSHA:  entry.SHA,
+					pinnedSHAs: map[string]bool{},
 					unreviewed: entry.Unreviewed,
 				}
 				groups[gk] = st
 			}
 			st.skills = append(st.skills, entry.Skill)
+			if entry.SHA != "" {
+				st.pinnedSHAs[strings.ToLower(entry.SHA)] = true
+			}
 			if edited, editErr := skillpacks.CheckLocalEdits(entry); editErr == nil && edited {
 				st.locallyEdited = append(st.locallyEdited, entry.Skill)
 			}
@@ -103,7 +109,7 @@ func checkSkillPacks(probe Probe, agents []AgentSpec) []SkillPackReport {
 			Pack:          gk.pack,
 			Agent:         gk.agent,
 			Scope:         gk.scope,
-			PinnedSHA:     st.pinnedSHA,
+			PinnedSHAs:    make([]string, 0, len(st.pinnedSHAs)),
 			Skills:        st.skills,
 			LocallyEdited: st.locallyEdited,
 			Unreviewed:    st.unreviewed,
@@ -111,10 +117,23 @@ func checkSkillPacks(probe Probe, agents []AgentSpec) []SkillPackReport {
 		if catalog != nil {
 			if catPack, ok := catalog.Lookup(gk.pack); ok {
 				rep.CatalogSHA = catPack.SHA
-				if st.pinnedSHA != "" && !strings.EqualFold(st.pinnedSHA, catPack.SHA) {
-					rep.UpdateAvailable = true
+				for sha := range st.pinnedSHAs {
+					if !strings.EqualFold(sha, catPack.SHA) {
+						rep.UpdateAvailable = true
+					}
 				}
 			}
+		}
+		for sha := range st.pinnedSHAs {
+			rep.PinnedSHAs = append(rep.PinnedSHAs, sha)
+		}
+		sort.Strings(rep.PinnedSHAs)
+		switch len(rep.PinnedSHAs) {
+		case 0:
+		case 1:
+			rep.PinnedSHA = rep.PinnedSHAs[0]
+		default:
+			rep.PinnedSHA = "mixed"
 		}
 		reports = append(reports, rep)
 	}

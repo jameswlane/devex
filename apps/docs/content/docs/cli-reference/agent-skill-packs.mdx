@@ -10,8 +10,8 @@ description: Install, pin, inspect, update, and remove curated third-party agent
 devex agent skills add tstack --agent claude --scope user --dry-run
 
 # Install all nine tstack skills for Claude Code or Codex
-devex agent skills add tstack --agent claude --scope user
-devex agent skills add tstack --agent codex --scope user
+devex agent skills add tstack --agent claude
+devex agent skills add tstack --agent codex
 
 # Install only full-send and its dependency closure
 devex agent skills add tstack --skill full-send --agent claude --scope user
@@ -39,7 +39,7 @@ Installs a curated pack from the embedded catalog or a raw `git+https://` reposi
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--agent` | *(required)* | Target agent: `claude`, `codex`, or `kimi` |
-| `--scope` | *(required)* | Installation scope: `user` or `project` |
+| `--scope` | `user` | Installation scope: `user` or `project` |
 | `--project-dir` | current directory | Explicit project root (valid only with `--scope project`) |
 | `--skill` | all catalog skills | Comma-separated or repeated skill names; resolves the full dependency closure for catalog packs |
 | `--dry-run` | `false` | Preview the complete plan, notes, and missing requirements with zero writes |
@@ -63,7 +63,7 @@ Lists installed DevEx-managed skills from the lock file, reporting `pack`, `skil
 
 ### `devex agent skills update [<pack>[@ref]]`
 
-Updates installed skill packs to the current embedded catalog `sha`, or to an explicit `<pack>@<ref>`. Before writing, `update` prints:
+Updates installed skill packs to the current embedded catalog `sha`, or to an explicit `<pack>@<ref>`. Curated packs are always fetched from the catalog source, never from a URL recorded in a lock file. Before writing anything, `update` prints the complete plan (`Planned changes:`), then applies it and prints the result (`Applied:`). The plan contains:
 
 1. A file-level diff (`A` added, `D` removed, `M` modified, including mode changes) for each changed skill.
 2. The full unified line diff for any changed files under `scripts/` (such as `babysit-pr/scripts/pr-wait`).
@@ -75,6 +75,7 @@ Updates installed skill packs to the current embedded catalog `sha`, or to an ex
 | `--project-dir` | current directory | Project root when updating project scope |
 | `--dry-run` | `false` | Preview diffs and planned actions without writing |
 | `--overwrite` | `false` | Replace locally edited skills and keep a `.devex-backup-*` backup |
+| `--allow-unreviewed` | `false` | Allow updating skills installed from a raw `git+https://` source |
 
 ### `devex agent skills remove <pack>`
 
@@ -83,7 +84,7 @@ Removes DevEx-managed skills recorded in the lock file for `--agent` and `--scop
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--agent` | *(required)* | Target agent: `claude`, `codex`, or `kimi` |
-| `--scope` | *(required)* | Installation scope: `user` or `project` |
+| `--scope` | `user` | Installation scope: `user` or `project` |
 | `--project-dir` | current directory | Project root (valid only with `--scope project`) |
 | `--skill` | all pack skills | Specific skill(s) to remove |
 | `--force` | `false` | Override dependency checks and move locally edited skills to a `.devex-backup-*` sibling |
@@ -121,6 +122,8 @@ Installed skill packs are tracked in a JSON lock file written atomically with mo
 - **User scope**: `$DEVEX_STATE_DIR/agent-skills.lock.json` (typically `~/.local/state/devex/agent-skills.lock.json`).
 - **Project scope**: `PROJECT/.devex/agent-skills.lock.json`.
 
+Before `add`, `update`, or `remove` acts on a lock entry, DevEx checks that the entry names exactly the destination it would resolve for that agent, scope, and skill, and that it was read from that scope's lock file. A project lock ships with the checkout, so an entry that points anywhere else is rejected rather than trusted. If a command fails partway, the lock still records the skills that were already installed, updated, or removed.
+
 Entries are keyed by destination path so the same pack can be installed independently for Claude Code, Codex, and Kimi Code. Each entry stores the pack name, skill name, agent, scope, destination path, source URL, ref, pinned commit SHA, installation timestamp, and a sorted list of `{path, sha256, mode}` file records.
 
 Before modifying or removing a managed skill, DevEx hashes the directory on disk and compares file sets, SHA-256 digests, and normalized executable bits (`0755` vs `0644`):
@@ -134,7 +137,7 @@ Before modifying or removing a managed skill, DevEx hashes the directory on disk
 
 Catalog entries can declare external prerequisites and skill-specific notes:
 
-- **Requirements**: `tstack` declares an authenticated GitHub CLI (`gh auth status`) for the pack and `python3` for `babysit-pr`'s `scripts/pr-wait`. DevEx checks requirements whose skill filter intersects the selected closure (using `PATH` lookup and silent bounded command checks) and prints missing requirements with install/login hints. DevEx never installs requirements silently.
+- **Requirements**: `tstack` declares an authenticated GitHub CLI (`gh auth status`) for the pack and `python3` for `babysit-pr`'s `scripts/pr-wait`. DevEx checks requirements whose skill filter intersects the selected closure (using `PATH` lookup and silent bounded command checks) and prints missing requirements with install/login hints. During `--dry-run`, only the `PATH` lookups run: check commands such as `gh auth status` can contact the network, so they are skipped. DevEx never installs requirements silently.
 - **Multi-provider subagents (`council` and `sol-loop`)**: Both `council` and `sol-loop` require subagents running on other providers' models (for example T3 Code's `delegate_task` or an equivalent harness). DevEx does not configure that harness; this note is printed in `--dry-run` plans and normal installs whenever either skill is selected.
 
 ## Diagnostics in `devex agent doctor`
@@ -142,7 +145,7 @@ Catalog entries can declare external prerequisites and skill-specific notes:
 [`devex agent doctor`](/docs/cli-reference/agent-doctor) inspects both the user lock file and any project lock file in the current working directory (without making network calls). In both table and JSON output it reports:
 
 - Installed packs per agent and scope
-- Pinned commit SHA
+- Pinned commit SHA (every distinct pin, when an update skipped some skills; `pinned_sha` is then `mixed`)
 - Whether an update is available compared to the embedded catalog SHA
 - Which installed skills have local edits
 
@@ -151,7 +154,7 @@ Catalog entries can declare external prerequisites and skill-specific notes:
 Agent skills are **instructions plus executable scripts** that your coding agent will read and run in your environment. Always review a skill pack before installing or updating it:
 
 - **Curated catalog packs** pin a reviewed commit SHA in `apps/cli/config/skill-packs/`.
-- **Raw `git+https://` sources** are rejected unless you explicitly pass `--allow-unreviewed`, print a prominent unreviewed-source warning, skip dependency resolution (installing only the requested skills), and pin the resolved commit SHA in the lock file.
+- **Raw `git+https://` sources** are rejected unless you explicitly pass `--allow-unreviewed` (on both `add` and `update`), print a prominent unreviewed-source warning, skip dependency resolution (installing only the requested skills), and pin the resolved commit SHA in the lock file.
 - **Safe fetching and staging**: DevEx fetches into a temporary directory with `GIT_TERMINAL_PROMPT=0` and Git hooks disabled (`core.hooksPath` pointed at the null device), verifies `HEAD` equals the pinned SHA, rejects symlinks, non-regular files, and path traversal (`..`), and publishes skills atomically through `os.Root`.
 
 ## Catalog format

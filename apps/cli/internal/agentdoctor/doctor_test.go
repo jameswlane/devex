@@ -777,6 +777,23 @@ fi`)
 			SHA:         tstackPack.SHA,
 			Files:       snap.FileRecords(),
 		}
+		// A second codex skill still on an old pin (an update skipped it).
+		staleSkillDir := filepath.Join(project, ".agents", "skills", "sol-loop")
+		Expect(os.MkdirAll(staleSkillDir, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(staleSkillDir, "SKILL.md"), []byte("old\n"), 0o644)).To(Succeed())
+		staleSnap, err := skillpacks.SnapshotFromDir(staleSkillDir, "sol-loop")
+		Expect(err).NotTo(HaveOccurred())
+		projectLock.Skills[skillpacks.DestinationKey(staleSkillDir)] = skillpacks.InstalledSkill{
+			Pack:        "tstack",
+			Skill:       "sol-loop",
+			Agent:       "codex",
+			Scope:       "project",
+			Destination: staleSkillDir,
+			Source:      tstackPack.Source,
+			SkillsPath:  "skills",
+			SHA:         "0000000000000000000000000000000000000002",
+			Files:       staleSnap.FileRecords(),
+		}
 		Expect(skillpacks.SaveLock(projectLockPath, projectLock)).To(Succeed())
 
 		probe := makeOSBackedProbe(home, nil, nil, okSandboxProbe(nil), nil)
@@ -799,7 +816,9 @@ fi`)
 		Expect(claudePack.LocallyEdited).To(Equal([]string{"file-pr"}))
 
 		codexPack := byKey["codex:project"]
-		Expect(codexPack.UpdateAvailable).To(BeFalse())
+		Expect(codexPack.PinnedSHA).To(Equal("mixed"))
+		Expect(codexPack.PinnedSHAs).To(ConsistOf(tstackPack.SHA, "0000000000000000000000000000000000000002"))
+		Expect(codexPack.UpdateAvailable).To(BeTrue())
 		Expect(codexPack.LocallyEdited).To(BeEmpty())
 
 		table := agentdoctor.FormatTable(report, nil)

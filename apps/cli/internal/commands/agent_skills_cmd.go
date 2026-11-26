@@ -64,7 +64,7 @@ dependency closure. Pass --dry-run to preview the full plan without writing.`,
 	}
 	cmd.Flags().StringSliceVar(&opts.Skills, "skill", nil, "Specific skill(s) to install along with their dependency closure")
 	cmd.Flags().StringVar(&opts.Agent, "agent", "", "Agent to install for: claude, codex or kimi (required)")
-	cmd.Flags().StringVar(&opts.Scope, "scope", "", "Installation scope: user or project (required)")
+	cmd.Flags().StringVar(&opts.Scope, "scope", "user", "Installation scope: user or project")
 	cmd.Flags().StringVar(&opts.ProjectDir, "project-dir", "", "Project root (default: current working directory)")
 	cmd.Flags().StringVar(&opts.SkillsPath, "skills-path", "skills", "Subdirectory containing skills inside a raw git+https:// repository")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Preview without writing files or updating the lock file")
@@ -143,11 +143,37 @@ which retains a .devex-backup-* backup.`,
 			if len(args) == 1 {
 				runOpts.PackSpec = args[0]
 			}
+			if runOpts.DryRun {
+				res, err := manager.Update(cmd.Context(), runOpts)
+				if err != nil {
+					return err
+				}
+				if len(res.Packs) > 0 {
+					cmd.Println("Dry run (no files or lock entries written):")
+				}
+				renderSkillPackUpdateResult(cmd, res, true)
+				return nil
+			}
+			// Show the complete plan, including file and script diffs, before
+			// anything is written.
+			planOpts := runOpts
+			planOpts.DryRun = true
+			plan, err := manager.Update(cmd.Context(), planOpts)
+			if err != nil {
+				return err
+			}
+			if len(plan.Packs) == 0 {
+				renderSkillPackUpdateResult(cmd, plan, true)
+				return nil
+			}
+			cmd.Println("Planned changes:")
+			renderSkillPackUpdateResult(cmd, plan, true)
 			res, err := manager.Update(cmd.Context(), runOpts)
 			if err != nil {
 				return err
 			}
-			renderSkillPackUpdateResult(cmd, res)
+			cmd.Println("\nApplied:")
+			renderSkillPackUpdateResult(cmd, res, false)
 			return nil
 		},
 	}
@@ -156,6 +182,7 @@ which retains a .devex-backup-* backup.`,
 	cmd.Flags().StringVar(&opts.ProjectDir, "project-dir", "", "Project root for project scope (default: current working directory)")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Preview updates and diffs without writing")
 	cmd.Flags().BoolVar(&opts.Overwrite, "overwrite", false, "Replace locally edited skills and retain a backup")
+	cmd.Flags().BoolVar(&opts.AllowUnreviewed, "allow-unreviewed", false, "Allow updating skills installed from unreviewed raw git+https:// sources")
 	return cmd
 }
 
@@ -185,7 +212,7 @@ instead of being deleted. Unmanaged directories are never touched.`,
 	}
 	cmd.Flags().StringSliceVar(&opts.Skills, "skill", nil, "Specific skill(s) to remove (default: all skills in the pack)")
 	cmd.Flags().StringVar(&opts.Agent, "agent", "", "Agent to remove from: claude, codex or kimi (required)")
-	cmd.Flags().StringVar(&opts.Scope, "scope", "", "Installation scope: user or project (required)")
+	cmd.Flags().StringVar(&opts.Scope, "scope", "user", "Installation scope: user or project")
 	cmd.Flags().StringVar(&opts.ProjectDir, "project-dir", "", "Project root (default: current working directory)")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Override dependency checks and move locally edited skills to a backup")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Preview removals without modifying files or the lock file")
@@ -249,13 +276,10 @@ func renderSkillPackAddResult(cmd *cobra.Command, res *skillpacks.AddResult) {
 	}
 }
 
-func renderSkillPackUpdateResult(cmd *cobra.Command, res *skillpacks.UpdateResult) {
+func renderSkillPackUpdateResult(cmd *cobra.Command, res *skillpacks.UpdateResult, showDiffs bool) {
 	if len(res.Packs) == 0 {
 		cmd.Println("No installed skill packs to update.")
 		return
-	}
-	if res.DryRun {
-		cmd.Println("Dry run (no files or lock entries written):")
 	}
 	for _, pack := range res.Packs {
 		cmd.Printf("Pack: %s -> %s (%s scope)\n", pack.Pack, skillpacks.ShortSHA(pack.Target), pack.Scope)
@@ -265,7 +289,7 @@ func renderSkillPackUpdateResult(cmd *cobra.Command, res *skillpacks.UpdateResul
 				cmd.Printf(" (%s)", item.Reason)
 			}
 			cmd.Println()
-			if item.Diff != nil && item.Diff.HasChanges() {
+			if showDiffs && item.Diff != nil && item.Diff.HasChanges() {
 				for _, ch := range item.Diff.Changes {
 					prefix := "M"
 					switch ch.Kind {
