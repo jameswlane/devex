@@ -60,12 +60,19 @@ linux:
       official_support: true
       platform_requirements:
         - os: fedora
+        - os: amazonlinux
+          version: 2+
+    # CentOS/RHEL comps name the "Development Tools" group "development", not Fedora's "development-tools".
+    # Alma and Rocky reach this entry through ID_LIKE="rhel centos fedora".
+    - install_method: dnf
+      install_command: '@development pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel'
+      uninstall_command: '@development pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel'
+      official_support: true
+      platform_requirements:
         - os: centos
           version: 8+
         - os: rhel
           version: 8+
-        - os: amazonlinux
-          version: 2+
     - install_method: pacman
       install_command: base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql
       uninstall_command: base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql
