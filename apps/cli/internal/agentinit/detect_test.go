@@ -222,6 +222,19 @@ tasks:
 				LintCommands: []string{"go vet ./..."},
 			},
 		),
+		Entry("justfile recipes needing arguments are not listed, defaulted ones are",
+			map[string]string{
+				"go.mod":   "module example.com/demo\n",
+				"justfile": "test target:\n  go test {{target}}\n\nlint fix=\"false\" *args:\n  golangci-lint run {{args}}\n",
+			},
+			agentinit.ProjectInfo{
+				ProjectName:  "go-just-args",
+				Languages:    []string{"Go"},
+				TaskRunner:   "just",
+				TestCommands: []string{"go test ./..."},
+				LintCommands: []string{"just lint"},
+			},
+		),
 		Entry("mise.toml with [tasks] table detects mise runner and targets",
 			map[string]string{
 				"go.mod":    "module example.com/demo\n",

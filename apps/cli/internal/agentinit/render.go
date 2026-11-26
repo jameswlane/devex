@@ -178,7 +178,13 @@ func PlanGitignoreAppend(existing []byte, exists bool) ([]byte, bool) {
 		for _, line := range strings.Split(string(existing), "\n") {
 			// Like git: drop one CR before the newline, then unescaped trailing
 			// spaces; leading spaces stay significant.
-			present[strings.TrimRight(strings.TrimSuffix(line, "\r"), " ")] = true
+			// The last matching pattern wins, so a later "!entry" re-includes it.
+			pattern := strings.TrimRight(strings.TrimSuffix(line, "\r"), " ")
+			if negated, ok := strings.CutPrefix(pattern, "!"); ok {
+				present[negated] = false
+				continue
+			}
+			present[pattern] = true
 		}
 	}
 

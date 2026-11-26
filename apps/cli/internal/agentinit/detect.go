@@ -22,7 +22,7 @@ type ProjectInfo struct {
 }
 
 var (
-	justRecipeRe = regexp.MustCompile(`^@?([A-Za-z_][A-Za-z0-9_-]*)(?:\s+[^:=]*?)?:\s*(?:[^=]|$)`)
+	justRecipeRe = regexp.MustCompile(`^@?([A-Za-z_][A-Za-z0-9_-]*)((?:\s+[^:]*?)?):\s*(?:[^=]|$)`)
 	railsGemRe   = regexp.MustCompile(`(?m)^\s*gem\s+['"]rails['"]`)
 )
 
@@ -216,7 +216,7 @@ func parseJustfileRecipes(fsys fs.FS, name string) (hasTest, hasLint bool) {
 			continue
 		}
 		m := justRecipeRe.FindStringSubmatch(line)
-		if len(m) < 2 {
+		if len(m) < 3 || !justRecipeRunsWithoutArgs(m[2]) {
 			continue
 		}
 		switch m[1] {
@@ -227,6 +227,18 @@ func parseJustfileRecipes(fsys fs.FS, name string) (hasTest, hasLint bool) {
 		}
 	}
 	return hasTest, hasLint
+}
+
+// justRecipeRunsWithoutArgs reports whether every parameter has a default or is
+// variadic with zero-or-more (*), so `just <recipe>` runs as written.
+func justRecipeRunsWithoutArgs(params string) bool {
+	for _, param := range strings.Fields(params) {
+		param = strings.TrimPrefix(param, "$")
+		if !strings.HasPrefix(param, "*") && !strings.Contains(param, "=") {
+			return false
+		}
+	}
+	return true
 }
 
 func parseMakefileTargets(fsys fs.FS, name string) (hasTest, hasLint bool) {

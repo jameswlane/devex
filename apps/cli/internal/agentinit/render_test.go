@@ -81,6 +81,13 @@ var _ = Describe("Agent init rendering", func() {
 			Expect(again).To(Equal(out))
 		})
 
+		It("re-adds an entry that a later negation re-includes", func() {
+			existing := []byte(".claude/settings.local.json\nCLAUDE.local.md\n!CLAUDE.local.md\n")
+			out, changed := agentinit.PlanGitignoreAppend(existing, true)
+			Expect(changed).To(BeTrue())
+			Expect(string(out)).To(Equal(string(existing) + "# DevEx agent-local files\nCLAUDE.local.md\n"))
+		})
+
 		It("treats leading-space patterns as different, since git keeps leading spaces", func() {
 			existing := []byte("  .claude/settings.local.json\nCLAUDE.local.md  \r\n")
 			out, changed := agentinit.PlanGitignoreAppend(existing, true)
