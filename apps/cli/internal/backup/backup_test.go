@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -54,13 +55,22 @@ var _ = Describe("Backup manager", func() {
 	})
 
 	It("assigns distinct IDs to backups created within the same second", func() {
-		second, err := manager.CreateBackup(backup.BackupOptions{Type: "version", Compress: true})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(second.ID).NotTo(Equal(id))
+		DeferCleanup(backup.FreezeClock(time.Date(2026, 11, 25, 12, 0, 0, 0, time.Local)))
+		ids := make([]string, 3)
+		for i := range ids {
+			metadata, err := manager.CreateBackup(backup.BackupOptions{Type: "version", Compress: true})
+			Expect(err).NotTo(HaveOccurred())
+			ids[i] = metadata.ID
+		}
+		Expect(ids).To(Equal([]string{
+			"backup-20261125-120000",
+			"backup-20261125-120000-1",
+			"backup-20261125-120000-2",
+		}))
 
 		backups, err := manager.ListBackups("", 0)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(backups).To(HaveLen(2))
+		Expect(backups).To(HaveLen(4))
 	})
 
 	Context("on a machine with no configuration yet", func() {

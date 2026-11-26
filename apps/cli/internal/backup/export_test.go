@@ -1,6 +1,9 @@
 package backup
 
-import "os"
+import (
+	"os"
+	"time"
+)
 
 // FailIndexWrites makes index writes stop halfway with err, as on a full
 // disk, and returns a restore function.
@@ -19,4 +22,12 @@ func BeforeFreshRestore(hook func(targetDir string)) (restore func()) {
 	previous := beforeFreshRestore
 	beforeFreshRestore = hook
 	return func() { beforeFreshRestore = previous }
+}
+
+// FreezeClock makes backup IDs use t as the current time, and returns a
+// restore function.
+func FreezeClock(t time.Time) (restore func()) {
+	previous := now
+	now = func() time.Time { return t }
+	return func() { now = previous }
 }

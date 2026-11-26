@@ -74,10 +74,8 @@ func (bm *BackupManager) CreateBackup(options BackupOptions) (*BackupMetadata, e
 		return nil, fmt.Errorf("failed to create backups directory: %w", err)
 	}
 
-	backupID := bm.generateBackupID()
-	backupDir := filepath.Join(bm.backupsDir, backupID)
-
-	if err := os.MkdirAll(backupDir, 0750); err != nil {
+	backupID, backupDir, err := bm.reserveBackupDir()
+	if err != nil {
 		return nil, fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
@@ -358,18 +356,26 @@ func (bm *BackupManager) ensureBackupsDir() error {
 	return os.MkdirAll(bm.backupsDir, 0750)
 }
 
-func (bm *BackupManager) generateBackupID() string {
-	base := fmt.Sprintf("backup-%s", time.Now().Format(BackupTimeFormat))
+// now is the clock backup IDs are taken from; tests replace it.
+var now = time.Now
+
+// reserveBackupDir creates the directory for a new backup and returns its ID.
+// os.Mkdir fails on an existing entry, so callers creating backups in the same
+// second, even in other processes, each get their own ID.
+func (bm *BackupManager) reserveBackupDir() (string, string, error) {
+	base := fmt.Sprintf("backup-%s", now().Format(BackupTimeFormat))
 	candidate := base
-	// Only an existing entry is a collision; any other Lstat error ends the
-	// search so the following MkdirAll can report it.
 	for i := 1; ; i++ {
-		if _, err := os.Lstat(filepath.Join(bm.backupsDir, candidate)); err != nil {
-			break
+		dir := filepath.Join(bm.backupsDir, candidate)
+		err := os.Mkdir(dir, 0750)
+		if err == nil {
+			return candidate, dir, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", "", err
 		}
 		candidate = fmt.Sprintf("%s-%d", base, i)
 	}
-	return candidate
 }
 
 func (bm *BackupManager) collectFiles(dir string, include, exclude []string) ([]string, error) {
