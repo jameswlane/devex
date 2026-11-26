@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -53,8 +52,9 @@ var _ = Describe("Dynamic desktop installation", func() {
 		}
 		recorder := filepath.Join(settings.HomeDir, "calls")
 		// Hooks run through bash, which treats Windows backslashes as escapes.
-		// Use forward slashes and quote the path so the hook writes to the temp home.
-		shellRecorder := strconv.Quote(filepath.ToSlash(recorder))
+		// Use forward slashes and single-quote the path (POSIX rules) so the hook
+		// writes to the temp home without bash expanding anything in it.
+		shellRecorder := "'" + strings.ReplaceAll(filepath.ToSlash(recorder), "'", `'\''`) + "'"
 		for i := range 2 {
 			cfg := &settings.ApplicationOverrides[i].AllPlatforms
 			name := settings.ApplicationOverrides[i].Name
