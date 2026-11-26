@@ -389,3 +389,38 @@ func isUnknownMCPFieldError(err error, stderr string) bool {
 	combined := strings.ToLower(err.Error() + "\n" + stderr)
 	return strings.Contains(combined, "unknown field") && strings.Contains(combined, "mcp_servers")
 }
+
+// EnsureUserBinDirsOnPath appends the user-scope binary directories that agent
+// installers write to (~/.local/bin and mise shims) to PATH when they exist and
+// are missing, so a just-installed agent is found before the shell reloads.
+func EnsureUserBinDirsOnPath(home string) {
+	if strings.TrimSpace(home) == "" {
+		return
+	}
+	miseData := os.Getenv("MISE_DATA_DIR")
+	if miseData == "" {
+		miseData = filepath.Join(home, ".local", "share", "mise")
+	}
+	path := os.Getenv("PATH")
+	entries := filepath.SplitList(path)
+	for _, dir := range []string{filepath.Join(home, ".local", "bin"), filepath.Join(miseData, "shims")} {
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() || slices.Contains(entries, dir) { //nolint:gosec // only checks that a PATH candidate directory exists
+			continue
+		}
+		entries = append(entries, dir)
+	}
+	_ = os.Setenv("PATH", strings.Join(entries, string(os.PathListSeparator)))
+}
+
+// SkippedAgents returns the "skipped (<reason>): <agent>" lines tool-agents
+// prints for agents it did not configure.
+func SkippedAgents(output string) []string {
+	var skipped []string
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "skipped (") {
+			skipped = append(skipped, line)
+		}
+	}
+	return skipped
+}

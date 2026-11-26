@@ -43,6 +43,7 @@ DevEx never prompts for or stores API keys or OAuth tokens. After install, run `
 - **Existing `agents.yaml`**: Never overwritten. If you already have an `agents.yaml`, DevEx keeps it unchanged and applies it.
 - **Linux sandboxes**: On Ubuntu 24.04, unprivileged `bubblewrap` sandboxes may require loading an AppArmor profile manually. Run `devex agent sandbox` for the exact commands.
 - **Windows**: `opencode` and `goose` catalog entries target Linux and macOS only.
+- **Maintain**: `maintain` re-applies `agents.yaml` with `devex agent apply`. Agents update through their own updaters or package managers (for example `claude update`, `brew upgrade`, `mise upgrade`).
 - **Remove**: `remove` uninstalls the agents recorded by the template run, while keeping shared sandbox packages (`Bubblewrap`, `socat`) and your `agents.yaml`.
 
 ## Maintain, status and remove

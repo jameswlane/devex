@@ -265,80 +265,11 @@ lifecycle:
           - --preset
           - "{{ inputs.preset }}"
   maintain:
-    - id: claude-code-upgrade
-      order: 10
-      if: has_resource("claude-code")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.claude-code.external_id }}"
-          - --non-interactive
-    - id: codex-upgrade
-      order: 20
-      if: has_resource("codex")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.codex.external_id }}"
-          - --non-interactive
-    - id: gemini-cli-upgrade
-      order: 30
-      if: has_resource("gemini-cli")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.gemini-cli.external_id }}"
-          - --non-interactive
-    - id: copilot-cli-upgrade
-      order: 40
-      if: has_resource("copilot-cli")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.copilot-cli.external_id }}"
-          - --non-interactive
-    - id: opencode-upgrade
-      order: 50
-      if: has_resource("opencode")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.opencode.external_id }}"
-          - --non-interactive
-    - id: goose-upgrade
-      order: 60
-      if: has_resource("goose")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.goose.external_id }}"
-          - --non-interactive
-    - id: aider-upgrade
-      order: 70
-      if: has_resource("aider")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.aider.external_id }}"
-          - --non-interactive
-    - id: kimi-code-upgrade
-      order: 80
-      if: has_resource("kimi-code")
-      shell:
-        command: devex
-        args:
-          - upgrade
-          - "{{ resource.kimi-code.external_id }}"
-          - --non-interactive
+    # Agents update through their own updaters or package managers
+    # (`devex upgrade` cannot upgrade mise, brew or curlpipe agents), so
+    # maintain only re-applies the shared agents.yaml defaults.
     - id: agents-apply
-      order: 90
+      order: 10
       if: has_resource("claude-code") || has_resource("codex") || has_resource("gemini-cli") || has_resource("opencode")
       shell:
         command: devex

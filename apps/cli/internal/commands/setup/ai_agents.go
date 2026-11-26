@@ -330,7 +330,13 @@ func defaultApplyAIAgentsConfig(ctx context.Context, pluginBootstrap *bootstrap.
 		Stdout: &out,
 		Stderr: &errBuf,
 	}
-	return agentapply.Execute(ctx, executor, spec, streams, false)
+	if err := agentapply.Execute(ctx, executor, spec, streams, false); err != nil {
+		return err
+	}
+	if skipped := agentapply.SkippedAgents(out.String()); len(skipped) > 0 {
+		return fmt.Errorf("tool-agents did not configure every agent: %s", strings.Join(skipped, "; "))
+	}
+	return nil
 }
 
 // handleAIAgentsConfiguration writes a minimal agents.yaml when absent (leaving
@@ -342,6 +348,8 @@ func (m *SetupModel) handleAIAgentsConfiguration(ctx context.Context, pluginBoot
 	if len(selectedApps) == 0 {
 		return
 	}
+	// Agents installed to user-scope directories this run are not on PATH yet.
+	agentapply.EnsureUserBinDirsOnPath(m.homeDir())
 
 	if harnessIDs := m.succeededHarnessIDs(); len(harnessIDs) > 0 {
 		m.writeAndApplyDefaultAgentsConfig(ctx, pluginBootstrap, harnessIDs)
@@ -497,6 +505,12 @@ func (m *SetupModel) renderAIAgentsPreview() string {
 	}
 	b.WriteString("  • Apply agents.yaml via tool-agents\n")
 	return b.String()
+}
+
+// AIAgentsSummary returns the AI coding agent warnings, doctor results and
+// login steps, so they can be printed after the interactive wizard closes.
+func (m *SetupModel) AIAgentsSummary() string {
+	return m.renderAIAgentsSummary()
 }
 
 func (m *SetupModel) renderAIAgentsSummary() string {

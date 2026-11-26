@@ -133,4 +133,13 @@ var _ = Describe("Setup AI agents precedence through root command", func() {
 		_, err = runRootSetup("--ai-agents", "Claude Code", "--ai-agents-preset", "yolo")
 		Expect(err).To(MatchError(ContainSubstring(config.ErrAgentsSkipPermissions)))
 	})
+
+	It("rejects AI agent selections combined with an explicit applications list instead of dropping them", func() {
+		cfgDir := devexpaths.ForHome(homeDir).Config
+		Expect(os.MkdirAll(cfgDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("applications:\n  - Git\n"), 0o600)).To(Succeed())
+
+		_, err := runRootSetup("--ai-agents", "Claude Code")
+		Expect(err).To(MatchError(ContainSubstring("cannot be combined with an applications list")))
+	})
 })

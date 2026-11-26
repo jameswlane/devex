@@ -139,6 +139,7 @@ func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings
 		}
 	}
 
+	agentapply.EnsureUserBinDirsOnPath(settings.HomeDir)
 	if exists {
 		// The loaded settings already merge every configuration tier, so apply
 		// them as they are instead of re-reading one file.
@@ -146,7 +147,14 @@ func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings
 		if dryRun {
 			return nil
 		}
-		return runAgentPluginCommand(cmd, settings, executor, "", "", false)
+		if len(settings.Agents.Enabled) == 0 {
+			cmd.Printf("No coding agents enabled in %s; add them under agents.enabled.\n", agentsPath)
+			return nil
+		}
+		if errs := config.ValidateAgentsConfig(settings.Agents, "agents.yaml"); len(errs) > 0 {
+			return fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
+		}
+		return applyResolvedAgents(cmd, settings.Agents, settings.Agents.Enabled, executor)
 	}
 
 	if len(harnessIDs) == 0 {
@@ -161,11 +169,24 @@ func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings
 		cmd.Printf("Would write %s:\n%s", agentsPath, string(data))
 		return nil
 	}
-	if _, _, err := agentapply.WriteDefaultAgentsYAMLIfMissing(userConfigDir, harnessIDs, preset); err != nil {
+	_, created, err := agentapply.WriteDefaultAgentsYAMLIfMissing(userConfigDir, harnessIDs, preset)
+	if err != nil {
 		return err
 	}
-	settings.Agents = config.AgentsConfig{Enabled: harnessIDs, Preset: preset}
-	return runAgentPluginCommand(cmd, settings, executor, "", "", false)
+	if !created {
+		cmd.Printf("%s appeared while writing it and was left unchanged; run 'devex agent apply' to apply it.\n", agentsPath)
+		return nil
+	}
+	cfg := config.AgentsConfig{Enabled: harnessIDs, Preset: preset}
+	return applyResolvedAgents(cmd, cfg, harnessIDs, executor)
+}
+
+// applyResolvedAgents applies cfg to targets that --init already resolved, so
+// the raw --agents/--preset values (which may be catalog slugs) are not re-read.
+func applyResolvedAgents(cmd *cobra.Command, cfg config.AgentsConfig, targets []string, executor agentPluginExecutor) error {
+	spec := agentapply.BuildResolvedSpec(cfg, targets, "", agentLookPath, agentExecutable)
+	streams := sdk.OperationIO{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()}
+	return agentapply.Execute(cmd.Context(), executor, spec, streams, false)
 }
 
 func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, agentsFlag, presetFlag string, diffOnly bool) error {

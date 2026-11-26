@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -427,5 +428,18 @@ var _ = Describe("Agent apply and diff commands", func() {
 		Expect(tierFake.called).To(BeTrue())
 		_, statErr := os.Stat(agentsPath)
 		Expect(os.IsNotExist(statErr)).To(BeTrue())
+	})
+
+	It("applies the harness IDs --init resolved from catalog slugs in DEVEX_AGENTS", func() {
+		initSettings := config.CrossPlatformSettings{HomeDir: home}
+		viper.Set("dry-run", false)
+		GinkgoT().Setenv("DEVEX_AGENTS", "claude-code")
+		envFake := &fakeAgentPluginExecutor{}
+		cmd := NewAgentCmdWithDeps(initSettings, nil, agentsandbox.Probe{}, envFake)
+		cmd.SetOut(io.Discard)
+		cmd.SetArgs([]string{"apply", "--init"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(envFake.called).To(BeTrue())
+		Expect(string(envFake.specBytes)).To(ContainSubstring(`"name": "claude"`))
 	})
 })

@@ -452,6 +452,11 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 
 			Expect(model.HasErrors()).To(BeFalse())
 			Expect(model.CompletionError()).NotTo(HaveOccurred())
+			// setup prints this on the normal terminal after the wizard's alternate screen closes.
+			var finalModel tea.Model = model
+			summarizer, ok := finalModel.(interface{ AIAgentsSummary() string })
+			Expect(ok).To(BeTrue())
+			Expect(summarizer.AIAgentsSummary()).To(ContainSubstring("tool-agents plugin unavailable"))
 			model.step = StepComplete
 			Expect(model.View()).To(ContainSubstring("AI coding agent warnings"))
 			Expect(model.View()).To(ContainSubstring("tool-agents plugin unavailable"))
