@@ -9,11 +9,12 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 var (
-	mcpServerNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	mcpServerNameRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$`)
 	mcpEnvVarNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	mcpEnvRefRe     = regexp.MustCompile(`^\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}$`)
 	mcpHeaderNameRe = regexp.MustCompile(`^[!#$%&'*+\-.^_` + "`" + `|~0-9A-Za-z]+$`)
@@ -81,7 +82,7 @@ func validateMCPServers(servers []MCPServerSpec) error {
 			label = fmt.Sprintf("#%d", i)
 		}
 		if !mcpServerNameRe.MatchString(srv.Name) {
-			return fmt.Errorf("mcp_servers[%d]: name %q must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", i, srv.Name)
+			return fmt.Errorf("mcp_servers[%d]: name %q must match ^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$", i, srv.Name)
 		}
 		if seen[srv.Name] {
 			return fmt.Errorf("mcp_servers[%d]: duplicate MCP server name %q", i, srv.Name)
@@ -252,7 +253,27 @@ func isSecretKey(key string) bool {
 			return true
 		}
 	}
-	return secretPATRe.MatchString(upper)
+	if secretPATRe.MatchString(upper) {
+		return true
+	}
+	return hasSecretAuthToken(upper)
+}
+
+func hasSecretAuthToken(upper string) bool {
+	tokens := strings.Split(upper, "_")
+	for i, tok := range tokens {
+		if tok != "AUTH" {
+			continue
+		}
+		if i+1 < len(tokens) {
+			switch tokens[i+1] {
+			case "MODE", "TYPE", "METHOD", "PROVIDER", "URL", "ENABLED", "DISABLED":
+				continue
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func looksLikeSecretValue(val string, isNativeRef func(string) bool) bool {
@@ -518,11 +539,274 @@ func redactDiffContent(content string) string {
 	if content == "" {
 		return ""
 	}
+	content = redactDiffSecretArgArrays(content)
 	lines := splitLinesPreserve(content)
 	for i, line := range lines {
 		lines[i] = redactDiffLine(line)
 	}
 	return strings.Join(lines, "")
+}
+
+type diffStringEdit struct {
+	start int
+	end   int
+	repl  string
+}
+
+type diffArrayElem struct {
+	isStr      bool
+	val        string
+	innerStart int
+	innerEnd   int
+}
+
+// redactDiffSecretArgArrays scans JSON and TOML arrays (single-line or
+// multi-line) and reuses scanArgSliceForSecrets to redact both `--flag=literal`
+// and separate `["--flag", "literal"]` argument elements while preserving safe
+// environment variable references.
+func redactDiffSecretArgArrays(content string) string {
+	var edits []diffStringEdit
+	isSafeRef := func(s string) bool { return isAnySafeEnvRef(s, false) }
+
+	pos := 0
+	for pos < len(content) {
+		switch content[pos] {
+		case '#':
+			pos = skipToEndOfLine(content, pos)
+		case '"', '\'':
+			if _, _, _, next, ok := scanQuotedString(content, pos); ok {
+				pos = next
+			} else {
+				pos++
+			}
+		case '[':
+			pos = scanDiffArray(content, pos, isSafeRef, &edits)
+		default:
+			pos++
+		}
+	}
+
+	if len(edits) == 0 {
+		return content
+	}
+	sort.Slice(edits, func(i, j int) bool {
+		return edits[i].start < edits[j].start
+	})
+	var b strings.Builder
+	last := 0
+	for _, e := range edits {
+		if e.start < last || e.start > e.end {
+			continue
+		}
+		b.WriteString(content[last:e.start])
+		b.WriteString(e.repl)
+		last = e.end
+	}
+	b.WriteString(content[last:])
+	return b.String()
+}
+
+func skipToEndOfLine(s string, pos int) int {
+	for pos < len(s) && s[pos] != '\n' {
+		pos++
+	}
+	return pos
+}
+
+func skipDiffWSAndComments(s string, pos int) int {
+	for pos < len(s) {
+		switch s[pos] {
+		case ' ', '\t', '\r', '\n':
+			pos++
+		case '#':
+			pos = skipToEndOfLine(s, pos)
+		default:
+			return pos
+		}
+	}
+	return pos
+}
+
+func scanQuotedString(s string, pos int) (val string, innerStart, innerEnd, next int, ok bool) {
+	if pos >= len(s) {
+		return "", 0, 0, pos, false
+	}
+	if strings.HasPrefix(s[pos:], `"""`) {
+		innerStart = pos + 3
+		for i := innerStart; i < len(s); {
+			if s[i] == '\\' && i+1 < len(s) {
+				i += 2
+				continue
+			}
+			if strings.HasPrefix(s[i:], `"""`) {
+				innerEnd = i
+				raw := strings.TrimPrefix(s[innerStart:innerEnd], "\r\n")
+				raw = strings.TrimPrefix(raw, "\n")
+				return raw, innerStart, innerEnd, i + 3, true
+			}
+			i++
+		}
+		return "", 0, 0, pos, false
+	}
+	if strings.HasPrefix(s[pos:], `'''`) {
+		innerStart = pos + 3
+		endRel := strings.Index(s[innerStart:], `'''`)
+		if endRel < 0 {
+			return "", 0, 0, pos, false
+		}
+		innerEnd = innerStart + endRel
+		raw := strings.TrimPrefix(s[innerStart:innerEnd], "\r\n")
+		raw = strings.TrimPrefix(raw, "\n")
+		return raw, innerStart, innerEnd, innerEnd + 3, true
+	}
+	if s[pos] == '"' {
+		innerStart = pos + 1
+		for i := innerStart; i < len(s) && s[i] != '\n'; {
+			if s[i] == '\\' && i+1 < len(s) {
+				i += 2
+				continue
+			}
+			if s[i] == '"' {
+				innerEnd = i
+				unq, err := strconv.Unquote(s[pos : i+1])
+				if err != nil {
+					unq = s[innerStart:innerEnd]
+				}
+				return unq, innerStart, innerEnd, i + 1, true
+			}
+			i++
+		}
+		return "", 0, 0, pos, false
+	}
+	if s[pos] == '\'' {
+		innerStart = pos + 1
+		for i := innerStart; i < len(s) && s[i] != '\n'; i++ {
+			if s[i] == '\'' {
+				innerEnd = i
+				return s[innerStart:innerEnd], innerStart, innerEnd, i + 1, true
+			}
+		}
+		return "", 0, 0, pos, false
+	}
+	return "", 0, 0, pos, false
+}
+
+func scanDiffArray(s string, openBracket int, isSafeRef func(string) bool, edits *[]diffStringEdit) int {
+	pos := openBracket + 1
+	var elems []diffArrayElem
+	closed := false
+
+	for pos < len(s) {
+		pos = skipDiffWSAndComments(s, pos)
+		if pos >= len(s) {
+			break
+		}
+		if s[pos] == ']' {
+			pos++
+			closed = true
+			break
+		}
+		if s[pos] == ',' {
+			pos++
+			continue
+		}
+
+		if s[pos] == '"' || s[pos] == '\'' {
+			if val, innerStart, innerEnd, next, ok := scanQuotedString(s, pos); ok {
+				afterStr := skipDiffWSAndComments(s, next)
+				if afterStr < len(s) && (s[afterStr] == ',' || s[afterStr] == ']') {
+					elems = append(elems, diffArrayElem{
+						isStr:      true,
+						val:        val,
+						innerStart: innerStart,
+						innerEnd:   innerEnd,
+					})
+					pos = afterStr
+					if s[pos] == ',' {
+						pos++
+					}
+					continue
+				}
+			}
+		}
+
+		elems = append(elems, diffArrayElem{isStr: false})
+		braceDepth := 0
+		for pos < len(s) {
+			ch := s[pos]
+			if ch == '#' {
+				pos = skipToEndOfLine(s, pos)
+				continue
+			}
+			if ch == '"' || ch == '\'' {
+				if _, _, _, next, ok := scanQuotedString(s, pos); ok {
+					pos = next
+					continue
+				}
+				pos++
+				continue
+			}
+			if ch == '[' {
+				pos = scanDiffArray(s, pos, isSafeRef, edits)
+				continue
+			}
+			if ch == '{' {
+				braceDepth++
+				pos++
+				continue
+			}
+			if ch == '}' {
+				if braceDepth > 0 {
+					braceDepth--
+				}
+				pos++
+				continue
+			}
+			if braceDepth == 0 && (ch == ',' || ch == ']') {
+				if ch == ',' {
+					pos++
+				}
+				break
+			}
+			pos++
+		}
+	}
+
+	if !closed || len(elems) == 0 {
+		return pos
+	}
+
+	argStrings := make([]string, len(elems))
+	isStr := make([]bool, len(elems))
+	for i, el := range elems {
+		argStrings[i] = el.val
+		isStr[i] = el.isStr
+	}
+
+	for _, idx := range scanArgSliceForSecrets(argStrings, isStr, isSafeRef) {
+		el := elems[idx]
+		if !el.isStr {
+			continue
+		}
+		if flagPart, _, hasEq := strings.Cut(el.val, "="); hasEq && secretArgFlags[strings.ToLower(flagPart)] {
+			if eqOffset := strings.IndexByte(s[el.innerStart:el.innerEnd], '='); eqOffset >= 0 {
+				*edits = append(*edits, diffStringEdit{
+					start: el.innerStart + eqOffset + 1,
+					end:   el.innerEnd,
+					repl:  "***",
+				})
+				continue
+			}
+		}
+		if idx > 0 && elems[idx-1].isStr && secretArgFlags[strings.ToLower(elems[idx-1].val)] {
+			*edits = append(*edits, diffStringEdit{
+				start: el.innerStart,
+				end:   el.innerEnd,
+				repl:  "***",
+			})
+		}
+	}
+	return pos
 }
 
 func redactDiffLine(line string) string {
@@ -745,13 +1029,17 @@ func planClaudeMCP(
 	home string,
 	env Env,
 	prev AgentManagedState,
-) (diffPlan *MCPDiffPlan, actions []MCPCommandAction, notice string, ownedMCP []string, mcpConfigPath string, warnings []string, err error) {
+) (diffPlan *MCPDiffPlan, actions []MCPCommandAction, notice string, ownedMCP []string, resolvedPath string, skipped bool, warnings []string, err error) {
 	claudeJSONPath := resolveClaudeMCPPath(home, env.Getenv)
-	prevMCP := prevMCPServersForPath(prev, claudeJSONPath)
+	resolvedPath, err = resolveCanonicalWriteTarget(claudeJSONPath)
+	if err != nil {
+		return nil, nil, "", nil, "", false, nil, err
+	}
+	prevMCP := prevMCPServersForPath(prev, resolvedPath)
 
 	beforeRaw, exists, mode, readErr := readExistingFile(claudeJSONPath, settingsFileMode)
 	if readErr != nil {
-		return nil, nil, "", nil, "", nil, readErr
+		return nil, nil, "", nil, resolvedPath, false, nil, readErr
 	}
 
 	var existingMCP *jsonObject
@@ -759,14 +1047,14 @@ func planClaudeMCP(
 		doc, parseErr := ParseJSONObject([]byte(beforeRaw), claudeJSONPath)
 		if parseErr != nil {
 			if len(servers) == 0 && len(prevMCP) == 0 {
-				return nil, nil, "", nil, "", nil, nil
+				return nil, nil, "", nil, resolvedPath, false, nil, nil
 			}
-			return nil, nil, "", nil, "", nil, parseErr
+			return nil, nil, "", nil, resolvedPath, false, nil, parseErr
 		}
 		if rawMCP, ok := doc.Get("mcpServers"); ok {
 			obj, isObj := rawMCP.(*jsonObject)
 			if !isObj {
-				return nil, nil, "", nil, "", nil, fmt.Errorf("%s: key \"mcpServers\" must be a JSON object", claudeJSONPath)
+				return nil, nil, "", nil, resolvedPath, false, nil, fmt.Errorf("%s: key \"mcpServers\" must be a JSON object", claudeJSONPath)
 			}
 			existingMCP = obj
 		}
@@ -775,13 +1063,13 @@ func planClaudeMCP(
 	warnings = scanJSONMCPServers(AgentClaude, claudeJSONPath, existingMCP, claudeNativeRefRe.MatchString)
 
 	if len(servers) == 0 && len(prevMCP) == 0 {
-		return nil, nil, "", nil, "", warnings, nil
+		return nil, nil, "", nil, resolvedPath, false, warnings, nil
 	}
 
 	claudeBin, lookErr := env.LookPath("claude")
 	if lookErr != nil {
 		notice = "skipped (claude binary not found on PATH; install Claude Code and re-run 'devex agent apply' to manage Claude MCP servers): claude mcp"
-		return nil, nil, notice, slices.Clone(prev.MCPServers), prev.MCPConfigPath, warnings, nil
+		return nil, nil, notice, nil, resolvedPath, true, warnings, nil
 	}
 
 	if existingMCP == nil {
@@ -828,12 +1116,12 @@ func planClaudeMCP(
 				continue
 			}
 			if !wasManaged {
-				return nil, nil, "", nil, "", warnings, fmt.Errorf("MCP server %q already exists in %s and is not managed by DevEx (remove it or match its configuration)", name, claudeJSONPath)
+				return nil, nil, "", nil, resolvedPath, false, warnings, fmt.Errorf("MCP server %q already exists in %s and is not managed by DevEx (remove it or match its configuration)", name, claudeJSONPath)
 			}
 			afterMCP.Set(name, desiredObj)
 			compact, compactErr := marshalCompactJSON(desiredObj)
 			if compactErr != nil {
-				return nil, nil, "", nil, "", warnings, fmt.Errorf("encode Claude MCP server %q: %w", name, compactErr)
+				return nil, nil, "", nil, resolvedPath, false, warnings, fmt.Errorf("encode Claude MCP server %q: %w", name, compactErr)
 			}
 			actions = append(actions,
 				MCPCommandAction{
@@ -856,7 +1144,7 @@ func planClaudeMCP(
 		afterMCP.Set(name, desiredObj)
 		compact, compactErr := marshalCompactJSON(desiredObj)
 		if compactErr != nil {
-			return nil, nil, "", nil, "", warnings, fmt.Errorf("encode Claude MCP server %q: %w", name, compactErr)
+			return nil, nil, "", nil, resolvedPath, false, warnings, fmt.Errorf("encode Claude MCP server %q: %w", name, compactErr)
 		}
 		actions = append(actions, MCPCommandAction{
 			ServerName: name,
@@ -884,7 +1172,7 @@ func planClaudeMCP(
 		Exists: exists,
 		Mode:   uint32(mode),
 	}
-	return diffPlan, actions, "", ownedMCP, mcpConfigPathForOwned(ownedMCP, claudeJSONPath), warnings, nil
+	return diffPlan, actions, "", ownedMCP, resolvedPath, false, warnings, nil
 }
 
 // --- Codex MCP ---
@@ -1055,32 +1343,28 @@ func mergeOpenCodeMCPServers(
 		mcpObj = obj
 	}
 
-	// OpenCode v2 layout: an object at `mcp.servers`. Never treat the `servers`
-	// container key itself as a server name.
-	if mcpObj != nil {
-		if rawServers, hasServers := mcpObj.Get("servers"); hasServers {
-			if serversObj, isObj := rawServers.(*jsonObject); isObj {
-				owned, warnings, err = mergeJSONMCPServerContainer(
-					AgentOpenCode,
-					settingsPath,
-					serversObj,
-					servers,
-					prevManaged,
-					renderOpenCodeV2MCPServerObject,
-					opencodeNativeRefRe.MatchString,
-				)
-				if err != nil {
-					return nil, warnings, err
-				}
-				if len(serversObj.Entries) == 0 && len(servers) == 0 && len(prevManaged) > 0 {
-					mcpObj.Delete("servers")
-					if len(mcpObj.Entries) == 0 {
-						doc.Delete("mcp")
-					}
-				}
-				return owned, warnings, nil
+	// OpenCode v2 layout: an object at `mcp.servers` that does not itself look
+	// like a legacy server definition (e.g. a server literally named "servers").
+	if serversObj, isV2 := openCodeV2ServersContainer(mcpObj); isV2 {
+		owned, warnings, err = mergeJSONMCPServerContainer(
+			AgentOpenCode,
+			settingsPath,
+			serversObj,
+			servers,
+			prevManaged,
+			renderOpenCodeV2MCPServerObject,
+			opencodeNativeRefRe.MatchString,
+		)
+		if err != nil {
+			return nil, warnings, err
+		}
+		if len(serversObj.Entries) == 0 && len(servers) == 0 && len(prevManaged) > 0 {
+			mcpObj.Delete("servers")
+			if len(mcpObj.Entries) == 0 {
+				doc.Delete("mcp")
 			}
 		}
+		return owned, warnings, nil
 	}
 
 	return mergeJSONMCPServers(
@@ -1093,6 +1377,35 @@ func mergeOpenCodeMCPServers(
 		renderOpenCodeMCPServerObject,
 		opencodeNativeRefRe.MatchString,
 	)
+}
+
+func isOpenCodeServerDefKey(key string) bool {
+	switch key {
+	case "type", "command", "url", "environment", "headers", "enabled", "disabled":
+		return true
+	default:
+		return false
+	}
+}
+
+func openCodeV2ServersContainer(mcpObj *jsonObject) (*jsonObject, bool) {
+	if mcpObj == nil {
+		return nil, false
+	}
+	rawServers, hasServers := mcpObj.Get("servers")
+	if !hasServers {
+		return nil, false
+	}
+	serversObj, isObj := rawServers.(*jsonObject)
+	if !isObj {
+		return nil, false
+	}
+	for _, entry := range serversObj.Entries {
+		if isOpenCodeServerDefKey(entry.Key) {
+			return nil, false
+		}
+	}
+	return serversObj, true
 }
 
 func checkOpenCodeNonTargetConflicts(settingsPath, otherPath string, servers []MCPServerSpec) error {
@@ -1116,21 +1429,13 @@ func checkOpenCodeNonTargetConflicts(settingsPath, otherPath string, servers []M
 		return nil
 	}
 
-	var v2Servers *jsonObject
-	if rawServers, hasServers := mcpObj.Get("servers"); hasServers {
-		if obj, isServersObj := rawServers.(*jsonObject); isServersObj {
-			v2Servers = obj
-		}
-	}
+	v2Servers, _ := openCodeV2ServersContainer(mcpObj)
 
 	for _, srv := range servers {
 		if v2Servers != nil {
 			if _, present := v2Servers.Get(srv.Name); present {
 				return fmt.Errorf("MCP server %q already exists in %s (non-target OpenCode config) and is not managed by DevEx; remove it there so DevEx can manage it in %s", srv.Name, otherPath, settingsPath)
 			}
-			continue
-		}
-		if srv.Name == "servers" {
 			continue
 		}
 		if _, present := mcpObj.Get(srv.Name); present {

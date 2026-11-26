@@ -235,6 +235,7 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 				afterFP.PresetPermissions = slices.Clone(next.PresetPermissions)
 			}
 			if fp.OwnsMCP {
+				afterFP.MCPOwned = cloneMCPOwned(next.MCPOwned)
 				afterFP.MCPServers = slices.Clone(next.MCPServers)
 				afterFP.MCPConfigPath = next.MCPConfigPath
 			}
@@ -346,8 +347,9 @@ func (p *AgentsPlugin) applyAgentMCP(
 		case "remove":
 			curMCP = slices.DeleteFunc(curMCP, func(name string) bool { return name == act.ServerName })
 		}
-		cur.MCPServers = slices.Clone(curMCP)
-		cur.MCPConfigPath = mcpConfigPathForOwned(curMCP, ap.MCPConfigPath)
+		cur.MCPOwned = withMCPOwnedForPath(cur.MCPOwned, ap.MCPConfigPath, curMCP)
+		cur.MCPServers = nil
+		cur.MCPConfigPath = ""
 		if saveErr := saveCommitted(ap.Agent, *cur); saveErr != nil {
 			return status.String(), saveErr
 		}

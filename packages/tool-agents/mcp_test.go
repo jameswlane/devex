@@ -915,8 +915,8 @@ http_headers = { Cookie = "sid=codex", "Proxy-Authorization" = "Basic codex" }
 			Expect(out).NotTo(ContainSubstring(`"ok_codex"`))
 		})
 
-		It("rejects MCP server names starting with a hyphen or underscore", func() {
-			for _, badName := range []string{"-flag", "--scope", "_leading"} {
+		It("rejects MCP server names starting with a hyphen and allows a leading underscore", func() {
+			for _, badName := range []string{"-flag", "--scope"} {
 				_, err := ParseSpec(mustMarshalSpec(Spec{
 					Agents: []AgentSpec{{
 						Name: AgentClaude,
@@ -929,6 +929,56 @@ http_headers = { Cookie = "sid=codex", "Proxy-Authorization" = "Basic codex" }
 				}))
 				Expect(err).To(HaveOccurred(), "expected name %q to be rejected", badName)
 			}
+			_, err := ParseSpec(mustMarshalSpec(Spec{
+				Agents: []AgentSpec{{
+					Name: AgentClaude,
+					MCPServers: []MCPServerSpec{{
+						Name:      "_leading",
+						Transport: MCPTransportStdio,
+						Command:   "mcp",
+					}},
+				}},
+			}))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects literal values for AUTH secret keys while allowing AUTH_MODE/TYPE/METHOD/PROVIDER/URL/ENABLED/DISABLED", func() {
+			for _, key := range []string{"AUTH", "X_AUTH", "AUTH_KEY", "BASIC_AUTH"} {
+				_, err := ParseSpec(mustMarshalSpec(Spec{
+					Agents: []AgentSpec{{
+						Name: AgentCodex,
+						MCPServers: []MCPServerSpec{{
+							Name:      "bad-auth",
+							Transport: MCPTransportStdio,
+							Command:   "mcp",
+							Env:       map[string]string{key: "raw-auth-literal"},
+						}},
+					}},
+				}))
+				Expect(err).To(HaveOccurred(), "expected key %q to be rejected", key)
+				Expect(err.Error()).NotTo(ContainSubstring("raw-auth-literal"))
+			}
+
+			_, err := ParseSpec(mustMarshalSpec(Spec{
+				Agents: []AgentSpec{{
+					Name: AgentCodex,
+					MCPServers: []MCPServerSpec{{
+						Name:      "ok-auth-meta",
+						Transport: MCPTransportStdio,
+						Command:   "mcp",
+						Env: map[string]string{
+							"AUTH_MODE":     "oauth",
+							"AUTH_TYPE":     "pkce",
+							"AUTH_METHOD":   "device",
+							"AUTH_PROVIDER": "github",
+							"AUTH_URL":      "https://auth.example.com",
+							"AUTH_ENABLED":  "true",
+							"AUTH_DISABLED": "false",
+						},
+					}},
+				}},
+			}))
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("redacts literal secrets in diff output (including removed entries and context lines) without mutating written files", func() {
@@ -1269,6 +1319,184 @@ http_headers = { Authorization = "Bearer %s" }
 			})
 			Expect(err).To(MatchError(And(
 				ContainSubstring("existing"),
+				ContainSubstring("opencode.json"),
+			)))
+		})
+
+		It("redacts secret CLI flag values passed as separate array elements in TOML and multiline JSON diffs", func() {
+			tomlInput := strings.Join([]string{
+				"[mcp_servers.cli]",
+				`command = "mcp"`,
+				`args = ["--token", "toml-split-secret", "--api-key=toml-eq-secret", "--secret", "${env:SAFE_REF}"]`,
+				"",
+			}, "\n")
+			redactedTOML := redactDiffContent(tomlInput)
+			Expect(redactedTOML).NotTo(ContainSubstring("toml-split-secret"))
+			Expect(redactedTOML).NotTo(ContainSubstring("toml-eq-secret"))
+			Expect(redactedTOML).To(ContainSubstring(`args = ["--token", "***", "--api-key=***", "--secret", "${env:SAFE_REF}"]`))
+
+			jsonInput := `{
+  "mcpServers": {
+    "cli": {
+      "command": "mcp",
+      "args": [
+        "--token",
+        "json-next-line-secret",
+        "--password",
+        "${SAFE_PASS}"
+      ]
+    }
+  }
+}
+`
+			redactedJSON := redactDiffContent(jsonInput)
+			Expect(redactedJSON).NotTo(ContainSubstring("json-next-line-secret"))
+			Expect(redactedJSON).To(ContainSubstring("\"--token\",\n        \"***\","))
+			Expect(redactedJSON).To(ContainSubstring(`"${SAFE_PASS}"`))
+		})
+
+		It("keys MCP ownership by resolved symlink destination so retargeting a symlinked config.toml reports conflict and does not delete unmanaged servers", func() {
+			env := newTestEnv(home, nil, "codex")
+			codexDir := filepath.Join(home, ".codex")
+			Expect(os.MkdirAll(codexDir, 0o700)).To(Succeed())
+
+			fileA := filepath.Join(home, "dotfiles-a.toml")
+			fileB := filepath.Join(home, "dotfiles-b.toml")
+			Expect(os.WriteFile(fileA, []byte(""), 0o600)).To(Succeed())
+			Expect(os.WriteFile(fileB, []byte("[mcp_servers.shared]\ncommand = \"unmanaged-b\"\n"), 0o600)).To(Succeed())
+
+			configLink := filepath.Join(codexDir, "config.toml")
+			Expect(os.Symlink(fileA, configLink)).To(Succeed())
+
+			specWithShared := Spec{
+				Agents: []AgentSpec{{
+					Name: AgentCodex,
+					MCPServers: []MCPServerSpec{{
+						Name:      "shared",
+						Transport: MCPTransportStdio,
+						Command:   "managed-a",
+					}},
+				}},
+			}
+			_, err := runPlugin(env, "apply", specWithShared)
+			Expect(err).NotTo(HaveOccurred())
+			dataA, err := os.ReadFile(fileA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(dataA)).To(ContainSubstring("[mcp_servers.shared]"))
+
+			// Retarget symlink to fileB which holds an unmanaged server with the same name.
+			Expect(os.Remove(configLink)).To(Succeed())
+			Expect(os.Symlink(fileB, configLink)).To(Succeed())
+
+			// Applying the same-name managed spec must report an unmanaged conflict.
+			_, err = runPlugin(env, "apply", specWithShared)
+			Expect(err).To(MatchError(ContainSubstring("not managed by DevEx")))
+
+			// Applying an empty MCP spec must not delete fileB's unmanaged server.
+			_, err = runPlugin(env, "apply", Spec{Agents: []AgentSpec{{Name: AgentCodex}}})
+			Expect(err).NotTo(HaveOccurred())
+			dataB, err := os.ReadFile(fileB)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(dataB)).To(ContainSubstring("[mcp_servers.shared]"))
+			Expect(string(dataB)).To(ContainSubstring(`command = "unmanaged-b"`))
+		})
+
+		It("retains MCP ownership for CODEX_HOME A after applying under CODEX_HOME B with no MCP servers", func() {
+			dirA := filepath.Join(home, "codex-home-a")
+			dirB := filepath.Join(home, "codex-home-b")
+			Expect(os.MkdirAll(dirA, 0o700)).To(Succeed())
+			Expect(os.MkdirAll(dirB, 0o700)).To(Succeed())
+
+			envA := newTestEnv(home, map[string]string{"CODEX_HOME": dirA}, "codex")
+			envB := newTestEnv(home, map[string]string{"CODEX_HOME": dirB}, "codex")
+
+			// 1. Apply managed server under CODEX_HOME A.
+			_, err := runPlugin(envA, "apply", Spec{
+				Agents: []AgentSpec{{
+					Name: AgentCodex,
+					MCPServers: []MCPServerSpec{{
+						Name:      "github",
+						Transport: MCPTransportHTTP,
+						URL:       "https://api.githubcopilot.com/mcp/",
+					}},
+				}},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			configA := filepath.Join(dirA, "config.toml")
+			dataA1, err := os.ReadFile(configA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(dataA1)).To(ContainSubstring("[mcp_servers.github]"))
+
+			// 2. Apply under CODEX_HOME B with no MCP servers.
+			_, err = runPlugin(envB, "apply", Spec{Agents: []AgentSpec{{Name: AgentCodex}}})
+			Expect(err).NotTo(HaveOccurred())
+
+			// 3. Switch back to CODEX_HOME A with the server removed from config: A's server must be removed.
+			_, err = runPlugin(envA, "apply", Spec{Agents: []AgentSpec{{Name: AgentCodex}}})
+			Expect(err).NotTo(HaveOccurred())
+			dataA2, err := os.ReadFile(configA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(dataA2)).NotTo(ContainSubstring("[mcp_servers.github]"))
+		})
+
+		It("does not mistake a legacy OpenCode server literally named servers for the v2 container in merge or conflict checks", func() {
+			env := newTestEnv(home, nil, "opencode")
+			openCodeDir := filepath.Join(home, ".config", "opencode")
+			Expect(os.MkdirAll(openCodeDir, 0o700)).To(Succeed())
+			jsonPath := filepath.Join(openCodeDir, "opencode.json")
+
+			Expect(os.WriteFile(jsonPath, []byte(`{
+  "mcp": {
+    "servers": {
+      "type": "local",
+      "command": ["x"],
+      "enabled": true
+    }
+  }
+}
+`), 0o600)).To(Succeed())
+
+			// Adding "github" must merge at legacy mcp.github (with enabled:true) and keep mcp.servers intact.
+			_, err := runPlugin(env, "apply", Spec{
+				Agents: []AgentSpec{{
+					Name: AgentOpenCode,
+					MCPServers: []MCPServerSpec{{
+						Name:      "github",
+						Transport: MCPTransportHTTP,
+						URL:       "https://api.githubcopilot.com/mcp/",
+					}},
+				}},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			raw, err := os.ReadFile(jsonPath)
+			Expect(err).NotTo(HaveOccurred())
+			var parsed map[string]any
+			Expect(json.Unmarshal(raw, &parsed)).To(Succeed())
+			mcpObj := parsed["mcp"].(map[string]any)
+			Expect(mcpObj).To(HaveKey("github"))
+			ghObj := mcpObj["github"].(map[string]any)
+			Expect(ghObj).To(HaveKeyWithValue("enabled", true))
+			Expect(ghObj).NotTo(HaveKey("disabled"))
+			legacyServersObj := mcpObj["servers"].(map[string]any)
+			Expect(legacyServersObj).To(HaveKeyWithValue("type", "local"))
+			Expect(legacyServersObj).NotTo(HaveKey("github"))
+
+			// Conflict detection in non-target opencode.json must flag a desired server named "servers".
+			jsoncPath := filepath.Join(openCodeDir, "opencode.jsonc")
+			Expect(os.WriteFile(jsoncPath, []byte("{\n  \"model\": \"anthropic/claude\"\n}\n"), 0o600)).To(Succeed())
+			_, err = runPlugin(env, "apply", Spec{
+				Agents: []AgentSpec{{
+					Name: AgentOpenCode,
+					MCPServers: []MCPServerSpec{{
+						Name:      "servers",
+						Transport: MCPTransportStdio,
+						Command:   "other",
+					}},
+				}},
+			})
+			Expect(err).To(MatchError(And(
+				ContainSubstring("servers"),
 				ContainSubstring("opencode.json"),
 			)))
 		})

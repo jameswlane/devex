@@ -24,8 +24,12 @@ type AgentManagedState struct {
 	Permissions []OpenCodeRule `json:"permissions,omitempty"`
 	// PresetPermissions are the OpenCode preset defaults DevEx put first.
 	PresetPermissions []OpenCodeRule `json:"preset_permissions,omitempty"`
-	MCPServers        []string       `json:"mcp_servers,omitempty"`
-	MCPConfigPath     string         `json:"mcp_config_path,omitempty"`
+	// MCPOwned maps each resolved absolute MCP config destination path to the
+	// MCP server names DevEx manages in that file.
+	MCPOwned map[string][]string `json:"mcp_owned,omitempty"`
+	// Legacy single-path fields, kept only for loading older managed.json files.
+	MCPServers    []string `json:"mcp_servers,omitempty"`
+	MCPConfigPath string   `json:"mcp_config_path,omitempty"`
 }
 
 func (a AgentManagedState) clone() AgentManagedState {
@@ -34,6 +38,7 @@ func (a AgentManagedState) clone() AgentManagedState {
 		Deny:              slices.Clone(a.Deny),
 		Permissions:       slices.Clone(a.Permissions),
 		PresetPermissions: slices.Clone(a.PresetPermissions),
+		MCPOwned:          cloneMCPOwned(a.MCPOwned),
 		MCPServers:        slices.Clone(a.MCPServers),
 		MCPConfigPath:     a.MCPConfigPath,
 	}
@@ -80,6 +85,9 @@ func LoadManagedState(path string) (ManagedState, error) {
 	}
 	if state.Agents == nil {
 		state.Agents = map[string]AgentManagedState{}
+	}
+	for name, a := range state.Agents {
+		state.Agents[name] = migrateLegacyMCPState(a)
 	}
 	return state, nil
 }
@@ -165,15 +173,12 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 		if mcpPath == "" {
 			mcpPath = a.MCPConfigPath
 		}
-		if a.MCPConfigPath != "" && b.MCPConfigPath != "" && filepath.Clean(a.MCPConfigPath) != filepath.Clean(b.MCPConfigPath) {
-			mcpServers = slices.Clone(b.MCPServers)
-			mcpPath = b.MCPConfigPath
-		}
 		out.Agents[name] = AgentManagedState{
 			Allow:             uniqueStrings(append(a.Allow, b.Allow...)),
 			Deny:              uniqueStrings(append(a.Deny, b.Deny...)),
 			Permissions:       uniqueOpenCodeRules(append(a.Permissions, b.Permissions...)),
 			PresetPermissions: uniqueOpenCodeRules(append(a.PresetPermissions, b.PresetPermissions...)),
+			MCPOwned:          unionMCPOwned(a.MCPOwned, b.MCPOwned),
 			MCPServers:        mcpServers,
 			MCPConfigPath:     mcpPath,
 		}
@@ -184,31 +189,118 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 func (a AgentManagedState) equal(b AgentManagedState) bool {
 	return slices.Equal(a.Allow, b.Allow) && slices.Equal(a.Deny, b.Deny) &&
 		slices.Equal(a.Permissions, b.Permissions) && slices.Equal(a.PresetPermissions, b.PresetPermissions) &&
+		mcpOwnedEqual(a.MCPOwned, b.MCPOwned) &&
 		slices.Equal(a.MCPServers, b.MCPServers) && a.MCPConfigPath == b.MCPConfigPath
 }
 
 func (a AgentManagedState) isEmpty() bool {
 	return len(a.Allow) == 0 && len(a.Deny) == 0 &&
 		len(a.Permissions) == 0 && len(a.PresetPermissions) == 0 &&
-		len(a.MCPServers) == 0
+		len(a.MCPOwned) == 0 && len(a.MCPServers) == 0
 }
 
-// prevMCPServersForPath returns previously managed MCP server names only when
-// prev was recorded for the same resolved MCP config path (or has no recorded
-// path, keeping older state files working).
+func migrateLegacyMCPState(a AgentManagedState) AgentManagedState {
+	a.MCPOwned = cloneMCPOwned(a.MCPOwned)
+	if len(a.MCPServers) == 0 {
+		a.MCPConfigPath = ""
+		return a
+	}
+	if a.MCPConfigPath != "" {
+		key, err := resolveCanonicalWriteTarget(a.MCPConfigPath)
+		if err != nil {
+			key = filepath.Clean(a.MCPConfigPath)
+		}
+		a.MCPOwned = withMCPOwnedForPath(a.MCPOwned, key, append(slices.Clone(a.MCPOwned[key]), a.MCPServers...))
+		a.MCPServers = nil
+		a.MCPConfigPath = ""
+	}
+	return a
+}
+
+func cloneMCPOwned(m map[string][]string) map[string][]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(m))
+	for k, v := range m {
+		cleaned := uniqueStrings(v)
+		if len(cleaned) == 0 {
+			continue
+		}
+		out[filepath.Clean(k)] = cleaned
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func unionMCPOwned(a, b map[string][]string) map[string][]string {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	out := cloneMCPOwned(a)
+	if out == nil {
+		out = make(map[string][]string, len(b))
+	}
+	for k, v := range b {
+		cleaned := uniqueStrings(v)
+		if len(cleaned) == 0 {
+			continue
+		}
+		key := filepath.Clean(k)
+		out[key] = uniqueStrings(append(slices.Clone(out[key]), cleaned...))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func mcpOwnedEqual(a, b map[string][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || !slices.Equal(av, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// prevMCPServersForPath returns previously managed MCP server names for the
+// resolved absolute MCP config destination path, plus any legacy unpathed
+// MCPServers from older state files.
 func prevMCPServersForPath(prev AgentManagedState, resolvedPath string) []string {
-	if len(prev.MCPServers) == 0 {
-		return nil
+	key := filepath.Clean(resolvedPath)
+	var out []string
+	if names := prev.MCPOwned[key]; len(names) > 0 {
+		out = append(out, names...)
 	}
-	if prev.MCPConfigPath != "" && filepath.Clean(prev.MCPConfigPath) != filepath.Clean(resolvedPath) {
-		return nil
+	if len(prev.MCPServers) > 0 && (prev.MCPConfigPath == "" || filepath.Clean(prev.MCPConfigPath) == key) {
+		out = append(out, prev.MCPServers...)
 	}
-	return prev.MCPServers
+	return uniqueStrings(out)
 }
 
-func mcpConfigPathForOwned(owned []string, resolvedPath string) string {
-	if len(owned) == 0 {
-		return ""
+// withMCPOwnedForPath returns a copy of base with only resolvedPath updated to
+// owned (deleting the key when owned is empty), preserving every other path.
+func withMCPOwnedForPath(base map[string][]string, resolvedPath string, owned []string) map[string][]string {
+	out := cloneMCPOwned(base)
+	key := filepath.Clean(resolvedPath)
+	cleaned := uniqueStrings(owned)
+	if len(cleaned) == 0 {
+		delete(out, key)
+		if len(out) == 0 {
+			return nil
+		}
+		return out
 	}
-	return filepath.Clean(resolvedPath)
+	if out == nil {
+		out = make(map[string][]string, 1)
+	}
+	out[key] = cleaned
+	return out
 }
