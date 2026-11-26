@@ -11,24 +11,13 @@ macos:
   brew_tap: anomalyco/tap
   self_updating: false
   official_support: true
-windows:
-  install_method: scoop
-  install_command: opencode
-  uninstall_command: opencode
-  self_updating: false
-  official_support: true
-  alternatives:
-    - install_method: chocolatey
-      install_command: opencode
-      uninstall_command: opencode
-      self_updating: false
-      official_support: true
 linux:
   # Unpinned bootstrap script: OpenCode updates the installer on release and
   # publishes no checksum for the script itself. The script fetches the release
   # archive over HTTPS from github.com/anomalyco/opencode/releases into
   # $HOME/.opencode/bin/opencode (the upstream script does not verify a separate
-  # binary checksum). OpenCode defaults autoupdate to true.
+  # binary checksum). OpenCode defaults autoupdate to true. Windows is omitted
+  # until DevEx has a scoop or chocolatey plugin.
   install_method: curlpipe
   download_url: https://opencode.ai/install
   install_scope: user

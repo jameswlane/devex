@@ -64,18 +64,18 @@ An OS configuration can also define `dependencies`, `pre_install`, `post_install
 
 The `AI Coding Agents` category (`applications/ai-agents/*.yaml`) ships opt-in (`default: false`) definitions for terminal coding agents. Install individual agents with `devex install "Claude Code"` or install the category with `devex install --categories "AI Coding Agents"`.
 
-User-scoped installer scripts (`install_scope: user`) run without `sudo` so binaries install into the invoking user's home directory. Agents with `self_updating: true` manage their own updates and are skipped by `devex update` and `devex upgrade`. Uninstall removes only the binary or managed package and preserves user configuration and credentials (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, `~/.copilot`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.kimi-code`, `~/.aider*`, `~/.config/goose`).
+User-scoped installer scripts (`install_scope: user`) run without `sudo` so binaries install into the invoking user's home directory. Agents with `self_updating: true` manage their own updates and are skipped by `devex update` and `devex upgrade`. `devex upgrade` does not cover mise or Homebrew yet, so update those agents with `mise upgrade` or `brew upgrade`. Uninstall removes only the binary or managed package and preserves user configuration and credentials (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, `~/.copilot`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.kimi-code`, `~/.aider*`, `~/.config/goose`).
 
 | Agent | Linux | macOS | Windows | Updates | Uninstall removes |
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | `curlpipe --user` (`https://claude.ai/install.sh`) | `brew --cask claude-code` | `winget Anthropic.ClaudeCode` | Self-updating on Linux (`devex` skips); package manager on macOS/Windows | `~/.local/bin/claude`, `~/.local/share/claude` (or package) |
-| Codex CLI | `mise codex@latest` | `brew --cask codex` | `mise node@lts npm:@openai/codex@latest` | DevEx / package manager | `mise` tool or Homebrew cask |
+| Codex CLI | `mise codex@latest` | `brew --cask codex` | `mise node@lts npm:@openai/codex@latest` | `mise upgrade` / `brew upgrade` | `mise` tool or Homebrew cask |
 | Gemini CLI | `mise node@lts npm:@google/gemini-cli@latest` (depends on `Node.js`) | `mise node@lts npm:@google/gemini-cli@latest` | `mise node@lts npm:@google/gemini-cli@latest` | Self-updating (`enableAutoUpdate` defaults on; `devex` skips) | `mise` tool (`npm:@google/gemini-cli`) |
 | GitHub Copilot CLI | `curlpipe --user` (`install.sh` from `github/copilot-cli`) | `brew --cask copilot-cli` | `winget GitHub.Copilot` | Self-updating (`devex` skips) | `~/.local/bin/copilot` (or package) |
-| OpenCode | `curlpipe --user` (`https://opencode.ai/install`) | `brew anomalyco/tap/opencode` | `scoop opencode` (`chocolatey` alt) | Self-updating on Linux (`devex` skips); package manager on macOS/Windows | `~/.opencode/bin/opencode` (or package) |
-| Kimi Code | `curlpipe --user` (`https://code.kimi.com/kimi-code/install.sh`; `mise node@lts npm:@moonshot-ai/kimi-code@latest` alt) | `curlpipe --user` (`mise` alt) | `mise node@lts npm:@moonshot-ai/kimi-code@latest` | Manual (`kimi upgrade`) on curlpipe; DevEx/mise on npm alt | `~/.kimi-code/bin/kimi` and `kimi.bak` (or `mise` tool) |
-| Aider | `mise uv@latest pipx:aider-chat[python=3.12]@latest` | `mise pipx:aider-chat[python=3.12]@latest` (activates `uv` first) | `mise pipx:aider-chat[python=3.12]@latest` (activates `uv` first) | DevEx / `mise` | `mise` tool (`pipx:aider-chat`) |
-| Goose | `mise aqua:aaif-goose/goose@latest` | `brew block-goose-cli` | not packaged | DevEx / package manager | `mise` tool or Homebrew formula |
+| OpenCode | `curlpipe --user` (`https://opencode.ai/install`) | `brew anomalyco/tap/opencode` | not packaged | Self-updating on Linux (`devex` skips); `brew upgrade` on macOS | `~/.opencode/bin/opencode` (or package) |
+| Kimi Code | `curlpipe --user` (`https://code.kimi.com/kimi-code/install.sh`; `mise node@lts npm:@moonshot-ai/kimi-code@latest` alt) | `curlpipe --user` (`mise` alt) | `mise node@lts npm:@moonshot-ai/kimi-code@latest` (needs Git for Windows) | Manual (`kimi upgrade`) on curlpipe; `mise upgrade` on npm | `~/.kimi-code/bin/kimi` and `kimi.bak` (or `mise` tool) |
+| Aider | `mise uv@latest pipx:aider-chat[python=3.12]@latest` | `mise uv@latest pipx:aider-chat[python=3.12]@latest` | `mise uv@latest pipx:aider-chat[python=3.12]@latest` | `mise upgrade` | `mise` tool (`pipx:aider-chat`) |
+| Goose | `mise aqua:aaif-goose/goose@latest` | `brew block-goose-cli` | not packaged | `mise upgrade` / `brew upgrade` | `mise` tool or Homebrew formula |
 
 ### Homebrew formulae and Casks
 

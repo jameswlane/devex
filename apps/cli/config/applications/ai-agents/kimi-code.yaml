@@ -25,6 +25,8 @@ macos:
       dependencies:
         - Node.js
 windows:
+  # Kimi Code also needs Git for Windows (it runs commands in Git Bash); the
+  # catalog has no Windows Git entry to depend on yet.
   install_method: mise
   install_command: node@lts npm:@moonshot-ai/kimi-code@latest
   uninstall_command: npm:@moonshot-ai/kimi-code
