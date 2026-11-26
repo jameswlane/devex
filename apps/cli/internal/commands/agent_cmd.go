@@ -115,6 +115,7 @@ to remove so Kimi does not load DevEx twice. Differing content requires --overwr
 	install.Flags().BoolVar(&options.overwrite, "overwrite", false, "Replace differing content and retain a backup")
 	install.Flags().BoolVar(&options.dryRun, "dry-run", false, "Preview without writing files")
 	cmd.AddCommand(install)
+	cmd.AddCommand(newAgentInitCmd(deps.Settings))
 	cmd.AddCommand(newAgentSandboxCmd(deps.SandboxProbe))
 	cmd.AddCommand(newAgentApplyCmd(deps.Settings, executor))
 	cmd.AddCommand(newAgentDiffCmd(deps.Settings, executor))

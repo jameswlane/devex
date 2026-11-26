@@ -1,0 +1,78 @@
+---
+title: Project agent scaffolding (init)
+description: Scaffold AGENTS.md, CLAUDE.md, GEMINI.md, .gitignore entries, and optional .mcp.json for a repository.
+---
+
+`devex agent init` inspects top-level marker files in a repository offline and
+scaffolds canonical project instructions alongside thin agent-specific shims.
+It never downloads plugins or contacts external services.
+
+```sh
+devex agent init
+devex agent init --dry-run
+devex agent init --project-dir ./my-service --mcp
+devex agent init --overwrite
+```
+
+## Generated files
+
+| File | Purpose |
+| --- | --- |
+| `AGENTS.md` | Canonical project instructions with detected languages, task runner, test/lint commands, and editable team sections. Read natively by Codex, OpenCode, and Cursor. |
+| `CLAUDE.md` | Thin shim importing `@AGENTS.md` for Claude Code without duplicating instructions. |
+| `GEMINI.md` | Thin shim importing `@./AGENTS.md` for Gemini CLI without duplicating instructions. |
+| `.gitignore` | Appends missing agent-local ignore entries (`.claude/settings.local.json` and `CLAUDE.local.md`) under `# DevEx agent-local files`, preserving every existing byte. |
+| `.mcp.json` | Optional (`--mcp`): Claude Code project-scope MCP servers rendered from `agents.yaml`. |
+
+## Offline stack detection
+
+`devex agent init` reads only top-level repository files:
+
+- **Languages:** `go.mod` (Go), `package.json` (JavaScript, or TypeScript when `tsconfig.json` is present), `Cargo.toml` (Rust), `pyproject.toml` / `requirements.txt` / `setup.py` (Python), `Gemfile` (Ruby).
+- **Task runners:** `Taskfile.yml` / `Taskfile.yaml` (`task`), `mise.toml` / `.mise.toml` with `[tasks]` (`mise`), `justfile` (`just`), `Makefile` (`make`), and `package.json` `scripts` using the lockfile package manager (`pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, or `npm`).
+- **Test and lint commands:** each command comes from the first source that defines it: a `test` or `lint` target of the detected task runner, then a `test` or `lint` script in `package.json` (for example when a `Makefile` only builds), then language defaults that the marker files support. Commands that cannot be detected are omitted.
+
+## Existing files, backups, and preview
+
+Preview every planned change without writing files, backups, or `.gitignore`
+edits:
+
+```sh
+devex agent init --dry-run
+```
+
+You can also enable dry-run mode via the `DEVEX_DRY_RUN=1` environment
+variable.
+
+- Identical existing files are reported as `Unchanged`.
+- Differing existing files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.mcp.json`) are left untouched and reported as `Skipped (exists)` unless `--overwrite` is passed.
+- With `--overwrite`, differing files are backed up beside the original as `<name>.devex-backup-<unixnano>` before replacement, and both paths are printed.
+- `.gitignore` only appends missing entries and never requires `--overwrite`.
+- All target paths are validated inside `--project-dir` before anything is written; symlinks and non-regular files are rejected with zero writes.
+
+## Project-scope MCP servers (`--mcp`)
+
+Pass `--mcp` to render `.mcp.json` from `agents.mcp_servers` entries in
+`agents.yaml` whose `agents` list is empty or includes `claude`, plus the
+`devex` server (as the bare `devex` command, so the file works for everyone
+who commits it) when `agents.devex_mcp` is `true`. `agents.enabled` must
+include `claude`; otherwise `.mcp.json` is skipped:
+
+```sh
+devex agent init --mcp
+```
+
+`agents.yaml` is validated first so literal secrets are rejected before any
+files are written. Environment references (`${env:VAR}` and
+`Bearer ${env:VAR}`) are rendered in Claude Code's `.mcp.json` expansion syntax
+(`${VAR}` and `Bearer ${VAR}`). If no servers target Claude Code,
+`.mcp.json` is skipped.
+
+## Flags
+
+| Flag | Description |
+| --- | --- |
+| `--project-dir DIR` | Target project directory (must already exist; defaults to current working directory) |
+| `--overwrite` | Replace differing existing files and keep timestamped backups |
+| `--mcp` | Render Claude Code project-scope `.mcp.json` from `agents.yaml` |
+| `--dry-run` (global) | Preview planned changes without writing files (also honors `DEVEX_DRY_RUN`) |

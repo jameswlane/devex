@@ -199,7 +199,7 @@ var _ = Describe("Runtime logging configuration", func() {
 var _ = Describe("Read-only command classification", func() {
 	It("routes agent subcommands through the shared inspection policy", func() {
 		cmd := NewRootCmd("test", nil, config.CrossPlatformSettings{})
-		for _, sub := range []string{"install-skill", "sandbox", "doctor", "login"} {
+		for _, sub := range []string{"install-skill", "init", "sandbox", "doctor", "login"} {
 			agentSub, _, err := cmd.Find([]string{"agent", sub})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(agentSub.Name()).To(Equal(sub))

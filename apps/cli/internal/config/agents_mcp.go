@@ -184,6 +184,9 @@ func validateHTTPMCPServer(srv AgentMCPServerConfig, prefix, label string, add f
 			if parsed.User != nil {
 				add(prefix+".url", fmt.Sprintf("MCP server %q url must not contain embedded credentials; use headers with ${env:VAR_NAME} instead", label))
 			}
+			if mcpURLPathOrFragmentHasSecret(parsed) {
+				add(prefix+".url", fmt.Sprintf("MCP server %q url path or fragment appears to contain a literal secret; use headers with ${env:VAR_NAME} instead", label))
+			}
 			query, qErr := url.ParseQuery(parsed.RawQuery)
 			if qErr != nil {
 				add(prefix+".url", fmt.Sprintf("MCP server %q url query string is malformed; use headers with ${env:VAR_NAME} for credentials", label))
@@ -283,6 +286,49 @@ func hasMCPSecretAuthToken(upper string) bool {
 		return true
 	}
 	return false
+}
+
+// mcpURLPathOrFragmentHasSecret reports whether a decoded path segment or a
+// parameter-style fragment (#access_token=...) carries a literal credential.
+// Segments and pairs are split in their escaped form and decoded one by one,
+// so escaped delimiters stay inside a value and one malformed escape does not
+// hide the other pairs.
+func mcpURLPathOrFragmentHasSecret(u *url.URL) bool {
+	// Prefer the original encoding: the Escaped* accessors re-encode from the
+	// decoded form when the raw text is not canonical, which turns encoded
+	// delimiters into literal ones.
+	rawPath := u.RawPath
+	if rawPath == "" {
+		rawPath = u.EscapedPath()
+	}
+	for _, segment := range strings.Split(rawPath, "/") {
+		if LooksLikeMCPSecretValue(lenientUnescape(segment, url.PathUnescape)) {
+			return true
+		}
+	}
+	fragment := u.RawFragment
+	if fragment == "" {
+		fragment = u.EscapedFragment()
+	}
+	if LooksLikeMCPSecretValue(u.Fragment) {
+		return true
+	}
+	for _, pair := range strings.FieldsFunc(fragment, func(r rune) bool { return r == '&' || r == ';' }) {
+		rawKey, rawValue, _ := strings.Cut(pair, "=")
+		key := lenientUnescape(rawKey, url.QueryUnescape)
+		value := lenientUnescape(rawValue, url.QueryUnescape)
+		if (IsMCPSecretKey(key) && strings.TrimSpace(value) != "") || LooksLikeMCPSecretValue(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func lenientUnescape(s string, unescape func(string) (string, error)) string {
+	if decoded, err := unescape(s); err == nil {
+		return decoded
+	}
+	return s
 }
 
 // LooksLikeMCPSecretValue reports whether val matches a known literal secret or

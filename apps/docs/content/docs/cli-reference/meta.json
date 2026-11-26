@@ -19,6 +19,7 @@
 		"self-update",
 		"mcp",
 		"agent-skills",
+		"agent-init",
 		"agent-sandbox",
 		"agent-config",
 		"agent-doctor",
