@@ -35,6 +35,13 @@ func newJSONString(s string) jsonRaw {
 	return jsonRaw{Raw: string(b)}
 }
 
+func newJSONBool(v bool) jsonRaw {
+	if v {
+		return jsonRaw{Raw: "true"}
+	}
+	return jsonRaw{Raw: "false"}
+}
+
 func (r jsonRaw) asString() (string, bool) {
 	if len(r.Raw) < 2 || r.Raw[0] != '"' {
 		return "", false
@@ -112,6 +119,48 @@ func (o *jsonObject) Set(key string, val jsonValue) {
 		}
 	}
 	o.Entries = append(o.Entries, jsonEntry{Key: key, Value: val})
+}
+
+func (o *jsonObject) Delete(key string) bool {
+	for i := range o.Entries {
+		if o.Entries[i].Key == key {
+			o.Entries = append(o.Entries[:i], o.Entries[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+func jsonSemanticEqual(a, b jsonValue) bool {
+	switch av := a.(type) {
+	case *jsonObject:
+		bv, ok := b.(*jsonObject)
+		if !ok || len(av.Entries) != len(bv.Entries) {
+			return false
+		}
+		for _, e := range av.Entries {
+			other, exists := bv.Get(e.Key)
+			if !exists || !jsonSemanticEqual(e.Value, other) {
+				return false
+			}
+		}
+		return true
+	case *jsonArray:
+		bv, ok := b.(*jsonArray)
+		if !ok || len(av.Items) != len(bv.Items) {
+			return false
+		}
+		for i := range av.Items {
+			if !jsonSemanticEqual(av.Items[i], bv.Items[i]) {
+				return false
+			}
+		}
+		return true
+	case jsonRaw:
+		return av.jsonEqual(b)
+	default:
+		return a == nil && b == nil
+	}
 }
 
 func (o *jsonObject) EnsureObject(key string) (*jsonObject, error) {

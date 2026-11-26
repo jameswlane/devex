@@ -24,6 +24,7 @@ type AgentManagedState struct {
 	Permissions []OpenCodeRule `json:"permissions,omitempty"`
 	// PresetPermissions are the OpenCode preset defaults DevEx put first.
 	PresetPermissions []OpenCodeRule `json:"preset_permissions,omitempty"`
+	MCPServers        []string       `json:"mcp_servers,omitempty"`
 }
 
 // ManagedState is stored at <DEVEX_STATE_DIR>/agents/managed.json.
@@ -48,6 +49,7 @@ func (s ManagedState) clone() ManagedState {
 			Deny:              slices.Clone(v.Deny),
 			Permissions:       slices.Clone(v.Permissions),
 			PresetPermissions: slices.Clone(v.PresetPermissions),
+			MCPServers:        slices.Clone(v.MCPServers),
 		}
 	}
 	return out
@@ -157,6 +159,7 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 			Deny:              uniqueStrings(append(a.Deny, b.Deny...)),
 			Permissions:       uniqueOpenCodeRules(append(a.Permissions, b.Permissions...)),
 			PresetPermissions: uniqueOpenCodeRules(append(a.PresetPermissions, b.PresetPermissions...)),
+			MCPServers:        uniqueStrings(append(a.MCPServers, b.MCPServers...)),
 		}
 	}
 	return out
@@ -164,5 +167,12 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 
 func (a AgentManagedState) equal(b AgentManagedState) bool {
 	return slices.Equal(a.Allow, b.Allow) && slices.Equal(a.Deny, b.Deny) &&
-		slices.Equal(a.Permissions, b.Permissions) && slices.Equal(a.PresetPermissions, b.PresetPermissions)
+		slices.Equal(a.Permissions, b.Permissions) && slices.Equal(a.PresetPermissions, b.PresetPermissions) &&
+		slices.Equal(a.MCPServers, b.MCPServers)
+}
+
+func (a AgentManagedState) isEmpty() bool {
+	return len(a.Allow) == 0 && len(a.Deny) == 0 &&
+		len(a.Permissions) == 0 && len(a.PresetPermissions) == 0 &&
+		len(a.MCPServers) == 0
 }

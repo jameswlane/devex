@@ -143,6 +143,11 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 			}
 			continue
 		}
+		for _, w := range ap.Warnings {
+			if _, err := fmt.Fprintf(p.out, "%s\n", w); err != nil {
+				return err
+			}
+		}
 		for _, fp := range ap.Files {
 			label := diffStatusLabel(fp.Action)
 			if _, err := fmt.Fprintf(p.out, "%s: %s\n", label, fp.Path); err != nil {
@@ -150,6 +155,25 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 			}
 			if fp.Action != actionUnchanged {
 				if diff := UnifiedDiff(fp.Path, fp.Before, fp.After); diff != "" {
+					if _, err := io.WriteString(p.out, diff); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if ap.MCPNotice != "" {
+			if _, err := fmt.Fprintf(p.out, "%s\n", ap.MCPNotice); err != nil {
+				return err
+			}
+		}
+		for _, md := range ap.MCPDiffs {
+			label := diffStatusLabel(md.Action)
+			target := md.Path + " (mcpServers)"
+			if _, err := fmt.Fprintf(p.out, "%s: %s\n", label, target); err != nil {
+				return err
+			}
+			if md.Action != actionUnchanged {
+				if diff := UnifiedDiff(target, md.Before, md.After); diff != "" {
 					if _, err := io.WriteString(p.out, diff); err != nil {
 						return err
 					}
@@ -178,6 +202,11 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 			}
 			continue
 		}
+		for _, w := range ap.Warnings {
+			if _, err := fmt.Fprintf(p.out, "%s\n", w); err != nil {
+				return err
+			}
+		}
 		prev, hadPrev := committed.Agents[ap.Agent]
 		next, hasNext := plan.NextState.Agents[ap.Agent]
 		stateChanges := hadPrev != hasNext || !prev.equal(next)
@@ -200,6 +229,20 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 			}
 			return err
 		}
+		mcpStatus, mcpRanAny, mcpErr := p.applyAgentMCP(ctx, ap)
+		status += mcpStatus
+		if mcpErr != nil {
+			_, _ = io.WriteString(p.out, status)
+			// Only restore prior state if no MCP commands executed; if commands
+			// already mutated external config, keep the pending union state so
+			// DevEx retains ownership of any added or partially-removed servers.
+			if stateChanges && !mcpRanAny {
+				if saveErr := SaveManagedState(plan.StatePath, committed); saveErr != nil {
+					return fmt.Errorf("%w; also failed to restore managed state: %v", mcpErr, saveErr)
+				}
+			}
+			return mcpErr
+		}
 		if stateChanges {
 			if hasNext {
 				committed.Agents[ap.Agent] = next
@@ -217,6 +260,60 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 		}
 	}
 	return nil
+}
+
+func (p *AgentsPlugin) applyAgentMCP(ctx context.Context, ap AgentPlan) (string, bool, error) {
+	var status strings.Builder
+	if ap.MCPNotice != "" {
+		fmt.Fprintf(&status, "%s\n", ap.MCPNotice)
+	}
+	if len(ap.MCPDiffs) == 0 && len(ap.MCPActions) == 0 {
+		return status.String(), false, nil
+	}
+
+	var backupPath string
+	if len(ap.MCPActions) > 0 && len(ap.MCPDiffs) > 0 && ap.MCPDiffs[0].Exists {
+		targetPath := ap.MCPDiffs[0].Path
+		resolved, err := resolveWriteTarget(targetPath)
+		if err != nil {
+			return status.String(), false, err
+		}
+		original, readErr := os.ReadFile(resolved)
+		if readErr != nil {
+			return status.String(), false, fmt.Errorf("read %q for backup: %w", targetPath, readErr)
+		}
+		backupPath, err = ensureOneTimeBackup(resolved, original, os.FileMode(ap.MCPDiffs[0].Mode))
+		if err != nil {
+			return status.String(), false, err
+		}
+	}
+
+	ranAny := false
+	for _, act := range ap.MCPActions {
+		if err := ctx.Err(); err != nil {
+			return status.String(), ranAny, err
+		}
+		out, err := p.env.RunCommand(ctx, act.Binary, act.Args...)
+		ranAny = true
+		if err != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail != "" {
+				return status.String(), ranAny, fmt.Errorf("%s mcp %s %q failed: %s: %w", ap.Agent, act.Kind, act.ServerName, detail, err)
+			}
+			return status.String(), ranAny, fmt.Errorf("%s mcp %s %q failed: %w", ap.Agent, act.Kind, act.ServerName, err)
+		}
+	}
+
+	for _, md := range ap.MCPDiffs {
+		label := applyStatusLabel(md.Action)
+		target := md.Path + " (mcpServers)"
+		if backupPath != "" {
+			fmt.Fprintf(&status, "%s: %s (backup: %s)\n", label, target, backupPath)
+		} else {
+			fmt.Fprintf(&status, "%s: %s\n", label, target)
+		}
+	}
+	return status.String(), ranAny, nil
 }
 
 // writeAgentFiles applies an agent's files and returns their status lines.
