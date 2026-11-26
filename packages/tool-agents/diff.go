@@ -130,7 +130,7 @@ func computeLineDiff(a, b []string) []diffOp {
 
 	// The LCS table costs na*nb cells; past maxDiffCells, show the changed
 	// middle as one removal and one addition instead of exhausting memory.
-	if na > 0 && nb > maxDiffCells/na {
+	if na > maxDiffCells || nb > maxDiffCells || (na > 0 && nb > maxDiffCells/na) {
 		for _, line := range midA {
 			ops = append(ops, diffOp{kind: '-', line: line})
 		}
