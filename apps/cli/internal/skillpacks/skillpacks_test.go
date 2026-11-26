@@ -346,7 +346,10 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		Expect(prEntry.Files).To(ContainElement(HaveField("Path", "scripts/pr-wait")))
 		for _, f := range prEntry.Files {
 			if f.Path == "scripts/pr-wait" {
-				Expect(f.Mode).To(Equal("0755"))
+				// Windows checkouts carry no executable bits.
+				if runtime.GOOS != "windows" {
+					Expect(f.Mode).To(Equal("0755"))
+				}
 				Expect(f.SHA256).To(HaveLen(64))
 			}
 		}
