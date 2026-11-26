@@ -48,6 +48,14 @@ linux:
   verification:
     sha256: 0a23f429a95f0d09db298b3c291536d818de066aa5a85c255806f0490ff6656b
   official_support: true
+  # Upstream documents the release tarball for Debian/Ubuntu releases that do
+  # not package lazygit; other distros use their alternative below, and an
+  # unmatched distro falls back to this entry.
+  platform_requirements:
+    - os: debian
+      version: <13
+    - os: ubuntu
+      version: <25.10
   alternatives:
     - install_method: apt
       install_command: lazygit

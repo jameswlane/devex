@@ -15,6 +15,11 @@ linux:
   install_command: ghostty
   uninstall_command: ghostty
   official_support: false
+  # Ubuntu packages Ghostty from 26.04; other distros use their alternative
+  # below, and an unmatched distro falls back to this entry.
+  platform_requirements:
+    - os: ubuntu
+      version: 26.04+
   alternatives:
     - install_method: apk
       install_command: ghostty
