@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -58,7 +59,8 @@ func DefaultProbe() Probe {
 			cmd := exec.CommandContext(cmdCtx, name, args...)
 			// Stop waiting for output pipes held open by grandchildren after kill.
 			cmd.WaitDelay = time.Second
-			return cmd.CombinedOutput()
+			// Stdout only: stderr is discarded so diagnostics never echo it.
+			return cmd.Output()
 		},
 		EvalSymlinks: filepath.EvalSymlinks,
 		UserHomeDir:  os.UserHomeDir,
@@ -269,7 +271,7 @@ func checkAgent(
 		out, err := probe.Run(cmdCtx, ar.ResolvedPath, spec.VersionArgs...)
 		cancel()
 		if err == nil {
-			ar.Version = Redact(firstLineTrimmed(string(out), maxVersionLength), secrets)
+			ar.Version = versionToken(string(out))
 		}
 	}
 
@@ -344,7 +346,13 @@ func checkAgent(
 		if err != nil || (info != nil && info.IsDir()) {
 			continue
 		}
-		res := validateMCPConfig(probe, mcpSpec, resolved)
+		var res MCPConfigResult
+		if info != nil && !info.Mode().IsRegular() {
+			// Reading a FIFO or device could block the doctor.
+			res = MCPConfigResult{Path: resolved, Format: mcpSpec.Format, Status: MCPStatusInvalid, Error: "invalid: not a regular file"}
+		} else {
+			res = validateMCPConfig(probe, mcpSpec, resolved)
+		}
 		ar.MCPConfigs = append(ar.MCPConfigs, res)
 		if res.Status == MCPStatusInvalid {
 			ar.Problems = append(ar.Problems, Problem{
@@ -451,14 +459,14 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 	}
 
 	// Check whether any known API-key env var NAME is set.
-	if len(ar.EnvVarsSet) > 0 {
+	if len(ar.EnvVarsSet) > 0 && !spec.EnvVarsDoNotAuthenticate {
 		ar.LoginState = LoginStateLoggedIn
 		ar.LoginDetail = fmt.Sprintf("env var %s set", strings.Join(ar.EnvVarsSet, ", "))
 		return
 	}
 
 	// File-backed agents without OS keyring fallback can be reported not_logged_in.
-	if len(spec.CredentialPaths) > 0 && !spec.UsesKeyring {
+	if len(spec.CredentialPaths) > 0 && !spec.UsesKeyring && spec.OtherAuthStore == "" {
 		ar.LoginState = LoginStateNotLoggedIn
 		ar.LoginDetail = "no credential file or API key env var found"
 		ar.Problems = append(ar.Problems, notLoggedInProblem(spec))
@@ -466,9 +474,14 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 	}
 
 	ar.LoginState = LoginStateUnknown
-	if spec.UsesKeyring {
+	switch {
+	case spec.UsesKeyring:
 		ar.LoginDetail = "credentials may be in OS keyring; no token env var or file found"
-	} else {
+	case spec.OtherAuthStore != "":
+		ar.LoginDetail = fmt.Sprintf("credentials may be in %s; no credential file found", spec.OtherAuthStore)
+	case len(ar.EnvVarsSet) > 0:
+		ar.LoginDetail = fmt.Sprintf("env var %s set but %s does not read it automatically", strings.Join(ar.EnvVarsSet, ", "), spec.Name)
+	default:
 		ar.LoginDetail = "no status command or credential signal"
 	}
 }
@@ -488,29 +501,70 @@ func notLoggedInProblem(spec AgentSpec) Problem {
 	}
 }
 
-func firstLineTrimmed(s string, maxLen int) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	for _, line := range strings.Split(s, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		if maxLen > 0 && len(trimmed) > maxLen {
-			return trimmed[:maxLen]
-		}
-		return trimmed
+var versionTokenRegexp = regexp.MustCompile(`\bv?\d+(?:\.\d+)+(?:-[0-9A-Za-z.]+)?`)
+
+// versionToken reports only a recognized version number from command output,
+// never free-form text that could carry a credential.
+func versionToken(out string) string {
+	token := versionTokenRegexp.FindString(out)
+	if len(token) > maxVersionLength {
+		return ""
 	}
-	return ""
+	return token
 }
 
 // FormatJSON renders Report as indented JSON with defense-in-depth secret redaction.
 func FormatJSON(r Report, secrets []string) ([]byte, error) {
-	data, err := json.MarshalIndent(r, "", "  ")
+	data, err := json.MarshalIndent(redactReport(r, secrets), "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal agent doctor report: %w", err)
 	}
-	redacted := Redact(string(data), secrets) + "\n"
-	return []byte(redacted), nil
+	return append(data, '\n'), nil
+}
+
+// redactReport redacts every free-form string before marshaling, so JSON
+// escaping can neither hide a secret nor be broken by the replacement.
+func redactReport(r Report, secrets []string) Report {
+	red := func(s string) string { return Redact(s, secrets) }
+	problems := func(in []Problem) []Problem {
+		out := make([]Problem, len(in))
+		for i, p := range in {
+			p.Summary, p.Fix = red(p.Summary), red(p.Fix)
+			out[i] = p
+		}
+		return out
+	}
+	r.Problems = problems(r.Problems)
+	agents := make([]AgentReport, len(r.Agents))
+	for i, a := range r.Agents {
+		a.Version, a.ResolvedPath, a.LoginDetail = red(a.Version), red(a.ResolvedPath), red(a.LoginDetail)
+		matches := make([]PathMatch, len(a.PathMatches))
+		for j, m := range a.PathMatches {
+			m.Path, m.RealPath = red(m.Path), red(m.RealPath)
+			matches[j] = m
+		}
+		a.PathMatches = matches
+		configs := make([]MCPConfigResult, len(a.MCPConfigs))
+		for j, c := range a.MCPConfigs {
+			c.Path, c.Error = red(c.Path), red(c.Error)
+			configs[j] = c
+		}
+		a.MCPConfigs = configs
+		if a.Node != nil {
+			n := *a.Node
+			n.Detected, n.Path = red(n.Detected), red(n.Path)
+			a.Node = &n
+		}
+		if a.Sandbox != nil {
+			sb := *a.Sandbox
+			sb.BwrapPath, sb.SocatPath = red(sb.BwrapPath), red(sb.SocatPath)
+			a.Sandbox = &sb
+		}
+		a.Problems = problems(a.Problems)
+		agents[i] = a
+	}
+	r.Agents = agents
+	return r
 }
 
 // FormatTable renders Report as a compact human-readable diagnostic summary

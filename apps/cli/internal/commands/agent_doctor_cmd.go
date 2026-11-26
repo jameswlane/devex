@@ -11,8 +11,9 @@ import (
 
 func newAgentDoctorCmd(probe agentdoctor.Probe) *cobra.Command {
 	var (
-		format   string
-		agentIDs []string
+		format     string
+		jsonOutput bool
+		agentIDs   []string
 	)
 	cmd := &cobra.Command{
 		Use:          "doctor",
@@ -40,8 +41,11 @@ problems are listed with actionable fixes and do not change the exit code.`,
   # Filter to specific agents
   devex agent doctor --agent claude --agent codex`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if jsonOutput {
+				format = "json"
+			}
 			if format != "table" && format != "json" {
-				return fmt.Errorf("unsupported format %q: use table or json", format)
+				return fmt.Errorf("unsupported format: use table or json")
 			}
 			specs, err := agentdoctor.FilterAgents(agentIDs)
 			if err != nil {
@@ -57,11 +61,12 @@ problems are listed with actionable fixes and do not change the exit code.`,
 				_, err = cmd.OutOrStdout().Write(out)
 				return err
 			}
-			cmd.Print(agentdoctor.FormatTable(report, secrets))
-			return nil
+			_, err = fmt.Fprint(cmd.OutOrStdout(), agentdoctor.FormatTable(report, secrets))
+			return err
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Shorthand for --format json")
 	cmd.Flags().StringSliceVar(&agentIDs, "agent", nil, fmt.Sprintf("Filter to specific agent IDs (%s)", strings.Join(agentdoctor.ValidAgentIDs(), ", ")))
 	return cmd
 }
@@ -89,7 +94,7 @@ gemini) return guidance for environment variables or the vendor's own flow.`, st
 		RunE: func(cmd *cobra.Command, args []string) error {
 			spec, ok := agentdoctor.LookupAgent(args[0])
 			if !ok {
-				return fmt.Errorf("unknown agent %q: valid agents are %s", args[0], strings.Join(agentdoctor.ValidAgentIDs(), ", "))
+				return fmt.Errorf("unknown agent: valid agents are %s", strings.Join(agentdoctor.ValidAgentIDs(), ", "))
 			}
 			binaryPath, installed := agentdoctor.FindBinary(probe, spec.Binary)
 			if !installed {

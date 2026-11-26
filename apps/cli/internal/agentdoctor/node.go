@@ -39,7 +39,7 @@ func (c *nodeProbeCache) probe(ctx context.Context, probe Probe) {
 	if err != nil {
 		return
 	}
-	raw := firstLineTrimmed(string(out), maxVersionLength)
+	raw := versionToken(string(out))
 	c.detected = raw
 	ver, err := semver.NewVersion(strings.TrimPrefix(raw, "v"))
 	if err == nil {

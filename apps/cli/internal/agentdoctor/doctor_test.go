@@ -53,7 +53,7 @@ func makeOSBackedProbe(home string, pathDirs []string, extraEnv map[string]strin
 			for k, v := range env {
 				cmd.Env = append(cmd.Env, k+"="+v)
 			}
-			return cmd.CombinedOutput()
+			return cmd.Output()
 		},
 		SandboxProbe: sandboxProbe,
 	}
@@ -166,7 +166,7 @@ exit 1`)
 
 		claude := findAgentReport(report, "claude")
 		Expect(claude.Installed).To(BeTrue())
-		Expect(claude.Version).To(Equal("2.1.332 (Claude Code)"))
+		Expect(claude.Version).To(Equal("2.1.332"))
 		Expect(claude.ResolvedPath).To(Equal(filepath.Join(binDir, "claude")))
 		Expect(claude.LoginState).To(Equal(agentdoctor.LoginStateLoggedIn))
 		Expect(claude.LoginDetail).To(ContainSubstring("exited 0"))
@@ -195,7 +195,7 @@ exit 1`)
 		report := agentdoctor.Check(context.Background(), probe, specs)
 		codex := findAgentReport(report, "codex")
 		Expect(codex.Installed).To(BeTrue())
-		Expect(codex.Version).To(Equal("codex-cli 0.172.0"))
+		Expect(codex.Version).To(Equal("0.172.0"))
 		Expect(codex.LoginState).To(Equal(agentdoctor.LoginStateNotLoggedIn))
 		Expect(codex.LoginDetail).To(ContainSubstring("exited non-zero"))
 		Expect(codex.Problems).To(HaveLen(1))
@@ -418,6 +418,102 @@ exec `+sleepPath+` 5`)
 			)))
 		}
 		Expect(findAgentReport(report, "aider").Sandbox).To(BeNil())
+	})
+
+	It("keeps stderr, long secrets, and JSON-escaped secrets out of reports built with the real probe", func() {
+		const (
+			stderrSentinel = "sk-devex-stderr-sentinel-111"
+			statusSentinel = "sk-devex-status-sentinel-222"
+			pathSentinel   = `sk-devex-"path\sentinel-333`
+		)
+		envSentinel := "sk-devex-env-sentinel-" + strings.Repeat("x", 200)
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, pathSentinel, "bin")
+		writeFakeBinary(binDir, "claude", `
+echo "`+stderrSentinel+`" >&2
+if [ "$1" = "--version" ]; then echo "`+envSentinel+` 2.1.0 (Claude Code)"; exit 0; fi
+echo "`+statusSentinel+`"
+exit 0`)
+		writeFakeBinary(binDir, "node", `echo "v22.14.0 `+envSentinel+`"`)
+
+		GinkgoT().Setenv("HOME", home)
+		GinkgoT().Setenv("PATH", binDir)
+		GinkgoT().Setenv("ANTHROPIC_API_KEY", envSentinel)
+		GinkgoT().Setenv("OPENAI_API_KEY", pathSentinel)
+		probe := agentdoctor.DefaultProbe()
+		probe.SandboxProbe = okSandboxProbe(nil)
+		specs, err := agentdoctor.FilterAgents([]string{"claude", "gemini"})
+		Expect(err).NotTo(HaveOccurred())
+
+		report := agentdoctor.Check(context.Background(), probe, specs)
+		Expect(findAgentReport(report, "claude").Version).To(Equal("2.1.0"))
+
+		secrets := agentdoctor.CollectSecretValues(os.Getenv)
+		jsonOut, err := agentdoctor.FormatJSON(report, secrets)
+		Expect(err).NotTo(HaveOccurred())
+		var decoded map[string]any
+		Expect(json.Unmarshal(jsonOut, &decoded)).To(Succeed())
+		table := agentdoctor.FormatTable(report, secrets)
+		for _, out := range []string{string(jsonOut), table} {
+			Expect(out).NotTo(ContainSubstring("sentinel"))
+			Expect(out).NotTo(ContainSubstring("xxxxxxxx"))
+		}
+		Expect(string(jsonOut)).To(ContainSubstring("[REDACTED]"))
+	})
+
+	It("does not open special files at MCP config paths", func() {
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		writeFakeBinary(binDir, "gemini", `echo "0.5.0"`)
+		Expect(os.MkdirAll(filepath.Join(home, ".gemini"), 0o700)).To(Succeed())
+		fifo := filepath.Join(home, ".gemini", "settings.json")
+		Expect(exec.Command("mkfifo", fifo).Run()).To(Succeed())
+
+		probe := makeOSBackedProbe(home, []string{binDir}, nil, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"gemini"})
+		Expect(err).NotTo(HaveOccurred())
+
+		done := make(chan agentdoctor.Report, 1)
+		go func() { done <- agentdoctor.Check(context.Background(), probe, specs) }()
+		var report agentdoctor.Report
+		Eventually(done, 3*time.Second).Should(Receive(&report))
+		gemini := findAgentReport(report, "gemini")
+		Expect(gemini.MCPConfigs).To(HaveLen(1))
+		Expect(gemini.MCPConfigs[0].Error).To(Equal("invalid: not a regular file"))
+	})
+
+	It("reports unknown login rather than a false state when the signal is not authoritative", func() {
+		home := GinkgoT().TempDir()
+		binDir := filepath.Join(home, "bin")
+		writeFakeBinary(binDir, "opencode", `echo "opencode v2.0.26"`)
+		writeFakeBinary(binDir, "kimi", `echo "2.6.0"`)
+		writeFakeBinary(binDir, "gemini", `echo "0.5.0"`)
+		geminiHome := filepath.Join(home, "gemini-home")
+		Expect(os.MkdirAll(filepath.Join(geminiHome, ".gemini"), 0o700)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(geminiHome, ".gemini", "oauth_creds.json"), []byte("{}"), 0o600)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(geminiHome, ".gemini", "settings.json"), []byte("{\n  // comment\n  \"mcpServers\": {}\n}\n"), 0o600)).To(Succeed())
+
+		probe := makeOSBackedProbe(home, []string{binDir}, map[string]string{
+			"KIMI_API_KEY":    "kimi-value-not-read",
+			"GEMINI_CLI_HOME": geminiHome,
+		}, okSandboxProbe(nil), nil)
+		specs, err := agentdoctor.FilterAgents([]string{"opencode", "kimi", "gemini"})
+		Expect(err).NotTo(HaveOccurred())
+		report := agentdoctor.Check(context.Background(), probe, specs)
+
+		opencode := findAgentReport(report, "opencode")
+		Expect(opencode.LoginState).To(Equal(agentdoctor.LoginStateUnknown))
+		Expect(opencode.LoginDetail).To(ContainSubstring("OpenCode's database"))
+		Expect(opencode.Problems).To(BeEmpty())
+
+		kimi := findAgentReport(report, "kimi")
+		Expect(kimi.LoginState).To(Equal(agentdoctor.LoginStateUnknown))
+		Expect(kimi.EnvVarsSet).To(ConsistOf("KIMI_API_KEY"))
+
+		gemini := findAgentReport(report, "gemini")
+		Expect(gemini.LoginState).To(Equal(agentdoctor.LoginStateLoggedIn))
+		Expect(gemini.LoginDetail).To(ContainSubstring(geminiHome))
+		Expect(gemini.MCPConfigs).To(ConsistOf(HaveField("Status", agentdoctor.MCPStatusOK)))
 	})
 
 	It("never leaks any secret sentinel from env vars, credential files, MCP configs, or status commands", func() {

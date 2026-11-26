@@ -53,7 +53,7 @@ var _ = Describe("Agent doctor and login commands", func() {
 				for k, v := range env {
 					cmd.Env = append(cmd.Env, k+"="+v)
 				}
-				return cmd.CombinedOutput()
+				return cmd.Output()
 			},
 			SandboxProbe: agentsandbox.Probe{
 				GOOS: "linux",
@@ -89,7 +89,7 @@ var _ = Describe("Agent doctor and login commands", func() {
 			Expect(stderr.String()).To(BeEmpty())
 			Expect(stdout.String()).To(And(
 				ContainSubstring("codex"),
-				ContainSubstring("codex-cli 0.172.0"),
+				ContainSubstring("0.172.0"),
 				ContainSubstring("not_logged_in"),
 				ContainSubstring("devex agent login codex"),
 				ContainSubstring("aider"),
@@ -113,6 +113,50 @@ var _ = Describe("Agent doctor and login commands", func() {
 			Expect(report.Problems).NotTo(BeEmpty())
 		})
 
+		It("writes the table to stdout, accepts --json, and never echoes rejected input", func() {
+			probe := makeFakeBinProbe("", nil)
+
+			readStdout := func(args ...string) (string, string, error) {
+				r, w, err := os.Pipe()
+				Expect(err).NotTo(HaveOccurred())
+				original := os.Stdout
+				os.Stdout = w
+				defer func() { os.Stdout = original }()
+				cmd := NewAgentCmdWithDeps(AgentCmdDeps{DoctorProbe: probe})
+				var stderr bytes.Buffer
+				cmd.SetErr(&stderr)
+				cmd.SetArgs(args)
+				runErr := cmd.Execute()
+				Expect(w.Close()).To(Succeed())
+				out, err := io.ReadAll(r)
+				Expect(err).NotTo(HaveOccurred())
+				return string(out), stderr.String(), runErr
+			}
+
+			out, errOut, err := readStdout("doctor")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out).To(ContainSubstring("Agent Doctor"))
+			Expect(errOut).To(BeEmpty())
+
+			out, _, err = readStdout("doctor", "--json")
+			Expect(err).NotTo(HaveOccurred())
+			var report agentdoctor.Report
+			Expect(json.Unmarshal([]byte(out), &report)).To(Succeed())
+			Expect(report.Agents).NotTo(BeEmpty())
+
+			const pasted = "sk-pasted-into-the-wrong-flag"
+			for _, args := range [][]string{
+				{"doctor", "--agent", pasted},
+				{"doctor", "--format", pasted},
+				{"login", pasted},
+			} {
+				_, errOut, err = readStdout(args...)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring(pasted))
+				Expect(errOut).NotTo(ContainSubstring(pasted))
+			}
+		})
+
 		It("rejects unsupported --format values and unknown --agent IDs", func() {
 			probe := makeFakeBinProbe("", nil)
 
@@ -120,7 +164,7 @@ var _ = Describe("Agent doctor and login commands", func() {
 			cmdBadFmt.SetOut(io.Discard)
 			cmdBadFmt.SetErr(io.Discard)
 			cmdBadFmt.SetArgs([]string{"doctor", "--format", "yaml"})
-			Expect(cmdBadFmt.Execute()).To(MatchError(ContainSubstring(`unsupported format "yaml"`)))
+			Expect(cmdBadFmt.Execute()).To(MatchError(ContainSubstring(`unsupported format`)))
 
 			cmdBadAgent := NewAgentCmdFromDeps(AgentCmdDeps{DoctorProbe: probe})
 			cmdBadAgent.SetOut(io.Discard)

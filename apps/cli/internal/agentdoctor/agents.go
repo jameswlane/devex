@@ -86,22 +86,28 @@ type MCPConfigSpec struct {
 
 // AgentSpec captures verified metadata for one cataloged AI coding agent.
 type AgentSpec struct {
-	ID                   string
-	Name                 string
-	CatalogFile          string
-	Binary               string
-	VersionArgs          []string
-	LoginStatusArgs      []string
-	LoginArgs            []string
-	NoLoginGuidance      string
-	CredentialPaths      []PathTemplate
-	UsesKeyring          bool
-	APIKeyEnvVars        []string
-	MCPConfigs           []MCPConfigSpec
-	NPMPackage           string
-	MinNodeVersion       string
-	NodeRequired         bool
-	SandboxPrerequisites []string
+	ID              string
+	Name            string
+	CatalogFile     string
+	Binary          string
+	VersionArgs     []string
+	LoginStatusArgs []string
+	LoginArgs       []string
+	NoLoginGuidance string
+	CredentialPaths []PathTemplate
+	UsesKeyring     bool
+	// OtherAuthStore names a credential store DevEx cannot inspect
+	// (besides the OS keyring); a missing credential file then means unknown.
+	OtherAuthStore string
+	// EnvVarsDoNotAuthenticate marks agents whose API-key variables are not
+	// consumed automatically, so a set variable is not a login signal.
+	EnvVarsDoNotAuthenticate bool
+	APIKeyEnvVars            []string
+	MCPConfigs               []MCPConfigSpec
+	NPMPackage               string
+	MinNodeVersion           string
+	NodeRequired             bool
+	SandboxPrerequisites     []string
 }
 
 // knownAgentDefs is the static registry of AI coding agents matching
@@ -198,13 +204,15 @@ var knownAgentDefs = []AgentSpec{
 		VersionArgs:     []string{"--version"},
 		NoLoginGuidance: `Gemini CLI does not have a standalone login subcommand. Start "gemini" and run /auth for Google OAuth, or export GEMINI_API_KEY (or GOOGLE_API_KEY with GOOGLE_GENAI_USE_VERTEXAI=true) from your secret manager.`,
 		CredentialPaths: []PathTemplate{
-			{HomeRelPath: ".gemini/oauth_creds.json"},
+			{EnvDirVar: "GEMINI_CLI_HOME", EnvRelPath: ".gemini/oauth_creds.json", HomeRelPath: ".gemini/oauth_creds.json"},
 		},
 		APIKeyEnvVars: []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"},
 		MCPConfigs: []MCPConfigSpec{
 			{
-				Path:       PathTemplate{HomeRelPath: ".gemini/settings.json"},
-				Format:     MCPFormatJSON,
+				// GEMINI_CLI_HOME replaces the home directory, and settings.json
+				// accepts comments: https://geminicli.com/docs/reference/configuration/
+				Path:       PathTemplate{EnvDirVar: "GEMINI_CLI_HOME", EnvRelPath: ".gemini/settings.json", HomeRelPath: ".gemini/settings.json"},
+				Format:     MCPFormatJSONC,
 				ServersKey: "mcpServers",
 			},
 		},
@@ -256,6 +264,9 @@ var knownAgentDefs = []AgentSpec{
 		Binary:      "opencode",
 		VersionArgs: []string{"--version"},
 		LoginArgs:   []string{"auth", "login"},
+		// OpenCode v2 stores credentials in its SQLite database; auth.json is
+		// the v1 store: https://opencode.ai/docs/cli/providers/#storage
+		OtherAuthStore: "OpenCode's database",
 		CredentialPaths: []PathTemplate{
 			{
 				XDGEnvVar:     "XDG_DATA_HOME",
@@ -347,6 +358,9 @@ var knownAgentDefs = []AgentSpec{
 		VersionArgs:   []string{"--version"},
 		LoginArgs:     []string{"login"},
 		APIKeyEnvVars: []string{"KIMI_API_KEY", "MOONSHOT_API_KEY", "KIMI_MODEL_API_KEY"},
+		// Kimi does not read these automatically:
+		// https://moonshotai.github.io/kimi-code/en/configuration/env-vars.html
+		EnvVarsDoNotAuthenticate: true,
 		MCPConfigs: []MCPConfigSpec{
 			{
 				Path: PathTemplate{
@@ -442,7 +456,8 @@ func FilterAgents(ids []string) ([]AgentSpec, error) {
 		id := strings.ToLower(strings.TrimSpace(raw))
 		spec, ok := LookupAgent(id)
 		if !ok {
-			return nil, fmt.Errorf("unknown agent %q: valid agents are %s", raw, strings.Join(ValidAgentIDs(), ", "))
+			// Never echo the rejected value: it may be a pasted credential.
+			return nil, fmt.Errorf("unknown agent: valid agents are %s", strings.Join(ValidAgentIDs(), ", "))
 		}
 		if seen[spec.ID] {
 			continue
