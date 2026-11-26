@@ -200,14 +200,12 @@ func TestStreamingInstaller_ContextTimeout(t *testing.T) {
 	// Create installer with timeout context
 	installer := createTestInstallerWithContext(t, ctx)
 
-	// Wait for timeout
-	time.Sleep(5 * time.Millisecond)
-
-	// Verify context timed out
+	// Block until the deadline fires; the timer closes Done from its own
+	// goroutine, so a sleep followed by a non-blocking check is racy.
 	select {
 	case <-installer.ctx.Done():
 		assert.Equal(t, context.DeadlineExceeded, installer.ctx.Err())
-	default:
+	case <-time.After(5 * time.Second):
 		t.Fatal("Context should have timed out")
 	}
 }
