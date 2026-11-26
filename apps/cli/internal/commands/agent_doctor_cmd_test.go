@@ -122,7 +122,7 @@ var _ = Describe("Agent doctor and login commands", func() {
 				original := os.Stdout
 				os.Stdout = w
 				defer func() { os.Stdout = original }()
-				cmd := NewAgentCmdWithDeps(AgentCmdDeps{DoctorProbe: probe})
+				cmd := NewAgentCmdFromDeps(AgentCmdDeps{DoctorProbe: probe})
 				var stderr bytes.Buffer
 				cmd.SetErr(&stderr)
 				cmd.SetArgs(args)
