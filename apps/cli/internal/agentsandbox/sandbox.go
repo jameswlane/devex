@@ -236,7 +236,7 @@ func findAppArmorBwrapProfile(probe Probe, bwrapPath string) string {
 	}
 	targets := []string{target}
 
-	matches, _ := probe.Glob(filepath.Join(pathAppArmorDir, "*"))
+	matches, _ := probe.Glob(pathAppArmorDir + "/*") // Linux path, not filepath
 	sort.Strings(matches)
 	if len(matches) == 0 {
 		// Fallback for minimal fixtures without Glob that populate /etc/apparmor.d/bwrap.

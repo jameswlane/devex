@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -59,7 +60,7 @@ func (f *fakeProbeConfig) probe() agentsandbox.Probe {
 		Glob: func(pattern string) ([]string, error) {
 			var matches []string
 			for path := range f.files {
-				if matched, err := filepath.Match(pattern, path); err == nil && matched {
+				if matched, err := pathpkg.Match(pattern, path); err == nil && matched {
 					matches = append(matches, path)
 				}
 			}
