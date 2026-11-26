@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -154,7 +155,7 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 				return err
 			}
 			if fp.Action != actionUnchanged {
-				if diff := UnifiedDiff(fp.Path, fp.Before, fp.After); diff != "" {
+				if diff := UnifiedDiff(fp.Path, redactDiffContent(fp.Before), redactDiffContent(fp.After)); diff != "" {
 					if _, err := io.WriteString(p.out, diff); err != nil {
 						return err
 					}
@@ -173,7 +174,7 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 				return err
 			}
 			if md.Action != actionUnchanged {
-				if diff := UnifiedDiff(target, md.Before, md.After); diff != "" {
+				if diff := UnifiedDiff(target, redactDiffContent(md.Before), redactDiffContent(md.After)); diff != "" {
 					if _, err := io.WriteString(p.out, diff); err != nil {
 						return err
 					}
@@ -184,14 +185,23 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 	return nil
 }
 
-// applyPlan writes one agent at a time and keeps managed state exact for each.
-// An agent's list entries live in one file that is replaced atomically, so a
-// failed write leaves that file, and therefore its previous ownership, as it
-// was. While an agent is being written, state owns both its old and new
-// entries, so neither an addition nor a removal loses its owner if the
-// process stops or the final save fails.
+// applyPlan writes one agent at a time and checkpoints managed ownership after
+// each succeeded file write and each succeeded MCP CLI command. While a file
+// with ownership changes is being replaced, state temporarily holds the union
+// of old and new entries so neither an addition nor a removal loses its owner
+// if the process stops mid-write. If a later step for the same agent fails,
+// ownership for every earlier step that succeeded remains persisted.
 func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 	committed := plan.InitialState.clone()
+	saveCommitted := func(agent string, state AgentManagedState) error {
+		if state.isEmpty() {
+			delete(committed.Agents, agent)
+		} else {
+			committed.Agents[agent] = state.clone()
+		}
+		return SaveManagedState(plan.StatePath, committed)
+	}
+
 	for _, ap := range plan.Agents {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -207,68 +217,97 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 				return err
 			}
 		}
-		prev, hadPrev := committed.Agents[ap.Agent]
+
+		cur := committed.Agents[ap.Agent].clone()
 		next, hasNext := plan.NextState.Agents[ap.Agent]
-		stateChanges := hadPrev != hasNext || !prev.equal(next)
-		if stateChanges {
-			pending := committed.clone()
-			pending.Agents[ap.Agent] = prev
-			pending = pending.union(ManagedState{Agents: map[string]AgentManagedState{ap.Agent: next}})
-			if err := SaveManagedState(plan.StatePath, pending); err != nil {
+		var status strings.Builder
+
+		for _, fp := range ap.Files {
+			if err := ctx.Err(); err != nil {
+				_, _ = io.WriteString(p.out, status.String())
 				return err
 			}
-		}
-		status, err := writeAgentFiles(ctx, ap)
-		if err != nil {
-			// Still report the files (and backups) written before the failure.
-			_, _ = io.WriteString(p.out, status)
-			if stateChanges {
-				if saveErr := SaveManagedState(plan.StatePath, committed); saveErr != nil {
-					return fmt.Errorf("%w; also failed to restore managed state: %v", err, saveErr)
+			afterFP := cur.clone()
+			if fp.OwnsPermissions {
+				afterFP.Allow = slices.Clone(next.Allow)
+				afterFP.Deny = slices.Clone(next.Deny)
+				afterFP.Permissions = slices.Clone(next.Permissions)
+				afterFP.PresetPermissions = slices.Clone(next.PresetPermissions)
+			}
+			if fp.OwnsMCP {
+				afterFP.MCPServers = slices.Clone(next.MCPServers)
+				afterFP.MCPConfigPath = next.MCPConfigPath
+			}
+			fpStateChanges := !cur.equal(afterFP)
+			wrotePending := false
+			if fpStateChanges && fp.Action != actionUnchanged {
+				pending := committed.clone()
+				pending = pending.union(ManagedState{Agents: map[string]AgentManagedState{ap.Agent: afterFP}})
+				if err := SaveManagedState(plan.StatePath, pending); err != nil {
+					_, _ = io.WriteString(p.out, status.String())
+					return err
+				}
+				wrotePending = true
+			}
+			backupPath, err := ApplyFilePlan(fp)
+			if err != nil {
+				_, _ = io.WriteString(p.out, status.String())
+				if wrotePending {
+					if saveErr := SaveManagedState(plan.StatePath, committed); saveErr != nil {
+						return fmt.Errorf("%w; also failed to restore managed state: %v", err, saveErr)
+					}
+				}
+				return err
+			}
+			label := applyStatusLabel(fp.Action)
+			if backupPath != "" {
+				fmt.Fprintf(&status, "%s: %s (backup: %s)\n", label, fp.Path, backupPath)
+			} else {
+				fmt.Fprintf(&status, "%s: %s\n", label, fp.Path)
+			}
+			if fpStateChanges {
+				cur = afterFP
+				if err := saveCommitted(ap.Agent, cur); err != nil {
+					_, _ = io.WriteString(p.out, status.String())
+					return err
 				}
 			}
-			return err
 		}
-		mcpStatus, mcpRanAny, mcpErr := p.applyAgentMCP(ctx, ap)
-		status += mcpStatus
+
+		mcpStatus, mcpErr := p.applyAgentMCP(ctx, ap, &cur, saveCommitted)
+		status.WriteString(mcpStatus)
 		if mcpErr != nil {
-			_, _ = io.WriteString(p.out, status)
-			// Only restore prior state if no MCP commands executed; if commands
-			// already mutated external config, keep the pending union state so
-			// DevEx retains ownership of any added or partially-removed servers.
-			if stateChanges && !mcpRanAny {
-				if saveErr := SaveManagedState(plan.StatePath, committed); saveErr != nil {
-					return fmt.Errorf("%w; also failed to restore managed state: %v", mcpErr, saveErr)
-				}
-			}
+			_, _ = io.WriteString(p.out, status.String())
 			return mcpErr
 		}
-		if stateChanges {
-			if hasNext {
-				committed.Agents[ap.Agent] = next
-			} else {
-				delete(committed.Agents, ap.Agent)
-			}
-			if err := SaveManagedState(plan.StatePath, committed); err != nil {
+
+		_, hadCur := committed.Agents[ap.Agent]
+		if hadCur != hasNext || !cur.equal(next) {
+			if err := saveCommitted(ap.Agent, next); err != nil {
 				return err
 			}
 		}
 		// Report only after ownership matches the files, so a failing output
 		// stream can never undo the record of a write that happened.
-		if _, err := io.WriteString(p.out, status); err != nil {
+		if _, err := io.WriteString(p.out, status.String()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *AgentsPlugin) applyAgentMCP(ctx context.Context, ap AgentPlan) (string, bool, error) {
+func (p *AgentsPlugin) applyAgentMCP(
+	ctx context.Context,
+	ap AgentPlan,
+	cur *AgentManagedState,
+	saveCommitted func(agent string, state AgentManagedState) error,
+) (string, error) {
 	var status strings.Builder
 	if ap.MCPNotice != "" {
 		fmt.Fprintf(&status, "%s\n", ap.MCPNotice)
 	}
 	if len(ap.MCPDiffs) == 0 && len(ap.MCPActions) == 0 {
-		return status.String(), false, nil
+		return status.String(), nil
 	}
 
 	var backupPath string
@@ -276,31 +315,41 @@ func (p *AgentsPlugin) applyAgentMCP(ctx context.Context, ap AgentPlan) (string,
 		targetPath := ap.MCPDiffs[0].Path
 		resolved, err := resolveWriteTarget(targetPath)
 		if err != nil {
-			return status.String(), false, err
+			return status.String(), err
 		}
 		original, readErr := os.ReadFile(resolved)
 		if readErr != nil {
-			return status.String(), false, fmt.Errorf("read %q for backup: %w", targetPath, readErr)
+			return status.String(), fmt.Errorf("read %q for backup: %w", targetPath, readErr)
 		}
 		backupPath, err = ensureOneTimeBackup(resolved, original, os.FileMode(ap.MCPDiffs[0].Mode))
 		if err != nil {
-			return status.String(), false, err
+			return status.String(), err
 		}
 	}
 
-	ranAny := false
+	curMCP := slices.Clone(prevMCPServersForPath(*cur, ap.MCPConfigPath))
 	for _, act := range ap.MCPActions {
 		if err := ctx.Err(); err != nil {
-			return status.String(), ranAny, err
+			return status.String(), err
 		}
 		out, err := p.env.RunCommand(ctx, act.Binary, act.Args...)
-		ranAny = true
 		if err != nil {
 			detail := strings.TrimSpace(string(out))
 			if detail != "" {
-				return status.String(), ranAny, fmt.Errorf("%s mcp %s %q failed: %s: %w", ap.Agent, act.Kind, act.ServerName, detail, err)
+				return status.String(), fmt.Errorf("%s mcp %s %q failed: %s: %w", ap.Agent, act.Kind, act.ServerName, detail, err)
 			}
-			return status.String(), ranAny, fmt.Errorf("%s mcp %s %q failed: %w", ap.Agent, act.Kind, act.ServerName, err)
+			return status.String(), fmt.Errorf("%s mcp %s %q failed: %w", ap.Agent, act.Kind, act.ServerName, err)
+		}
+		switch act.Kind {
+		case "add":
+			curMCP = uniqueStrings(append(curMCP, act.ServerName))
+		case "remove":
+			curMCP = slices.DeleteFunc(curMCP, func(name string) bool { return name == act.ServerName })
+		}
+		cur.MCPServers = slices.Clone(curMCP)
+		cur.MCPConfigPath = mcpConfigPathForOwned(curMCP, ap.MCPConfigPath)
+		if saveErr := saveCommitted(ap.Agent, *cur); saveErr != nil {
+			return status.String(), saveErr
 		}
 	}
 
@@ -311,27 +360,6 @@ func (p *AgentsPlugin) applyAgentMCP(ctx context.Context, ap AgentPlan) (string,
 			fmt.Fprintf(&status, "%s: %s (backup: %s)\n", label, target, backupPath)
 		} else {
 			fmt.Fprintf(&status, "%s: %s\n", label, target)
-		}
-	}
-	return status.String(), ranAny, nil
-}
-
-// writeAgentFiles applies an agent's files and returns their status lines.
-func writeAgentFiles(ctx context.Context, ap AgentPlan) (string, error) {
-	var status strings.Builder
-	for _, fp := range ap.Files {
-		if err := ctx.Err(); err != nil {
-			return status.String(), err
-		}
-		backupPath, err := ApplyFilePlan(fp)
-		if err != nil {
-			return status.String(), err
-		}
-		label := applyStatusLabel(fp.Action)
-		if backupPath != "" {
-			fmt.Fprintf(&status, "%s: %s (backup: %s)\n", label, fp.Path, backupPath)
-		} else {
-			fmt.Fprintf(&status, "%s: %s\n", label, fp.Path)
 		}
 	}
 	return status.String(), nil

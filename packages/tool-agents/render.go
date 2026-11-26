@@ -66,14 +66,15 @@ func (e Env) normalize() Env {
 
 // AgentPlan holds the planned file and command operations for a single agent.
 type AgentPlan struct {
-	Agent      string
-	Skipped    bool
-	Reason     string
-	Files      []FilePlan
-	MCPDiffs   []MCPDiffPlan
-	MCPActions []MCPCommandAction
-	MCPNotice  string
-	Warnings   []string
+	Agent         string
+	Skipped       bool
+	Reason        string
+	Files         []FilePlan
+	MCPDiffs      []MCPDiffPlan
+	MCPActions    []MCPCommandAction
+	MCPNotice     string
+	MCPConfigPath string
+	Warnings      []string
 }
 
 // PlanResult contains all planned agent operations plus updated managed state.
@@ -326,10 +327,12 @@ func planClaude(spec AgentSpec, configDir, home string, env Env, prev AgentManag
 			}
 		}
 
-		plan.Files = append(plan.Files, buildJSONFilePlan(AgentClaude, settingsPath, before, exists, mode, origDoc, doc))
+		fp := buildJSONFilePlan(AgentClaude, settingsPath, before, exists, mode, origDoc, doc)
+		fp.OwnsPermissions = true
+		plan.Files = append(plan.Files, fp)
 	}
 
-	mcpDiff, mcpActions, mcpNotice, ownedMCP, mcpWarnings, err := planClaudeMCP(spec.MCPServers, home, env, prev)
+	mcpDiff, mcpActions, mcpNotice, ownedMCP, mcpConfigPath, mcpWarnings, err := planClaudeMCP(spec.MCPServers, home, env, prev)
 	if err != nil {
 		return AgentPlan{}, AgentManagedState{}, err
 	}
@@ -338,12 +341,14 @@ func planClaude(spec AgentSpec, configDir, home string, env Env, prev AgentManag
 	}
 	plan.MCPActions = mcpActions
 	plan.MCPNotice = mcpNotice
+	plan.MCPConfigPath = resolveClaudeMCPPath(home, env.Getenv)
 	plan.Warnings = append(plan.Warnings, mcpWarnings...)
 
 	return plan, AgentManagedState{
-		Allow:      ownedAllow,
-		Deny:       ownedDeny,
-		MCPServers: ownedMCP,
+		Allow:         ownedAllow,
+		Deny:          ownedDeny,
+		MCPServers:    ownedMCP,
+		MCPConfigPath: mcpConfigPath,
 	}, nil
 }
 
@@ -393,8 +398,9 @@ func planCodex(spec AgentSpec, configDir string, prev AgentManagedState) (AgentP
 		}
 	}
 
+	prevMCP := prevMCPServersForPath(prev, configPath)
 	var ownedMCP []string
-	hasTOMLWork := len(updates) > 0 || len(desiredMCP) > 0 || len(prev.MCPServers) > 0
+	hasTOMLWork := len(updates) > 0 || len(desiredMCP) > 0 || len(prevMCP) > 0
 	if existsTOML || hasTOMLWork {
 		afterTOML := beforeTOML
 		if len(updates) > 0 {
@@ -403,8 +409,8 @@ func planCodex(spec AgentSpec, configDir string, prev AgentManagedState) (AgentP
 				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", configPath, err)
 			}
 		}
-		if len(desiredMCP) > 0 || len(prev.MCPServers) > 0 {
-			afterTOML, _, ownedMCP, err = EditTOMLMCPServers(afterTOML, desiredMCP, desiredOrder, prev.MCPServers)
+		if len(desiredMCP) > 0 || len(prevMCP) > 0 {
+			afterTOML, _, ownedMCP, err = EditTOMLMCPServers(afterTOML, desiredMCP, desiredOrder, prevMCP)
 			if err != nil {
 				return AgentPlan{}, AgentManagedState{}, fmt.Errorf("%s: %w", configPath, err)
 			}
@@ -416,13 +422,14 @@ func planCodex(spec AgentSpec, configDir string, prev AgentManagedState) (AgentP
 			action = actionUpdate
 		}
 		plan.Files = append(plan.Files, FilePlan{
-			Agent:  AgentCodex,
-			Path:   configPath,
-			Action: action,
-			Before: beforeTOML,
-			After:  afterTOML,
-			Mode:   modeTOML,
-			Exists: existsTOML,
+			Agent:   AgentCodex,
+			Path:    configPath,
+			Action:  action,
+			Before:  beforeTOML,
+			After:   afterTOML,
+			Mode:    modeTOML,
+			Exists:  existsTOML,
+			OwnsMCP: true,
 		})
 	}
 
@@ -468,8 +475,10 @@ func planCodex(spec AgentSpec, configDir string, prev AgentManagedState) (AgentP
 		})
 	}
 
+	plan.MCPConfigPath = configPath
 	return plan, AgentManagedState{
-		MCPServers: ownedMCP,
+		MCPServers:    ownedMCP,
+		MCPConfigPath: mcpConfigPathForOwned(ownedMCP, configPath),
 	}, nil
 }
 
@@ -492,6 +501,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) (Agent
 	}
 
 	settingsPath := filepath.Join(configDir, "settings.json")
+	prevMCP := prevMCPServersForPath(prev, settingsPath)
 	before, exists, mode, err := readExistingFile(settingsPath, settingsFileMode)
 	if err != nil {
 		return AgentPlan{}, AgentManagedState{}, err
@@ -500,7 +510,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) (Agent
 	hasSettingsWork := spec.Model != "" || spec.Preset != "" ||
 		len(desiredAllow) > 0 || len(desiredDeny) > 0 ||
 		len(prev.Allow) > 0 || len(prev.Deny) > 0 ||
-		len(spec.MCPServers) > 0 || len(prev.MCPServers) > 0
+		len(spec.MCPServers) > 0 || len(prevMCP) > 0
 
 	if !exists && !hasSettingsWork {
 		return plan, AgentManagedState{}, nil
@@ -569,7 +579,7 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) (Agent
 		"mcpServers",
 		doc,
 		spec.MCPServers,
-		prev.MCPServers,
+		prevMCP,
 		renderGeminiMCPServerObject,
 		geminiNativeRefRe.MatchString,
 	)
@@ -577,12 +587,17 @@ func planGemini(spec AgentSpec, configDir string, prev AgentManagedState) (Agent
 		return AgentPlan{}, AgentManagedState{}, err
 	}
 	plan.Warnings = append(plan.Warnings, mcpWarnings...)
+	plan.MCPConfigPath = settingsPath
 
-	plan.Files = append(plan.Files, buildJSONFilePlan(AgentGemini, settingsPath, before, exists, mode, origDoc, doc))
+	fp := buildJSONFilePlan(AgentGemini, settingsPath, before, exists, mode, origDoc, doc)
+	fp.OwnsPermissions = true
+	fp.OwnsMCP = true
+	plan.Files = append(plan.Files, fp)
 	return plan, AgentManagedState{
-		Allow:      ownedAllow,
-		Deny:       ownedDeny,
-		MCPServers: ownedMCP,
+		Allow:         ownedAllow,
+		Deny:          ownedDeny,
+		MCPServers:    ownedMCP,
+		MCPConfigPath: mcpConfigPathForOwned(ownedMCP, settingsPath),
 	}, nil
 }
 
@@ -599,11 +614,17 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) (Age
 	// taking precedence when present. Target opencode.jsonc if it already exists
 	// (rejecting comments/trailing commas rather than stripping them), otherwise
 	// manage opencode.json.
-	settingsPath := filepath.Join(configDir, "opencode.json")
+	jsonPath := filepath.Join(configDir, "opencode.json")
 	jsoncPath := filepath.Join(configDir, "opencode.jsonc")
+	settingsPath := jsonPath
+	otherPath := ""
 	if _, err := os.Lstat(jsoncPath); err == nil {
 		settingsPath = jsoncPath
+		if _, err2 := os.Lstat(jsonPath); err2 == nil {
+			otherPath = jsonPath
+		}
 	}
+	prevMCP := prevMCPServersForPath(prev, settingsPath)
 
 	presetRules, err := openCodePresetRules(spec.Preset)
 	if err != nil {
@@ -638,7 +659,7 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) (Age
 
 	hasSettingsWork := spec.Model != "" ||
 		len(desiredRules) > 0 || len(prev.Permissions) > 0 || len(prev.PresetPermissions) > 0 ||
-		len(spec.MCPServers) > 0 || len(prev.MCPServers) > 0
+		len(spec.MCPServers) > 0 || len(prevMCP) > 0
 	if !exists && !hasSettingsWork {
 		return plan, AgentManagedState{}, nil
 	}
@@ -673,26 +694,28 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) (Age
 		doc.Set("permissions", &jsonArray{Items: merged})
 	}
 
-	ownedMCP, mcpWarnings, err := mergeJSONMCPServers(
-		AgentOpenCode,
+	ownedMCP, mcpWarnings, err := mergeOpenCodeMCPServers(
 		settingsPath,
-		"mcp",
+		otherPath,
 		doc,
 		spec.MCPServers,
-		prev.MCPServers,
-		renderOpenCodeMCPServerObject,
-		opencodeNativeRefRe.MatchString,
+		prevMCP,
 	)
 	if err != nil {
 		return AgentPlan{}, AgentManagedState{}, err
 	}
 	plan.Warnings = append(plan.Warnings, mcpWarnings...)
+	plan.MCPConfigPath = settingsPath
 
-	plan.Files = append(plan.Files, buildJSONFilePlan(AgentOpenCode, settingsPath, before, exists, mode, origDoc, doc))
+	fp := buildJSONFilePlan(AgentOpenCode, settingsPath, before, exists, mode, origDoc, doc)
+	fp.OwnsPermissions = true
+	fp.OwnsMCP = true
+	plan.Files = append(plan.Files, fp)
 	return plan, AgentManagedState{
 		PresetPermissions: ownedPreset,
 		Permissions:       ownedExplicit,
 		MCPServers:        ownedMCP,
+		MCPConfigPath:     mcpConfigPathForOwned(ownedMCP, settingsPath),
 	}, nil
 }
 

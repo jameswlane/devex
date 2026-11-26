@@ -19,13 +19,15 @@ const (
 
 // FilePlan describes the planned change to one native agent file.
 type FilePlan struct {
-	Agent  string
-	Path   string
-	Action fileAction
-	Before string
-	After  string
-	Mode   os.FileMode
-	Exists bool
+	Agent           string
+	Path            string
+	Action          fileAction
+	Before          string
+	After           string
+	Mode            os.FileMode
+	Exists          bool
+	OwnsPermissions bool
+	OwnsMCP         bool
 }
 
 // resolveWriteTarget follows existing symlinks so dotfile-manager links

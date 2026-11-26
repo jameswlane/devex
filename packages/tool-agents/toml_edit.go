@@ -41,13 +41,11 @@ func EditTOMLTopLevelStrings(existing string, updates map[string]string, ordered
 	lines := splitLinesPreserve(existing)
 	foundKeys := make(map[string]bool, len(updates))
 	firstTableIdx := len(lines)
-	inMultiline := ""
+	var scan tomlScanState
 
 	for i, line := range lines {
-		if inMultiline != "" {
-			if strings.Contains(line, inMultiline) {
-				inMultiline = ""
-			}
+		if scan.inMultiline() {
+			scan.scanLine(line)
 			continue
 		}
 
@@ -55,28 +53,27 @@ func EditTOMLTopLevelStrings(existing string, updates map[string]string, ordered
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "[") {
+		if scan.atTop() && strings.HasPrefix(trimmed, "[") {
 			firstTableIdx = i
 			break
 		}
 
 		key, rawVal, comment, isAssign := splitTOMLAssignment(line)
-		if isAssign {
-			// Detect multiline string delimiter if this is another key.
+		if isAssign && scan.atTop() {
 			if delim := openMultilineDelimiter(rawVal); delim != "" {
 				if _, owned := updates[key]; owned {
 					return "", false, fmt.Errorf("TOML key %q uses a multiline string; DevEx will not overwrite it", key)
 				}
-				inMultiline = delim
-				continue
 			}
 		}
 
-		if !isAssign {
+		if !isAssign || !scan.atTop() {
+			scan.scanLine(line)
 			continue
 		}
 		newVal, owned := updates[key]
 		if !owned {
+			scan.scanLine(line)
 			continue
 		}
 
@@ -96,6 +93,7 @@ func EditTOMLTopLevelStrings(existing string, updates map[string]string, ordered
 			rebuilt += " " + comment
 		}
 		lines[i] = rebuilt + eol
+		scan.scanLine(lines[i])
 	}
 
 	var missing []string
@@ -314,6 +312,24 @@ func EditTOMLMCPServers(
 		}
 	}
 
+	lines := splitLinesPreserve(existing)
+	sections := splitTOMLSections(lines)
+
+	// Detect inline `mcp_servers = { ... }` or dotted/inline per-server forms
+	// BEFORE adopting or writing, so DevEx never appends an invalid table or
+	// adopts an entry it cannot later update/remove.
+	mcpServersInline, nonStandardServers, standardServers := inspectTOMLMCPForms(sections)
+	touchedCheck := uniqueStrings(append(slices.Clone(desiredOrder), prevManaged...))
+	if mcpServersInline && len(touchedCheck) > 0 {
+		return "", false, nil, fmt.Errorf("mcp_servers is defined as an inline table; define [mcp_servers.<name>] as standard tables so DevEx can manage them")
+	}
+	for _, name := range touchedCheck {
+		_, exists := existingServers[name]
+		if nonStandardServers[name] || (exists && !standardServers[name]) {
+			return "", false, nil, fmt.Errorf("MCP server %q is defined in inline or dotted TOML form; define [mcp_servers.%s] as standard tables so DevEx can manage them", name, formatTOMLKey(name))
+		}
+	}
+
 	desiredParsed := make(map[string]map[string]any, len(desired))
 	desiredRendered := make(map[string]string, len(desired))
 	for _, name := range desiredOrder {
@@ -363,33 +379,11 @@ func EditTOMLMCPServers(
 		return existing, false, owned, nil
 	}
 
-	lines := splitLinesPreserve(existing)
-	sections := splitTOMLSections(lines)
-
-	// Confirm every server we must replace or remove has explicit table headers
-	// (not inline `mcp_servers = { ... }` or dotted keys under `[mcp_servers]`).
-	foundHeaderFor := map[string]bool{}
-	for _, sec := range sections {
-		if srvName, isMCP := mcpServerTableOwner(sec.path); isMCP {
-			foundHeaderFor[srvName] = true
-		}
-	}
-	for name := range toReplace {
-		if !foundHeaderFor[name] {
-			return "", false, nil, fmt.Errorf("MCP server %q is defined in inline or dotted TOML form; DevEx will not rewrite it", name)
-		}
-	}
-	for name := range toRemove {
-		if !foundHeaderFor[name] {
-			return "", false, nil, fmt.Errorf("MCP server %q is defined in inline or dotted TOML form; DevEx will not rewrite it", name)
-		}
-	}
-
 	replacedDone := map[string]bool{}
 	var outLines []string
 	for idx, sec := range sections {
 		srvName, isMCP := mcpServerTableOwner(sec.path)
-		if isMCP && (toRemove[srvName] || toReplace[srvName]) {
+		if isMCP && !sec.isArrayTable && (toRemove[srvName] || toReplace[srvName]) {
 			// Preserve any trailing comment block that introduces the following section.
 			_, preservedTail := splitSectionPreservedTail(sec.lines, idx < len(sections)-1)
 			if toReplace[srvName] && !replacedDone[srvName] {
@@ -463,46 +457,311 @@ func EditTOMLMCPServers(
 		}
 	}
 
+	// Guard against accidental data loss: every untouched top-level key and
+	// every untouched mcp_servers.<name> entry must be deep-equal before vs after.
+	touched := make(map[string]bool, len(toAdd)+len(toReplace)+len(toRemove))
+	for _, name := range toAdd {
+		touched[name] = true
+	}
+	for name := range toReplace {
+		touched[name] = true
+	}
+	for name := range toRemove {
+		touched[name] = true
+	}
+	if err := verifyTOMLUntouchedPreserved(parsed, verified, touched); err != nil {
+		return "", false, nil, err
+	}
+
 	return result, result != existing, owned, nil
 }
 
+func verifyTOMLUntouchedPreserved(before, after map[string]any, touchedMCP map[string]bool) error {
+	for k, beforeVal := range before {
+		if k == "mcp_servers" {
+			continue
+		}
+		afterVal, exists := after[k]
+		if !exists || !reflect.DeepEqual(beforeVal, afterVal) {
+			return fmt.Errorf("validate updated TOML: unmanaged top-level key %q changed unexpectedly; refusing to write", k)
+		}
+	}
+	for k := range after {
+		if k == "mcp_servers" {
+			continue
+		}
+		if _, exists := before[k]; !exists {
+			return fmt.Errorf("validate updated TOML: unexpected top-level key %q appeared; refusing to write", k)
+		}
+	}
+	beforeServers, _ := before["mcp_servers"].(map[string]any)
+	afterServers, _ := after["mcp_servers"].(map[string]any)
+	for name, beforeVal := range beforeServers {
+		if touchedMCP[name] {
+			continue
+		}
+		afterVal, exists := afterServers[name]
+		if !exists || !reflect.DeepEqual(beforeVal, afterVal) {
+			return fmt.Errorf("validate updated TOML: unmanaged mcp_servers.%s changed unexpectedly; refusing to write", name)
+		}
+	}
+	for name := range afterServers {
+		if touchedMCP[name] {
+			continue
+		}
+		if _, exists := beforeServers[name]; !exists {
+			return fmt.Errorf("validate updated TOML: unexpected mcp_servers.%s appeared; refusing to write", name)
+		}
+	}
+	return nil
+}
+
+type tomlStringMode int
+
+const (
+	tomlModeNone tomlStringMode = iota
+	tomlModeBasicMultiline
+	tomlModeLiteralMultiline
+)
+
+type tomlScanState struct {
+	mode         tomlStringMode
+	bracketDepth int
+	braceDepth   int
+}
+
+func (s *tomlScanState) inMultiline() bool {
+	return s.mode != tomlModeNone
+}
+
+func (s *tomlScanState) atTop() bool {
+	return s.mode == tomlModeNone && s.bracketDepth == 0 && s.braceDepth == 0
+}
+
+func (s *tomlScanState) scanLine(line string) {
+	for i := 0; i < len(line); {
+		switch s.mode {
+		case tomlModeBasicMultiline:
+			if line[i] == '\\' {
+				i += 2
+				continue
+			}
+			if strings.HasPrefix(line[i:], `"""`) {
+				run := 0
+				for i+run < len(line) && line[i+run] == '"' {
+					run++
+				}
+				if run <= 5 {
+					i += run
+				} else {
+					i += 3
+				}
+				s.mode = tomlModeNone
+				continue
+			}
+			i++
+		case tomlModeLiteralMultiline:
+			if strings.HasPrefix(line[i:], `'''`) {
+				run := 0
+				for i+run < len(line) && line[i+run] == '\'' {
+					run++
+				}
+				if run <= 5 {
+					i += run
+				} else {
+					i += 3
+				}
+				s.mode = tomlModeNone
+				continue
+			}
+			i++
+		default:
+			c := line[i]
+			switch {
+			case c == '#':
+				return
+			case strings.HasPrefix(line[i:], `"""`):
+				s.mode = tomlModeBasicMultiline
+				i += 3
+			case strings.HasPrefix(line[i:], `'''`):
+				s.mode = tomlModeLiteralMultiline
+				i += 3
+			case c == '"':
+				i++
+				for i < len(line) {
+					if line[i] == '\\' {
+						i += 2
+						continue
+					}
+					if line[i] == '"' {
+						i++
+						break
+					}
+					i++
+				}
+			case c == '\'':
+				i++
+				for i < len(line) {
+					if line[i] == '\'' {
+						i++
+						break
+					}
+					i++
+				}
+			case c == '[':
+				s.bracketDepth++
+				i++
+			case c == ']':
+				if s.bracketDepth > 0 {
+					s.bracketDepth--
+				}
+				i++
+			case c == '{':
+				s.braceDepth++
+				i++
+			case c == '}':
+				if s.braceDepth > 0 {
+					s.braceDepth--
+				}
+				i++
+			default:
+				i++
+			}
+		}
+	}
+}
+
+func inspectTOMLMCPForms(sections []tomlSection) (mcpServersInline bool, nonStandardServers, standardServers map[string]bool) {
+	nonStandardServers = map[string]bool{}
+	standardServers = map[string]bool{}
+	for _, sec := range sections {
+		if srvName, isMCP := mcpServerTableOwner(sec.path); isMCP && !sec.isArrayTable {
+			standardServers[srvName] = true
+			continue
+		}
+		isTopLevel := sec.path == nil
+		isMCPHeader := len(sec.path) == 1 && sec.path[0] == "mcp_servers" && !sec.isArrayTable
+		if !isTopLevel && !isMCPHeader {
+			continue
+		}
+		var scan tomlScanState
+		startIdx := 0
+		if isMCPHeader {
+			startIdx = 1 // skip the [mcp_servers] header line itself
+		}
+		for _, line := range sec.lines[startIdx:] {
+			if scan.atTop() {
+				if keyPath, _, ok := splitTOMLKeyAssignment(line); ok {
+					switch {
+					case isTopLevel && len(keyPath) == 1 && keyPath[0] == "mcp_servers":
+						mcpServersInline = true
+					case isTopLevel && len(keyPath) >= 2 && keyPath[0] == "mcp_servers":
+						nonStandardServers[keyPath[1]] = true
+					case isMCPHeader && len(keyPath) >= 1:
+						nonStandardServers[keyPath[0]] = true
+					}
+				}
+			}
+			scan.scanLine(line)
+		}
+	}
+	return mcpServersInline, nonStandardServers, standardServers
+}
+
+// splitTOMLKeyAssignment parses a TOML assignment whose left-hand side may be
+// a dotted or quoted key path (e.g. `mcp_servers.foo.command = "x"` or
+// `foo = { command = "x" }`).
+func splitTOMLKeyAssignment(line string) (keyPath []string, rawVal string, ok bool) {
+	body := strings.TrimRight(line, "\r\n")
+	trimmed := strings.TrimLeft(body, " \t")
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "[") {
+		return nil, "", false
+	}
+	eq := -1
+	inBasic := false
+	inLiteral := false
+	escaped := false
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		if inBasic {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '"' {
+				inBasic = false
+			}
+			continue
+		}
+		if inLiteral {
+			if c == '\'' {
+				inLiteral = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inBasic = true
+		case '\'':
+			inLiteral = true
+		case '#':
+			return nil, "", false
+		case '=':
+			eq = i
+		}
+		if eq >= 0 {
+			break
+		}
+	}
+	if eq <= 0 {
+		return nil, "", false
+	}
+	lhs := strings.TrimSpace(trimmed[:eq])
+	path, valid := parseTOMLDottedKey(lhs)
+	if !valid {
+		return nil, "", false
+	}
+	valPart, _ := splitTOMLInlineComment(trimmed[eq+1:])
+	return path, strings.TrimSpace(valPart), true
+}
+
 type tomlSection struct {
-	path  []string // nil for top-level preamble before first table header
-	lines []string
+	path         []string // nil for top-level preamble before first table header
+	isArrayTable bool
+	lines        []string
 }
 
 func splitTOMLSections(lines []string) []tomlSection {
 	var sections []tomlSection
 	cur := tomlSection{}
-	inMultiline := ""
+	var scan tomlScanState
 
 	for _, line := range lines {
-		if inMultiline != "" {
+		if !scan.atTop() {
 			cur.lines = append(cur.lines, line)
-			if strings.Contains(line, inMultiline) {
-				inMultiline = ""
-			}
+			scan.scanLine(line)
 			continue
 		}
 
 		trimmed := strings.TrimSpace(line)
-		if path, ok := parseTOMLTableHeader(trimmed); ok {
+		if path, isArrayTable, ok := parseTOMLTableHeader(trimmed); ok {
 			if len(cur.lines) > 0 || cur.path != nil {
 				sections = append(sections, cur)
 			}
 			cur = tomlSection{
-				path:  path,
-				lines: []string{line},
+				path:         path,
+				isArrayTable: isArrayTable,
+				lines:        []string{line},
 			}
 			continue
 		}
 
 		cur.lines = append(cur.lines, line)
-		if _, rawVal, _, isAssign := splitTOMLAssignment(line); isAssign {
-			if delim := openMultilineDelimiter(rawVal); delim != "" {
-				inMultiline = delim
-			}
-		}
+		scan.scanLine(line)
 	}
 	if len(cur.lines) > 0 || cur.path != nil {
 		sections = append(sections, cur)
@@ -511,9 +770,9 @@ func splitTOMLSections(lines []string) []tomlSection {
 }
 
 // parseTOMLTableHeader parses `[a.b."c"]` or `[[a.b]]` into its path segments.
-func parseTOMLTableHeader(trimmed string) ([]string, bool) {
+func parseTOMLTableHeader(trimmed string) ([]string, bool, bool) {
 	if !strings.HasPrefix(trimmed, "[") {
-		return nil, false
+		return nil, false, false
 	}
 	headerPart, _ := splitTOMLInlineComment(trimmed)
 	headerPart = strings.TrimSpace(headerPart)
@@ -525,12 +784,13 @@ func parseTOMLTableHeader(trimmed string) ([]string, bool) {
 	case strings.HasPrefix(headerPart, "[") && strings.HasSuffix(headerPart, "]") && len(headerPart) >= 2:
 		inner = strings.TrimSpace(headerPart[1 : len(headerPart)-1])
 	default:
-		return nil, false
+		return nil, false, false
 	}
 	if inner == "" {
-		return nil, false
+		return nil, false, false
 	}
-	return parseTOMLDottedKey(inner)
+	path, ok := parseTOMLDottedKey(inner)
+	return path, isArrayTable, ok
 }
 
 func parseTOMLDottedKey(s string) ([]string, bool) {

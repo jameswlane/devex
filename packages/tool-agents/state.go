@@ -25,6 +25,18 @@ type AgentManagedState struct {
 	// PresetPermissions are the OpenCode preset defaults DevEx put first.
 	PresetPermissions []OpenCodeRule `json:"preset_permissions,omitempty"`
 	MCPServers        []string       `json:"mcp_servers,omitempty"`
+	MCPConfigPath     string         `json:"mcp_config_path,omitempty"`
+}
+
+func (a AgentManagedState) clone() AgentManagedState {
+	return AgentManagedState{
+		Allow:             slices.Clone(a.Allow),
+		Deny:              slices.Clone(a.Deny),
+		Permissions:       slices.Clone(a.Permissions),
+		PresetPermissions: slices.Clone(a.PresetPermissions),
+		MCPServers:        slices.Clone(a.MCPServers),
+		MCPConfigPath:     a.MCPConfigPath,
+	}
 }
 
 // ManagedState is stored at <DEVEX_STATE_DIR>/agents/managed.json.
@@ -44,13 +56,7 @@ func (s ManagedState) clone() ManagedState {
 	out := newManagedState()
 	out.Version = s.Version
 	for k, v := range s.Agents {
-		out.Agents[k] = AgentManagedState{
-			Allow:             slices.Clone(v.Allow),
-			Deny:              slices.Clone(v.Deny),
-			Permissions:       slices.Clone(v.Permissions),
-			PresetPermissions: slices.Clone(v.PresetPermissions),
-			MCPServers:        slices.Clone(v.MCPServers),
-		}
+		out.Agents[k] = v.clone()
 	}
 	return out
 }
@@ -154,12 +160,22 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 	out := s.clone()
 	for name, b := range other.Agents {
 		a := out.Agents[name]
+		mcpServers := uniqueStrings(append(slices.Clone(a.MCPServers), b.MCPServers...))
+		mcpPath := b.MCPConfigPath
+		if mcpPath == "" {
+			mcpPath = a.MCPConfigPath
+		}
+		if a.MCPConfigPath != "" && b.MCPConfigPath != "" && filepath.Clean(a.MCPConfigPath) != filepath.Clean(b.MCPConfigPath) {
+			mcpServers = slices.Clone(b.MCPServers)
+			mcpPath = b.MCPConfigPath
+		}
 		out.Agents[name] = AgentManagedState{
 			Allow:             uniqueStrings(append(a.Allow, b.Allow...)),
 			Deny:              uniqueStrings(append(a.Deny, b.Deny...)),
 			Permissions:       uniqueOpenCodeRules(append(a.Permissions, b.Permissions...)),
 			PresetPermissions: uniqueOpenCodeRules(append(a.PresetPermissions, b.PresetPermissions...)),
-			MCPServers:        uniqueStrings(append(a.MCPServers, b.MCPServers...)),
+			MCPServers:        mcpServers,
+			MCPConfigPath:     mcpPath,
 		}
 	}
 	return out
@@ -168,11 +184,31 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 func (a AgentManagedState) equal(b AgentManagedState) bool {
 	return slices.Equal(a.Allow, b.Allow) && slices.Equal(a.Deny, b.Deny) &&
 		slices.Equal(a.Permissions, b.Permissions) && slices.Equal(a.PresetPermissions, b.PresetPermissions) &&
-		slices.Equal(a.MCPServers, b.MCPServers)
+		slices.Equal(a.MCPServers, b.MCPServers) && a.MCPConfigPath == b.MCPConfigPath
 }
 
 func (a AgentManagedState) isEmpty() bool {
 	return len(a.Allow) == 0 && len(a.Deny) == 0 &&
 		len(a.Permissions) == 0 && len(a.PresetPermissions) == 0 &&
 		len(a.MCPServers) == 0
+}
+
+// prevMCPServersForPath returns previously managed MCP server names only when
+// prev was recorded for the same resolved MCP config path (or has no recorded
+// path, keeping older state files working).
+func prevMCPServersForPath(prev AgentManagedState, resolvedPath string) []string {
+	if len(prev.MCPServers) == 0 {
+		return nil
+	}
+	if prev.MCPConfigPath != "" && filepath.Clean(prev.MCPConfigPath) != filepath.Clean(resolvedPath) {
+		return nil
+	}
+	return prev.MCPServers
+}
+
+func mcpConfigPathForOwned(owned []string, resolvedPath string) string {
+	if len(owned) == 0 {
+		return ""
+	}
+	return filepath.Clean(resolvedPath)
 }
