@@ -434,7 +434,8 @@ echo "`+stderrSentinel+`" >&2
 if [ "$1" = "--version" ]; then echo "sk-1.2.3-devex-sentinel `+envSentinel+` 2.1.0 (Claude Code)"; exit 0; fi
 echo "`+statusSentinel+`"
 exit 0`)
-		writeFakeBinary(binDir, "node", `echo "v22.14.0 `+envSentinel+`"`)
+		writeFakeBinary(binDir, "node", `echo "sk-1.2.3-devex-sentinel v22.14.0 `+envSentinel+`"`)
+		writeFakeBinary(binDir, "gemini", `echo "0.5.0"`)
 
 		GinkgoT().Setenv("HOME", home)
 		GinkgoT().Setenv("PATH", binDir)
@@ -448,6 +449,9 @@ exit 0`)
 
 		report := agentdoctor.Check(context.Background(), probe, specs)
 		Expect(findAgentReport(report, "claude").Version).To(Equal("2.1.0"))
+		gemini := findAgentReport(report, "gemini")
+		Expect(gemini.Node).NotTo(BeNil())
+		Expect(gemini.Node.Detected).To(Equal("v22.14.0"))
 
 		secrets := agentdoctor.CollectSecretValues(os.Getenv)
 		jsonOut, err := agentdoctor.FormatJSON(report, secrets)
