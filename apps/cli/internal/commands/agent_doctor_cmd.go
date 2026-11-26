@@ -19,7 +19,12 @@ func newAgentDoctorCmd(probe agentdoctor.Probe) *cobra.Command {
 		Use:          "doctor",
 		Short:        "Diagnose installed coding agents, auth status, sandboxes, and MCP configs",
 		SilenceUsage: true,
-		Args:         cobra.NoArgs,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("%s takes no arguments", cmd.CommandPath())
+			}
+			return nil
+		},
 		Long: `Inspect known AI coding agents on this host without reading, storing, or
 printing credentials.
 
@@ -65,6 +70,7 @@ problems are listed with actionable fixes and do not change the exit code.`,
 			return err
 		},
 	}
+	cmd.SetFlagErrorFunc(redactedFlagError)
 	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Shorthand for --format json")
 	cmd.Flags().StringSliceVar(&agentIDs, "agent", nil, fmt.Sprintf("Filter to specific agent IDs (%s)", strings.Join(agentdoctor.ValidAgentIDs(), ", ")))
@@ -110,7 +116,14 @@ gemini) return guidance for environment variables or the vendor's own flow.`, st
 			return runner(cmd.Context(), binaryPath, spec.LoginArgs, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
+	cmd.SetFlagErrorFunc(redactedFlagError)
 	return cmd
+}
+
+// redactedFlagError replaces flag parser errors, which quote the rejected
+// value, so a credential pasted into a flag is never echoed.
+func redactedFlagError(cmd *cobra.Command, _ error) error {
+	return fmt.Errorf("invalid flag or flag value: run \"%s --help\" for usage", cmd.CommandPath())
 }
 
 func collectDefenseInDepthSecrets(probe agentdoctor.Probe) []string {

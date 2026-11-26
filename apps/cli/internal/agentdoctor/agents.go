@@ -26,6 +26,9 @@ const (
 	// MCPFormatJSONC is JSON with // and /* */ comments and trailing commas,
 	// which OpenCode accepts in opencode.jsonc.
 	MCPFormatJSONC MCPFormat = "jsonc"
+	// MCPFormatJSONComments is JSON with comments but no trailing commas,
+	// matching Gemini CLI's settings loader.
+	MCPFormatJSONComments MCPFormat = "json-comments"
 )
 
 // PathTemplate describes how to resolve a user-level file path from the
@@ -212,7 +215,7 @@ var knownAgentDefs = []AgentSpec{
 				// GEMINI_CLI_HOME replaces the home directory, and settings.json
 				// accepts comments: https://geminicli.com/docs/reference/configuration/
 				Path:       PathTemplate{EnvDirVar: "GEMINI_CLI_HOME", EnvRelPath: ".gemini/settings.json", HomeRelPath: ".gemini/settings.json"},
-				Format:     MCPFormatJSONC,
+				Format:     MCPFormatJSONComments,
 				ServersKey: "mcpServers",
 			},
 		},
@@ -358,7 +361,8 @@ var knownAgentDefs = []AgentSpec{
 		VersionArgs:   []string{"--version"},
 		LoginArgs:     []string{"login"},
 		APIKeyEnvVars: []string{"KIMI_API_KEY", "MOONSHOT_API_KEY", "KIMI_MODEL_API_KEY"},
-		// Kimi does not read these automatically:
+		// Kimi reads these only in specific setups (e.g. KIMI_MODEL_API_KEY with
+		// KIMI_MODEL_NAME), so a set variable is not proof of login:
 		// https://moonshotai.github.io/kimi-code/en/configuration/env-vars.html
 		EnvVarsDoNotAuthenticate: true,
 		MCPConfigs: []MCPConfigSpec{

@@ -147,8 +147,13 @@ var _ = Describe("Agent doctor and login commands", func() {
 			const pasted = "sk-pasted-into-the-wrong-flag"
 			for _, args := range [][]string{
 				{"doctor", "--agent", pasted},
+				{"doctor", "--agent", `"` + pasted},
 				{"doctor", "--format", pasted},
+				{"doctor", "--json=" + pasted},
+				{"doctor", "--" + pasted},
+				{"doctor", pasted},
 				{"login", pasted},
+				{"login", "--" + pasted, "claude"},
 			} {
 				_, errOut, err = readStdout(args...)
 				Expect(err).To(HaveOccurred())

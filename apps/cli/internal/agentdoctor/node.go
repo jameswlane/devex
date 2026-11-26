@@ -17,6 +17,7 @@ type NodeCheck struct {
 }
 
 type nodeProbeCache struct {
+	secrets  []string
 	probed   bool
 	path     string
 	detected string
@@ -39,7 +40,7 @@ func (c *nodeProbeCache) probe(ctx context.Context, probe Probe) {
 	if err != nil {
 		return
 	}
-	raw := versionToken(string(out))
+	raw := versionToken(Redact(string(out), c.secrets))
 	c.detected = raw
 	ver, err := semver.NewVersion(strings.TrimPrefix(raw, "v"))
 	if err == nil {

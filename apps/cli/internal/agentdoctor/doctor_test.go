@@ -431,7 +431,7 @@ exec `+sleepPath+` 5`)
 		binDir := filepath.Join(home, pathSentinel, "bin")
 		writeFakeBinary(binDir, "claude", `
 echo "`+stderrSentinel+`" >&2
-if [ "$1" = "--version" ]; then echo "`+envSentinel+` 2.1.0 (Claude Code)"; exit 0; fi
+if [ "$1" = "--version" ]; then echo "sk-1.2.3-devex-sentinel `+envSentinel+` 2.1.0 (Claude Code)"; exit 0; fi
 echo "`+statusSentinel+`"
 exit 0`)
 		writeFakeBinary(binDir, "node", `echo "v22.14.0 `+envSentinel+`"`)
@@ -440,6 +440,7 @@ exit 0`)
 		GinkgoT().Setenv("PATH", binDir)
 		GinkgoT().Setenv("ANTHROPIC_API_KEY", envSentinel)
 		GinkgoT().Setenv("OPENAI_API_KEY", pathSentinel)
+		GinkgoT().Setenv("GEMINI_API_KEY", "sk-1.2.3-devex-sentinel")
 		probe := agentdoctor.DefaultProbe()
 		probe.SandboxProbe = okSandboxProbe(nil)
 		specs, err := agentdoctor.FilterAgents([]string{"claude", "gemini"})
@@ -514,6 +515,11 @@ exit 0`)
 		Expect(gemini.LoginState).To(Equal(agentdoctor.LoginStateLoggedIn))
 		Expect(gemini.LoginDetail).To(ContainSubstring(geminiHome))
 		Expect(gemini.MCPConfigs).To(ConsistOf(HaveField("Status", agentdoctor.MCPStatusOK)))
+
+		// Gemini's loader strips comments but rejects trailing commas.
+		Expect(os.WriteFile(filepath.Join(geminiHome, ".gemini", "settings.json"), []byte(`{"mcpServers":{},}`), 0o600)).To(Succeed())
+		gemini = findAgentReport(agentdoctor.Check(context.Background(), probe, specs), "gemini")
+		Expect(gemini.MCPConfigs).To(ConsistOf(HaveField("Status", agentdoctor.MCPStatusInvalid)))
 	})
 
 	It("never leaks any secret sentinel from env vars, credential files, MCP configs, or status commands", func() {

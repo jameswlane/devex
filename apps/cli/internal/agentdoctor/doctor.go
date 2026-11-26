@@ -271,7 +271,7 @@ func checkAgent(
 		out, err := probe.Run(cmdCtx, ar.ResolvedPath, spec.VersionArgs...)
 		cancel()
 		if err == nil {
-			ar.Version = versionToken(string(out))
+			ar.Version = versionToken(Redact(string(out), secrets))
 		}
 	}
 
@@ -293,6 +293,7 @@ func checkAgent(
 
 	// 5. Node.js version check where relevant.
 	if spec.MinNodeVersion != "" && (spec.NodeRequired || matches[0].IsNPMGlobal) {
+		nodeCache.secrets = secrets
 		nc := evaluateNodeCheck(ctx, probe, nodeCache, spec.MinNodeVersion)
 		ar.Node = &nc
 		if !nc.OK {
@@ -480,7 +481,7 @@ func checkLogin(ctx context.Context, probe Probe, spec AgentSpec, ar *AgentRepor
 	case spec.OtherAuthStore != "":
 		ar.LoginDetail = fmt.Sprintf("credentials may be in %s; no credential file found", spec.OtherAuthStore)
 	case len(ar.EnvVarsSet) > 0:
-		ar.LoginDetail = fmt.Sprintf("env var %s set but %s does not read it automatically", strings.Join(ar.EnvVarsSet, ", "), spec.Name)
+		ar.LoginDetail = fmt.Sprintf("env var %s set; DevEx cannot confirm %s uses it", strings.Join(ar.EnvVarsSet, ", "), spec.Name)
 	default:
 		ar.LoginDetail = "no status command or credential signal"
 	}

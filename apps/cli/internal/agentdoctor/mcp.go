@@ -48,7 +48,9 @@ func validateMCPConfig(probe Probe, spec MCPConfigSpec, resolvedPath string) MCP
 	case MCPFormatJSON:
 		parseErr = parseJSONMCP(data, spec.ServersKey)
 	case MCPFormatJSONC:
-		parseErr = parseJSONMCP(stripJSONC(data), spec.ServersKey)
+		parseErr = parseJSONMCP(stripJSONC(data, true), spec.ServersKey)
+	case MCPFormatJSONComments:
+		parseErr = parseJSONMCP(stripJSONC(data, false), spec.ServersKey)
 	case MCPFormatTOML:
 		parseErr = parseTOMLMCP(data, spec.ServersKey)
 	case MCPFormatYAML:
@@ -161,9 +163,9 @@ func offsetToLineCol(data []byte, offset int64) (int, int) {
 	return line, col
 }
 
-// stripJSONC blanks comments and trailing commas outside strings with spaces,
+// stripJSONC blanks comments (and trailing commas when allowed) outside strings with spaces,
 // keeping newlines so parser error positions still match the original file.
-func stripJSONC(data []byte) []byte {
+func stripJSONC(data []byte, trailingCommas bool) []byte {
 	out := make([]byte, len(data))
 	copy(out, data)
 	inString := false
@@ -197,7 +199,7 @@ func stripJSONC(data []byte) []byte {
 					out[i] = ' '
 				}
 			}
-		case c == ',':
+		case c == ',' && trailingCommas:
 			if next := nextSignificant(out, i+1); next == '}' || next == ']' {
 				out[i] = ' '
 			}
