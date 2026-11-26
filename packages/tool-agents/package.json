@@ -1,0 +1,47 @@
+{
+	"name": "@devex/tool-agents",
+	"private": true,
+	"version": "1.0.0",
+	"description": "Declarative coding-agent configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "node ../../scripts/turbo/go-task.mjs go build -o devex-plugin-tool-agents .",
+		"dev": "node ../../scripts/turbo/go-task.mjs go build -race -o devex-plugin-tool-agents .",
+		"test": "node ../../scripts/turbo/go-task.mjs go test ./...",
+		"lint": "node ../../scripts/turbo/go-task.mjs golangci-lint run --allow-parallel-runners",
+		"download": "node ../../scripts/turbo/go-task.mjs go mod download",
+		"mod": "node ../../scripts/turbo/go-task.mjs go mod tidy",
+		"vulncheck": "node ../../scripts/turbo/go-task.mjs vulncheck"
+	},
+	"keywords": [
+		"agents",
+		"claude",
+		"codex",
+		"gemini",
+		"opencode",
+		"configuration"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/tool-agents"
+	},
+	"devex": {
+		"plugin": {
+			"type": "tool",
+			"platforms": [
+				"linux",
+				"darwin",
+				"windows"
+			],
+			"dependencies": [],
+			"priority": 80,
+			"supports": {
+				"diff": true,
+				"apply": true
+			}
+		}
+	}
+}

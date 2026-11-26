@@ -395,6 +395,8 @@ importers:
         specifier: workspace:*
         version: link:../plugin-sdk
 
+  packages/tool-agents: {}
+
   packages/tool-git: {}
 
   packages/tool-shell: {}
