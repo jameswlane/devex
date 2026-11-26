@@ -540,7 +540,7 @@ func (r startupRoute) read() bool {
 	case "config":
 		return r.is("config", "effective") || r.is("config", "show")
 	case "agent":
-		return r.agentSkillInstall() || r.agentSandbox()
+		return r.agentSkillInstall() || r.agentSandbox() || r.is("agent", "diff")
 	}
 	return false
 }

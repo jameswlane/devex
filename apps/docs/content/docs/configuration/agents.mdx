@@ -1,0 +1,96 @@
+---
+title: Coding Agents (agents.yaml)
+description: Declaratively configure global instructions, models, permission presets, and command rules across coding agents
+---
+
+# Coding Agents Configuration
+
+Create `agents.yaml` in your DevEx user configuration directory (`$DEVEX_CONFIG_DIR/config/agents.yaml`, defaulting to `~/.config/devex/config/agents.yaml`) to declare shared coding-agent instructions, model defaults, conservative permission presets, and allowed/denied shell commands once and render them into each installed harness with `devex agent diff` and `devex agent apply`.
+
+## Schema
+
+```yaml
+agents:
+  enabled: [claude, codex, gemini, opencode]
+  preset: balanced # optional: strict | balanced; omitted leaves permission modes untouched
+  instructions: | # shared global instructions
+    Prefer small diffs.
+    Run tests before committing.
+  allowed_commands:
+    - "git status"
+    - "go test ./..."
+  denied_commands:
+    - "git push --force"
+  overrides:
+    claude:
+      model: claude-sonnet-5
+      preset: strict
+      allowed_commands:
+        - "gh pr view" # appended to shared allowed_commands
+      denied_commands:
+        - "rm -rf /" # appended to shared denied_commands
+    codex:
+      model: gpt-5
+    gemini:
+      model: gemini-2.5-pro
+    opencode:
+      model: anthropic/claude-sonnet-5-5
+```
+
+Validate your file at any time with:
+
+```sh
+devex config validate --strict
+```
+
+Unknown keys, unsupported agent names, empty or multi-line commands, invalid model strings, and skip-permission preset values are all rejected.
+
+## Supported Agents and Native Files
+
+An enabled agent is rendered when its binary is on `PATH` or its configuration directory already exists. Otherwise it is reported as `skipped (not installed)` and nothing is created for it.
+
+| Agent | Binary | Home Override Env Var | Instructions File | Settings / Rules Files |
+| --- | --- | --- | --- | --- |
+| `claude` (Claude Code) | `claude` | `CLAUDE_CONFIG_DIR` (default `~/.claude`) | `<dir>/CLAUDE.md` | `<dir>/settings.json` |
+| `codex` (OpenAI Codex CLI) | `codex` | `CODEX_HOME` (default `~/.codex`) | `<dir>/AGENTS.md` | `<dir>/config.toml`, `<dir>/rules/devex.rules` |
+| `gemini` (Gemini CLI) | `gemini` | `GEMINI_CLI_HOME` (root containing `.gemini`, default `~`) | `<dir>/GEMINI.md` | `<dir>/settings.json` |
+| `opencode` (OpenCode) | `opencode` | `OPENCODE_CONFIG_DIR` > `$XDG_CONFIG_HOME/opencode` > `~/.config/opencode` | `<dir>/AGENTS.md` | `<dir>/opencode.json` (or existing `opencode.jsonc`) |
+
+## Permission Presets
+
+Both presets are conservative. DevEx never maps any preset to an unsandboxed or skip-all-permissions mode (`bypassPermissions`, `danger-full-access`, `approval_policy = "never"`, `yolo`, or blanket `allow`), and rejects overrides requesting them. If no preset is configured for an agent, DevEx does not modify its permission-mode keys.
+
+| Agent | `strict` | `balanced` |
+| --- | --- | --- |
+| `claude` | `permissions.defaultMode = "default"` | `permissions.defaultMode = "acceptEdits"` |
+| `codex` | `approval_policy = "on-request"`, `sandbox_mode = "read-only"` | `approval_policy = "on-request"`, `sandbox_mode = "workspace-write"` |
+| `gemini` | `general.defaultApprovalMode = "default"` | `general.defaultApprovalMode = "auto_edit"` |
+| `opencode` | `permissions`: `{action: "edit", resource: "*", effect: "ask"}`, `{action: "shell", resource: "*", effect: "ask"}` | `permissions`: `{action: "edit", resource: "*", effect: "allow"}`, `{action: "shell", resource: "*", effect: "ask"}` |
+
+## Managed Blocks, Backups, and Idempotency
+
+- **Managed instructions block**: Shared `instructions` are written inside `<!-- >>> devex agents >>> -->` ... `<!-- <<< devex agents <<< -->`. Every byte outside the block is preserved. Setting empty instructions removes the block while keeping user notes intact. Malformed markers return an error without writing.
+- **Non-destructive merges**:
+  - JSON settings (`claude`, `gemini`, `opencode`) update only owned keys while preserving unknown keys, nested objects, and key order with 2-space indentation. Files containing JSON comments (`//`, `/* */`) or trailing commas return an error rather than stripping comments.
+  - Codex `config.toml` updates only owned top-level scalar keys (`model`, `approval_policy`, `sandbox_mode`), preserving comments, ordering, and tables, and validates the output with a TOML parser before writing.
+  - DevEx tracks list entries it added in `$DEVEX_STATE_DIR/agents/managed.json` so removing an entry from `agents.yaml` removes only that DevEx-managed entry while leaving user-added entries untouched.
+- **One-time backups**: Before the first modification of an existing file, DevEx writes a sibling `<file>.devex-bak-*` copy preserving file mode. Newly created files need no backup.
+- **Idempotent apply**: Re-applying unchanged configuration produces byte-identical files, leaves modification times untouched, creates no additional backups, and reports `unchanged`.
+
+## Preview and Apply
+
+```sh
+# Preview unified diffs with zero writes
+devex agent diff
+
+# Apply to all enabled, installed agents
+devex agent apply
+
+# Dry-run apply (equivalent to diff, zero writes)
+devex agent apply --dry-run
+
+# Limit to a subset of enabled agents and override the preset
+devex agent apply --agents claude,codex --preset strict
+```
+
+See the [Agent Configuration CLI Reference](/docs/cli-reference/agent-config) for all flags and environment variable precedence.

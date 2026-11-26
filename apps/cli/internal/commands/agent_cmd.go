@@ -14,6 +14,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/agentskills"
+	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -35,12 +36,21 @@ func (d agentSkillDestination) path() string {
 }
 
 func NewAgentCmd() *cobra.Command {
-	return NewAgentCmdWithSandboxProbe(agentsandbox.DefaultProbe())
+	return NewAgentCmdWithDeps(config.CrossPlatformSettings{}, nil, agentsandbox.DefaultProbe(), nil)
 }
 
 // NewAgentCmdWithSandboxProbe constructs the `agent` command with an injected
 // sandbox probe so tests can run without inspecting the host kernel or binaries.
 func NewAgentCmdWithSandboxProbe(sandboxProbe agentsandbox.Probe) *cobra.Command {
+	return NewAgentCmdWithDeps(config.CrossPlatformSettings{}, nil, sandboxProbe, nil)
+}
+
+// NewAgentCmdWithDeps constructs the `agent` command with full dependency
+// injection for configuration, plugin bootstrap, sandbox probe, and plugin execution.
+func NewAgentCmdWithDeps(settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider, sandboxProbe agentsandbox.Probe, executor agentPluginExecutor) *cobra.Command {
+	if executor == nil {
+		executor = bootstrapAgentPluginExecutor{getBootstrap: getPluginBootstrap}
+	}
 	cmd := &cobra.Command{
 		Use:   "agent",
 		Short: "Manage coding agent integrations",
@@ -76,6 +86,8 @@ to remove so Kimi does not load DevEx twice. Differing content requires --overwr
 	install.Flags().BoolVar(&options.dryRun, "dry-run", false, "Preview without writing files")
 	cmd.AddCommand(install)
 	cmd.AddCommand(newAgentSandboxCmd(sandboxProbe))
+	cmd.AddCommand(newAgentApplyCmd(settings, executor))
+	cmd.AddCommand(newAgentDiffCmd(settings, executor))
 	return cmd
 }
 

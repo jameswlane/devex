@@ -35,4 +35,5 @@ var CrossPlatformFiles = []string{
 	"macos.yaml",
 	"windows.yaml",
 	"security.yaml",
+	"agents.yaml",
 }
