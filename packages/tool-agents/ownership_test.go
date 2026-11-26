@@ -142,6 +142,38 @@ var _ = Describe("Managed entry ownership", func() {
 		Expect(string(data)).To(ContainSubstring("Bash(make *)"))
 	})
 
+	It("keeps a user OpenCode rule when a later agent fails after DevEx removed its own copy", func() {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			Skip("needs POSIX directory permissions enforced for the current user")
+		}
+		env := newTestEnv(home, nil, "opencode", "gemini")
+		config := filepath.Join(home, ".config", "opencode", "opencode.json")
+		Expect(os.MkdirAll(filepath.Dir(config), 0o700)).To(Succeed())
+		Expect(os.WriteFile(config, []byte(`{"permissions": [{"action": "shell", "resource": "git push *", "effect": "deny"}]}`), 0o600)).To(Succeed())
+		geminiDir := filepath.Join(home, ".gemini")
+		Expect(os.MkdirAll(geminiDir, 0o700)).To(Succeed())
+
+		Expect(apply(env, Spec{Agents: []AgentSpec{
+			{Name: AgentOpenCode, DeniedCommands: []string{"git push"}},
+			{Name: AgentGemini, DeniedCommands: []string{"git push"}},
+		}})).To(Succeed())
+
+		Expect(os.Chmod(geminiDir, 0o500)).To(Succeed())
+		DeferCleanup(func() { _ = os.Chmod(geminiDir, 0o700) })
+		withdrawn := Spec{Agents: []AgentSpec{{Name: AgentOpenCode}, {Name: AgentGemini}}}
+		Expect(apply(env, withdrawn)).To(HaveOccurred())
+		Expect(os.Chmod(geminiDir, 0o700)).To(Succeed())
+		Expect(apply(env, withdrawn)).To(Succeed())
+
+		doc, err := os.ReadFile(config)
+		Expect(err).NotTo(HaveOccurred())
+		var parsed struct {
+			Permissions []OpenCodeRule `json:"permissions"`
+		}
+		Expect(json.Unmarshal(doc, &parsed)).To(Succeed())
+		Expect(parsed.Permissions).To(Equal([]OpenCodeRule{{Action: "shell", Resource: "git push *", Effect: "deny"}}))
+	})
+
 	It("refuses to replace or delete a Codex devex.rules file DevEx did not write", func() {
 		env := newTestEnv(home, nil, "codex")
 		rules := filepath.Join(home, ".codex", "rules", "devex.rules")

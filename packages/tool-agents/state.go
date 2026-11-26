@@ -53,22 +53,6 @@ func (s ManagedState) clone() ManagedState {
 	return out
 }
 
-func (s ManagedState) equal(other ManagedState) bool {
-	if s.Version != other.Version || len(s.Agents) != len(other.Agents) {
-		return false
-	}
-	for k, a := range s.Agents {
-		b, ok := other.Agents[k]
-		if !ok {
-			return false
-		}
-		if !slices.Equal(a.Allow, b.Allow) || !slices.Equal(a.Deny, b.Deny) || !slices.Equal(a.Permissions, b.Permissions) || !slices.Equal(a.PresetPermissions, b.PresetPermissions) {
-			return false
-		}
-	}
-	return true
-}
-
 // LoadManagedState loads managed.json if it exists; absent files return an
 // empty state without touching the filesystem.
 func LoadManagedState(path string) (ManagedState, error) {
@@ -176,4 +160,9 @@ func (s ManagedState) union(other ManagedState) ManagedState {
 		}
 	}
 	return out
+}
+
+func (a AgentManagedState) equal(b AgentManagedState) bool {
+	return slices.Equal(a.Allow, b.Allow) && slices.Equal(a.Deny, b.Deny) &&
+		slices.Equal(a.Permissions, b.Permissions) && slices.Equal(a.PresetPermissions, b.PresetPermissions)
 }

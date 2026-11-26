@@ -159,23 +159,14 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 	return nil
 }
 
+// applyPlan writes one agent at a time and keeps managed state exact for each.
+// An agent's list entries live in one file that is replaced atomically, so a
+// failed write leaves that file, and therefore its previous ownership, as it
+// was. While an agent is being written, state owns both its old and new
+// entries, so neither an addition nor a removal loses its owner if the
+// process stops or the final save fails.
 func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
-	// Before writing, own both the old and the new entries, so an entry being
-	// added or removed never looks user-owned if a write fails part-way
-	// through. Owned entries that are absent from a file are harmless.
-	if plan.InitialState.equal(plan.NextState) {
-		return p.writeFiles(ctx, plan)
-	}
-	if err := SaveManagedState(plan.StatePath, plan.InitialState.union(plan.NextState)); err != nil {
-		return err
-	}
-	if err := p.writeFiles(ctx, plan); err != nil {
-		return err
-	}
-	return SaveManagedState(plan.StatePath, plan.NextState)
-}
-
-func (p *AgentsPlugin) writeFiles(ctx context.Context, plan PlanResult) error {
+	committed := plan.InitialState.clone()
 	for _, ap := range plan.Agents {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -186,24 +177,57 @@ func (p *AgentsPlugin) writeFiles(ctx context.Context, plan PlanResult) error {
 			}
 			continue
 		}
-		for _, fp := range ap.Files {
-			if err := ctx.Err(); err != nil {
+		prev, hadPrev := committed.Agents[ap.Agent]
+		next, hasNext := plan.NextState.Agents[ap.Agent]
+		stateChanges := hadPrev != hasNext || !prev.equal(next)
+		if stateChanges {
+			pending := committed.clone()
+			pending.Agents[ap.Agent] = prev
+			pending = pending.union(ManagedState{Agents: map[string]AgentManagedState{ap.Agent: next}})
+			if err := SaveManagedState(plan.StatePath, pending); err != nil {
 				return err
 			}
-			backupPath, err := ApplyFilePlan(fp)
-			if err != nil {
-				return err
-			}
-			label := applyStatusLabel(fp.Action)
-			if backupPath != "" {
-				if _, err := fmt.Fprintf(p.out, "%s: %s (backup: %s)\n", label, fp.Path, backupPath); err != nil {
-					return err
-				}
-			} else {
-				if _, err := fmt.Fprintf(p.out, "%s: %s\n", label, fp.Path); err != nil {
-					return err
+		}
+		if err := p.writeAgentFiles(ctx, ap); err != nil {
+			if stateChanges {
+				if saveErr := SaveManagedState(plan.StatePath, committed); saveErr != nil {
+					return fmt.Errorf("%w; also failed to restore managed state: %v", err, saveErr)
 				}
 			}
+			return err
+		}
+		if !stateChanges {
+			continue
+		}
+		if hasNext {
+			committed.Agents[ap.Agent] = next
+		} else {
+			delete(committed.Agents, ap.Agent)
+		}
+		if err := SaveManagedState(plan.StatePath, committed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *AgentsPlugin) writeAgentFiles(ctx context.Context, ap AgentPlan) error {
+	for _, fp := range ap.Files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		backupPath, err := ApplyFilePlan(fp)
+		if err != nil {
+			return err
+		}
+		label := applyStatusLabel(fp.Action)
+		if backupPath != "" {
+			_, err = fmt.Fprintf(p.out, "%s: %s (backup: %s)\n", label, fp.Path, backupPath)
+		} else {
+			_, err = fmt.Fprintf(p.out, "%s: %s\n", label, fp.Path)
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
