@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -174,6 +175,18 @@ var _ = Describe("Managed entry ownership", func() {
 		Expect(parsed.Permissions).To(Equal([]OpenCodeRule{{Action: "shell", Resource: "git push *", Effect: "deny"}}))
 	})
 
+	It("keeps ownership of a written rule when printing the status fails", func() {
+		env := newTestEnv(home, nil, "claude")
+		specPath := writeSpecFile(specDir, Spec{Agents: []AgentSpec{{Name: AgentClaude, AllowedCommands: []string{"go test"}}}})
+		err := NewAgentsPluginWithDeps(env, failingWriter{}).ExecuteContext(context.Background(), "apply", []string{"--config", specPath})
+		Expect(err).To(HaveOccurred())
+
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentClaude}}})).To(Succeed())
+		data, readErr := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+		Expect(readErr).NotTo(HaveOccurred())
+		Expect(string(data)).NotTo(ContainSubstring("go test"))
+	})
+
 	It("refuses to replace or delete a Codex devex.rules file DevEx did not write", func() {
 		env := newTestEnv(home, nil, "codex")
 		rules := filepath.Join(home, ".codex", "rules", "devex.rules")
@@ -189,3 +202,7 @@ var _ = Describe("Managed entry ownership", func() {
 		Expect(snapshotTree(home)).To(Equal(before))
 	})
 })
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }

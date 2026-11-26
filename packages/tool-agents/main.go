@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -188,7 +189,8 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 				return err
 			}
 		}
-		if err := p.writeAgentFiles(ctx, ap); err != nil {
+		status, err := writeAgentFiles(ctx, ap)
+		if err != nil {
 			if stateChanges {
 				if saveErr := SaveManagedState(plan.StatePath, committed); saveErr != nil {
 					return fmt.Errorf("%w; also failed to restore managed state: %v", err, saveErr)
@@ -196,41 +198,44 @@ func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
 			}
 			return err
 		}
-		if !stateChanges {
-			continue
+		if stateChanges {
+			if hasNext {
+				committed.Agents[ap.Agent] = next
+			} else {
+				delete(committed.Agents, ap.Agent)
+			}
+			if err := SaveManagedState(plan.StatePath, committed); err != nil {
+				return err
+			}
 		}
-		if hasNext {
-			committed.Agents[ap.Agent] = next
-		} else {
-			delete(committed.Agents, ap.Agent)
-		}
-		if err := SaveManagedState(plan.StatePath, committed); err != nil {
+		// Report only after ownership matches the files, so a failing output
+		// stream can never undo the record of a write that happened.
+		if _, err := io.WriteString(p.out, status); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *AgentsPlugin) writeAgentFiles(ctx context.Context, ap AgentPlan) error {
+// writeAgentFiles applies an agent's files and returns their status lines.
+func writeAgentFiles(ctx context.Context, ap AgentPlan) (string, error) {
+	var status strings.Builder
 	for _, fp := range ap.Files {
 		if err := ctx.Err(); err != nil {
-			return err
+			return status.String(), err
 		}
 		backupPath, err := ApplyFilePlan(fp)
 		if err != nil {
-			return err
+			return status.String(), err
 		}
 		label := applyStatusLabel(fp.Action)
 		if backupPath != "" {
-			_, err = fmt.Fprintf(p.out, "%s: %s (backup: %s)\n", label, fp.Path, backupPath)
+			fmt.Fprintf(&status, "%s: %s (backup: %s)\n", label, fp.Path, backupPath)
 		} else {
-			_, err = fmt.Fprintf(p.out, "%s: %s\n", label, fp.Path)
-		}
-		if err != nil {
-			return err
+			fmt.Fprintf(&status, "%s: %s\n", label, fp.Path)
 		}
 	}
-	return nil
+	return status.String(), nil
 }
 
 func diffStatusLabel(action fileAction) string {
