@@ -27,9 +27,34 @@ Windows 11. Set up these prerequisites on a fresh machine before running DevEx:
   packages. Set `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled`
   to `1` from an elevated shell.
 
-Automating these steps inside DevEx is tracked in open issues:
+### Prerequisite checks in `devex setup`
 
-- [Windows prerequisite checks in `devex setup` #623](https://github.com/jameswlane/devex/issues/623)
+On Windows, `devex setup` checks Developer Mode, Win32 long paths, PowerShell 7
+and Windows Terminal before it plans anything, and prints each one as on, off
+or unknown (unknown means DevEx could not read the registry value).
+
+- A missing PowerShell 7 or Windows Terminal can be installed with winget
+  (`Microsoft.PowerShell`, `Microsoft.WindowsTerminal`).
+- DevEx offers to turn on Developer Mode or long paths only when it runs from
+  an elevated terminal. Otherwise, or when the state is unknown, it prints the
+  exact `reg add` command to run yourself.
+- Interactive setup asks before each change. Unattended setup changes only what
+  you name with `--windows-prerequisites` (or `setup.windows.prerequisites` in
+  configuration): `developer-mode`, `long-paths`, `powershell`,
+  `windows-terminal` or `all`.
+- `devex setup --dry-run` shows each check and each planned change without
+  applying anything.
+
+```powershell
+# Preview the checks and planned changes
+devex setup --dry-run
+
+# From an elevated terminal, fix everything without prompts
+devex setup --non-interactive --windows-prerequisites=all
+```
+
+Related work is tracked in open issues:
+
 - [PowerShell configuration #135](https://github.com/jameswlane/devex/issues/135)
 - [Windows Terminal profiles #136](https://github.com/jameswlane/devex/issues/136)
 - [Git for Windows bootstrap #139](https://github.com/jameswlane/devex/issues/139)
