@@ -160,14 +160,22 @@ func (p *AgentsPlugin) printDiff(plan PlanResult) error {
 }
 
 func (p *AgentsPlugin) applyPlan(ctx context.Context, plan PlanResult) error {
-	// Record ownership before writing: an entry DevEx is about to add must
-	// never look user-owned afterwards, even if a write or the save fails.
-	// Owned entries that never reached a file are harmless to remove later.
-	if !plan.InitialState.equal(plan.NextState) {
-		if err := SaveManagedState(plan.StatePath, plan.NextState); err != nil {
-			return err
-		}
+	// Before writing, own both the old and the new entries, so an entry being
+	// added or removed never looks user-owned if a write fails part-way
+	// through. Owned entries that are absent from a file are harmless.
+	if plan.InitialState.equal(plan.NextState) {
+		return p.writeFiles(ctx, plan)
 	}
+	if err := SaveManagedState(plan.StatePath, plan.InitialState.union(plan.NextState)); err != nil {
+		return err
+	}
+	if err := p.writeFiles(ctx, plan); err != nil {
+		return err
+	}
+	return SaveManagedState(plan.StatePath, plan.NextState)
+}
+
+func (p *AgentsPlugin) writeFiles(ctx context.Context, plan PlanResult) error {
 	for _, ap := range plan.Agents {
 		if err := ctx.Err(); err != nil {
 			return err

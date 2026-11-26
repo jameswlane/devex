@@ -22,6 +22,8 @@ type AgentManagedState struct {
 	Allow       []string       `json:"allow,omitempty"`
 	Deny        []string       `json:"deny,omitempty"`
 	Permissions []OpenCodeRule `json:"permissions,omitempty"`
+	// PresetPermissions are the OpenCode preset defaults DevEx put first.
+	PresetPermissions []OpenCodeRule `json:"preset_permissions,omitempty"`
 }
 
 // ManagedState is stored at <DEVEX_STATE_DIR>/agents/managed.json.
@@ -42,9 +44,10 @@ func (s ManagedState) clone() ManagedState {
 	out.Version = s.Version
 	for k, v := range s.Agents {
 		out.Agents[k] = AgentManagedState{
-			Allow:       slices.Clone(v.Allow),
-			Deny:        slices.Clone(v.Deny),
-			Permissions: slices.Clone(v.Permissions),
+			Allow:             slices.Clone(v.Allow),
+			Deny:              slices.Clone(v.Deny),
+			Permissions:       slices.Clone(v.Permissions),
+			PresetPermissions: slices.Clone(v.PresetPermissions),
 		}
 	}
 	return out
@@ -59,7 +62,7 @@ func (s ManagedState) equal(other ManagedState) bool {
 		if !ok {
 			return false
 		}
-		if !slices.Equal(a.Allow, b.Allow) || !slices.Equal(a.Deny, b.Deny) || !slices.Equal(a.Permissions, b.Permissions) {
+		if !slices.Equal(a.Allow, b.Allow) || !slices.Equal(a.Deny, b.Deny) || !slices.Equal(a.Permissions, b.Permissions) || !slices.Equal(a.PresetPermissions, b.PresetPermissions) {
 			return false
 		}
 	}
@@ -153,6 +156,23 @@ func OwnedEntries(existing, prevManaged, desired []string) []string {
 	for _, item := range uniqueStrings(desired) {
 		if slices.Contains(prevManaged, item) || !slices.Contains(existing, item) {
 			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// union returns a state owning every entry either state owns. applyPlan saves
+// it before writing, so neither an entry being added nor one being removed
+// loses its owner if a write fails part-way through.
+func (s ManagedState) union(other ManagedState) ManagedState {
+	out := s.clone()
+	for name, b := range other.Agents {
+		a := out.Agents[name]
+		out.Agents[name] = AgentManagedState{
+			Allow:             uniqueStrings(append(a.Allow, b.Allow...)),
+			Deny:              uniqueStrings(append(a.Deny, b.Deny...)),
+			Permissions:       uniqueOpenCodeRules(append(a.Permissions, b.Permissions...)),
+			PresetPermissions: uniqueOpenCodeRules(append(a.PresetPermissions, b.PresetPermissions...)),
 		}
 	}
 	return out

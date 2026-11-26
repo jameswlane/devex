@@ -190,7 +190,7 @@ func BuildPlan(spec Spec, env Env) (PlanResult, error) {
 			return PlanResult{}, fmt.Errorf("%s: %w", agent.Name, planErr)
 		}
 
-		if len(nextAgent.Allow) == 0 && len(nextAgent.Deny) == 0 && len(nextAgent.Permissions) == 0 {
+		if len(nextAgent.Allow) == 0 && len(nextAgent.Deny) == 0 && len(nextAgent.Permissions) == 0 && len(nextAgent.PresetPermissions) == 0 {
 			delete(nextState.Agents, agent.Name)
 		} else {
 			nextState.Agents[agent.Name] = nextAgent
@@ -568,7 +568,7 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 		return nil, AgentManagedState{}, err
 	}
 
-	hasSettingsWork := spec.Model != "" || len(desiredRules) > 0 || len(prev.Permissions) > 0
+	hasSettingsWork := spec.Model != "" || len(desiredRules) > 0 || len(prev.Permissions) > 0 || len(prev.PresetPermissions) > 0
 	if !exists && !hasSettingsWork {
 		return files, AgentManagedState{}, nil
 	}
@@ -588,8 +588,8 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 		doc.Set("model", newJSONString(spec.Model))
 	}
 
-	var ownedRules []OpenCodeRule
-	if len(desiredRules) > 0 || len(prev.Permissions) > 0 {
+	var ownedPreset, ownedExplicit []OpenCodeRule
+	if len(desiredRules) > 0 || len(prev.Permissions) > 0 || len(prev.PresetPermissions) > 0 {
 		var existingItems []jsonValue
 		if rawPerms, ok := doc.Get("permissions"); ok {
 			arr, isArr := rawPerms.(*jsonArray)
@@ -598,24 +598,15 @@ func planOpenCode(spec AgentSpec, configDir string, prev AgentManagedState) ([]F
 			}
 			existingItems = arr.Items
 		}
-		existingRules := make([]OpenCodeRule, 0, len(existingItems))
-		for _, item := range existingItems {
-			if parsed, ok := openCodeRuleFromJSON(item); ok {
-				existingRules = append(existingRules, parsed)
-			}
-		}
-		for _, r := range desiredRules {
-			if slices.Contains(prev.Permissions, r) || !slices.Contains(existingRules, r) {
-				ownedRules = append(ownedRules, r)
-			}
-		}
-		merged := mergeOpenCodePermissions(existingItems, prev.Permissions, presetRules, allowRules, denyRules)
+		var merged []jsonValue
+		merged, ownedPreset, ownedExplicit = mergeOpenCodePermissions(existingItems, prev, presetRules, append(allowRules, denyRules...))
 		doc.Set("permissions", &jsonArray{Items: merged})
 	}
 
 	files = append(files, buildJSONFilePlan(AgentOpenCode, settingsPath, before, exists, mode, origDoc, doc))
 	return files, AgentManagedState{
-		Permissions: ownedRules,
+		PresetPermissions: ownedPreset,
+		Permissions:       ownedExplicit,
 	}, nil
 }
 
@@ -759,36 +750,60 @@ func openCodeRuleToJSON(r OpenCodeRule) *jsonObject {
 	}
 }
 
-// mergeOpenCodePermissions keeps user rules in their own order, because
-// OpenCode V2 uses the last matching rule. DevEx preset defaults go first,
-// unless the user already has the same rule, whose position then wins. DevEx
-// allow/deny rules go last so they take effect; an identical user rule earlier
-// in the list is dropped rather than left to shadow nothing.
-func mergeOpenCodePermissions(existing []jsonValue, prevManaged, presetRules, allowRules, denyRules []OpenCodeRule) []jsonValue {
-	explicit := append(slices.Clone(allowRules), denyRules...)
-	userItems := make([]jsonValue, 0, len(existing))
-	userRules := make([]OpenCodeRule, 0, len(existing))
-	for _, item := range existing {
-		if parsed, ok := openCodeRuleFromJSON(item); ok {
-			if slices.Contains(prevManaged, parsed) || slices.Contains(explicit, parsed) {
-				continue
+// mergeOpenCodePermissions keeps every user rule object verbatim and in order,
+// because OpenCode V2 uses the last matching rule. It first strips the copies
+// DevEx wrote last time: preset defaults from the front (first occurrence) and
+// explicit allow/deny rules from the back (last occurrence), so a user rule
+// identical to a DevEx rule is never removed. Preset defaults then go first
+// unless the user already has the same rule, and explicit rules always go last
+// so they take effect; withdrawing one restores the user's own precedence.
+func mergeOpenCodePermissions(existing []jsonValue, prev AgentManagedState, presetRules, explicitRules []OpenCodeRule) (merged []jsonValue, ownedPreset, ownedExplicit []OpenCodeRule) {
+	items := slices.Clone(existing)
+	removeAt := func(i int) { items = slices.Delete(items, i, i+1) }
+	for _, r := range prev.PresetPermissions {
+		for i := range items {
+			if parsed, ok := exactOpenCodeRule(items[i]); ok && parsed == r {
+				removeAt(i)
+				break
 			}
-			userRules = append(userRules, parsed)
 		}
-		userItems = append(userItems, item)
+	}
+	for _, r := range prev.Permissions {
+		for i := len(items) - 1; i >= 0; i-- {
+			if parsed, ok := exactOpenCodeRule(items[i]); ok && parsed == r {
+				removeAt(i)
+				break
+			}
+		}
 	}
 
-	out := make([]jsonValue, 0, len(presetRules)+len(userItems)+len(explicit))
-	for _, r := range presetRules {
-		if !slices.Contains(userRules, r) {
-			out = append(out, openCodeRuleToJSON(r))
+	userRules := make([]OpenCodeRule, 0, len(items))
+	for _, item := range items {
+		if parsed, ok := openCodeRuleFromJSON(item); ok {
+			userRules = append(userRules, parsed)
 		}
 	}
-	out = append(out, userItems...)
-	for _, r := range uniqueOpenCodeRules(explicit) {
-		out = append(out, openCodeRuleToJSON(r))
+	for _, r := range uniqueOpenCodeRules(presetRules) {
+		if !slices.Contains(userRules, r) {
+			merged = append(merged, openCodeRuleToJSON(r))
+			ownedPreset = append(ownedPreset, r)
+		}
 	}
-	return out
+	merged = append(merged, items...)
+	for _, r := range uniqueOpenCodeRules(explicitRules) {
+		merged = append(merged, openCodeRuleToJSON(r))
+		ownedExplicit = append(ownedExplicit, r)
+	}
+	return merged, ownedPreset, ownedExplicit
+}
+
+// exactOpenCodeRule matches only rule objects with exactly the three keys
+// DevEx writes, so a user rule carrying extra keys is never taken for DevEx's.
+func exactOpenCodeRule(v jsonValue) (OpenCodeRule, bool) {
+	if obj, ok := v.(*jsonObject); !ok || len(obj.Entries) != 3 {
+		return OpenCodeRule{}, false
+	}
+	return openCodeRuleFromJSON(v)
 }
 
 func renderCodexRules(allowed, denied []string) (string, error) {

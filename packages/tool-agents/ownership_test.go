@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -83,31 +84,62 @@ var _ = Describe("Managed entry ownership", func() {
 		Expect(string(data)).NotTo(ContainSubstring("go test"))
 	})
 
-	It("puts a declared OpenCode deny after a user allow for the same command and keeps user rule order", func() {
+	It("appends a declared OpenCode deny after user rules, keeps user rule objects verbatim, and restores them on withdrawal", func() {
 		env := newTestEnv(home, nil, "opencode")
 		config := filepath.Join(home, ".config", "opencode", "opencode.json")
 		Expect(os.MkdirAll(filepath.Dir(config), 0o700)).To(Succeed())
+		original := []OpenCodeRule{
+			{Action: "shell", Resource: "git push *", Effect: "deny"},
+			{Action: "shell", Resource: "git push *", Effect: "allow"},
+			{Action: "shell", Resource: "ls *", Effect: "allow"},
+			{Action: "shell", Resource: "ls *", Effect: "allow"},
+		}
 		Expect(os.WriteFile(config, []byte(`{"permissions": [
-  {"action": "shell", "resource": "git push *", "effect": "deny"},
+  {"action": "shell", "resource": "git push *", "effect": "deny", "note": "mine"},
   {"action": "shell", "resource": "git push *", "effect": "allow"},
   {"action": "shell", "resource": "ls *", "effect": "allow"},
   {"action": "shell", "resource": "ls *", "effect": "allow"}
 ]}`), 0o600)).To(Succeed())
+		rules := func() []OpenCodeRule {
+			doc, err := os.ReadFile(config)
+			Expect(err).NotTo(HaveOccurred())
+			var parsed struct {
+				Permissions []OpenCodeRule `json:"permissions"`
+			}
+			Expect(json.Unmarshal(doc, &parsed)).To(Succeed())
+			return parsed.Permissions
+		}
 
 		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentOpenCode, DeniedCommands: []string{"git push"}}}})).To(Succeed())
+		Expect(rules()).To(Equal(append(slices.Clone(original), OpenCodeRule{Action: "shell", Resource: "git push *", Effect: "deny"})))
+		Expect(os.ReadFile(config)).To(ContainSubstring(`"note": "mine"`))
 
-		doc, err := os.ReadFile(config)
-		Expect(err).NotTo(HaveOccurred())
-		var parsed struct {
-			Permissions []OpenCodeRule `json:"permissions"`
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentOpenCode, DeniedCommands: []string{"git push"}}}})).To(Succeed())
+		Expect(rules()).To(HaveLen(5))
+
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentOpenCode}}})).To(Succeed())
+		Expect(rules()).To(Equal(original))
+		Expect(os.ReadFile(config)).To(ContainSubstring(`"note": "mine"`))
+	})
+
+	It("still removes a withdrawn Claude rule after the removing write failed once", func() {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			Skip("needs POSIX directory permissions enforced for the current user")
 		}
-		Expect(json.Unmarshal(doc, &parsed)).To(Succeed())
-		Expect(parsed.Permissions).To(Equal([]OpenCodeRule{
-			{Action: "shell", Resource: "git push *", Effect: "allow"},
-			{Action: "shell", Resource: "ls *", Effect: "allow"},
-			{Action: "shell", Resource: "ls *", Effect: "allow"},
-			{Action: "shell", Resource: "git push *", Effect: "deny"},
-		}))
+		env := newTestEnv(home, nil, "claude")
+		claudeDir := filepath.Join(home, ".claude")
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentClaude, AllowedCommands: []string{"go test"}}}})).To(Succeed())
+
+		Expect(os.Chmod(claudeDir, 0o500)).To(Succeed())
+		DeferCleanup(func() { _ = os.Chmod(claudeDir, 0o700) })
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentClaude, AllowedCommands: []string{"make"}}}})).To(HaveOccurred())
+		Expect(os.Chmod(claudeDir, 0o700)).To(Succeed())
+
+		Expect(apply(env, Spec{Agents: []AgentSpec{{Name: AgentClaude, AllowedCommands: []string{"make"}}}})).To(Succeed())
+		data, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(data)).NotTo(ContainSubstring("go test"))
+		Expect(string(data)).To(ContainSubstring("Bash(make *)"))
 	})
 
 	It("refuses to replace or delete a Codex devex.rules file DevEx did not write", func() {
