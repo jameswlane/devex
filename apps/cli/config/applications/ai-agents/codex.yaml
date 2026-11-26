@@ -11,10 +11,19 @@ macos:
   brew_cask: true
   self_updating: false
   official_support: true
+windows:
+  # OpenAI documents npm install -g @openai/codex; mise installs that package
+  # without a global npm prefix.
+  install_method: mise
+  install_command: npm:@openai/codex@latest
+  uninstall_command: npm:@openai/codex
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
 linux:
-  # mise resolves codex from its registry to aqua:openai/codex official GitHub
-  # release binaries. Windows is omitted because OpenAI's docs target Windows 11
-  # via WSL2 rather than a native package manager.
+  # mise resolves codex from its registry to aqua:openai/codex, the official
+  # GitHub release binaries OpenAI documents as an install option.
   install_method: mise
   install_command: codex@latest
   uninstall_command: codex

@@ -26,6 +26,14 @@ func uninstallConfiguredApplication(ctx context.Context, app types.AppConfig, in
 	if app.InstallMethod == "curlpipe" {
 		// Catalog uninstall commands are shell programs, not package names. Keep
 		// quoting, flags and environment expansion intact, without adding sudo.
+		if app.InstallScope == "user" {
+			// User-scope installs live in the invoking user's home; run removal
+			// as that user (with their HOME) even when DevEx is elevated.
+			if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "sh", "-c", app.UninstallCommand); err != nil {
+				return fmt.Errorf("uninstall command for %s failed: %w", app.Name, err)
+			}
+			return nil
+		}
 		cmd := exec.CommandContext(ctx, "sh", "-c", app.UninstallCommand)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {

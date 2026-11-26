@@ -140,7 +140,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 				Expect(resolved.InstallCommand).To(Equal(wantTarget))
 				packages, err := installers.CatalogPackageArguments("mise", resolved.InstallCommand)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(packages).To(Equal([]string{wantTarget}))
+				Expect(packages).To(Equal(strings.Fields(wantTarget)))
 				uninstallArgs, err := installers.CatalogPackageArguments("mise", resolved.UninstallCommand)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(uninstallArgs).To(Equal([]string{wantUninstall}))

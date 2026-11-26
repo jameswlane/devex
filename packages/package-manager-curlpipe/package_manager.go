@@ -120,6 +120,13 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 		fmt.Fprintf(os.Stderr, "Download verification: checksum=%t signature=%t (false means skipped)\n", verified.ChecksumVerified, verified.SignatureVerified)
 		// Run the file with bash as a separate argv
 		if userScope {
+			// When DevEx is elevated the script runs as the invoking user, who
+			// must be able to read the root-owned temp file. Install scripts are
+			// public downloads, so read access leaks nothing.
+			// #nosec G302 -- see above
+			if err := os.Chmod(tempFile.Name(), 0o644); err != nil {
+				return fmt.Errorf("failed to make script readable for the invoking user: %w", err)
+			}
 			if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "bash", tempFile.Name()); err != nil {
 				return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
 			}

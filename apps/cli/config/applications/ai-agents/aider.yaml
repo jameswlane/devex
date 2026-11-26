@@ -14,6 +14,8 @@ macos:
   official_support: true
   dependencies:
     - mise
+  pre_install:
+    - shell: mise use --global uv@latest
 windows:
   install_method: mise
   install_command: pipx:aider-chat[python=3.12]@latest
@@ -22,10 +24,13 @@ windows:
   official_support: true
   dependencies:
     - mise
+  pre_install:
+    - shell: mise use --global uv@latest
 linux:
-  # mise's pipx/pypi backend uses uv tool install with an isolated mise-managed
+  # mise's pipx backend runs uv tool install with an isolated mise-managed
   # Python 3.12 runtime (aider-chat requires Python >=3.10,<3.13) without
-  # touching the system Python.
+  # touching the system Python. The backend needs an active uv (or pipx), so a
+  # pre-install step activates uv first; uninstall removes Aider and keeps uv.
   install_method: mise
   install_command: pipx:aider-chat[python=3.12]@latest
   uninstall_command: pipx:aider-chat
@@ -33,3 +38,5 @@ linux:
   official_support: true
   dependencies:
     - mise
+  pre_install:
+    - shell: mise use --global uv@latest

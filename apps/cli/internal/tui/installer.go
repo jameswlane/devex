@@ -1015,7 +1015,9 @@ func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app typ
 	if si.apt.has(si.apt.batchInstalled, app.Name) {
 		return nil
 	}
-	if osConfig.InstallMethod == "deb" || osConfig.InstallMethod == "appimage" {
+	// User-scope scripts go through the curlpipe plugin, which runs them as
+	// the invoking user even when DevEx itself is elevated.
+	if osConfig.InstallMethod == "deb" || osConfig.InstallMethod == "appimage" || (osConfig.InstallMethod == "curlpipe" && osConfig.InstallScope == "user") {
 		return installers.InstallArtifact(ctx, types.AppConfig{InstallMethod: osConfig.InstallMethod, InstallCommand: osConfig.InstallCommand, InstallScope: osConfig.InstallScope, SelfUpdating: osConfig.SelfUpdating, DownloadURL: osConfig.DownloadURL, Packages: osConfig.Packages, Options: osConfig.Options, Verification: osConfig.Verification})
 	}
 	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
