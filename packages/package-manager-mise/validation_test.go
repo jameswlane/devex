@@ -55,9 +55,61 @@ var _ = Describe("Validation", func() {
 				err := plugin.ValidateToolSpec("java-openjdk@17")
 				Expect(err).ToNot(HaveOccurred())
 			})
+
+			It("should accept mise backend tool specifications", func() {
+				validSpecs := []string{
+					"aqua:aaif-goose/goose",
+					"aqua:aaif-goose/goose@latest",
+					"aqua:openai/codex@0.1.0",
+					"github:aaif-goose/goose@latest",
+					"github:block/goose@v1.0.25",
+					"npm:opencode-ai",
+					"npm:opencode-ai@1.0.0",
+					"npm:@google/gemini-cli",
+					"npm:@google/gemini-cli@1.2.3",
+					"npm:@google/gemini-cli@latest",
+					"npm:@moonshot-ai/kimi-code@latest",
+					"pipx:aider-chat",
+					"pipx:aider-chat@latest",
+					"pipx:aider-chat[python=3.12]@latest",
+					"pipx:aider-chat[python=3.12]",
+					"ubi:jesseduffield/lazygit@latest",
+					"cargo:ripgrep@14.0.0",
+					"go:github.com/jesseduffield/lazydocker@latest",
+					"go:github.com/owner/repo/cmd/tool@v1.2.3",
+				}
+				for _, spec := range validSpecs {
+					Expect(plugin.ValidateToolSpec(spec)).To(Succeed(), "expected valid spec: %s", spec)
+				}
+			})
 		})
 
 		Context("with invalid tool specifications", func() {
+			It("should reject invalid backend specifications", func() {
+				invalidSpecs := []string{
+					"unknown:owner/repo",
+					"aqua:",
+					"aqua:@latest",
+					"aqua:-bad/repo",
+					"aqua:owner/repo/../other",
+					"aqua:owner//repo",
+					"aqua:owner/repo/",
+					"aqua:owner/repo@1.0@2.0",
+					"npm:@scope",
+					"npm:@scope/",
+					"npm:@scope/pkg@1.0@2.0",
+					"npm:@/pkg",
+					"pipx:aider chat",
+					"pipx:aider-chat[python=3.12",
+					"pipx:aider-chat[]@latest",
+					"pipx:aider-chat[python=..]@latest",
+					"github:owner/repo;rm -rf /",
+					"go:github.com/owner/repo\t@latest",
+				}
+				for _, spec := range invalidSpecs {
+					Expect(plugin.ValidateToolSpec(spec)).To(HaveOccurred(), "expected invalid spec: %s", spec)
+				}
+			})
 			It("should reject empty string", func() {
 				err := plugin.ValidateToolSpec("")
 				Expect(err).To(HaveOccurred())
