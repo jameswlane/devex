@@ -176,8 +176,9 @@ func PlanGitignoreAppend(existing []byte, exists bool) ([]byte, bool) {
 	present := make(map[string]bool, len(gitignoreEntries))
 	if exists {
 		for _, line := range strings.Split(string(existing), "\n") {
-			// Git keeps leading spaces in a pattern and drops unescaped trailing ones.
-			present[strings.TrimRight(line, " \r")] = true
+			// Like git: drop one CR before the newline, then unescaped trailing
+			// spaces; leading spaces stay significant.
+			present[strings.TrimRight(strings.TrimSuffix(line, "\r"), " ")] = true
 		}
 	}
 

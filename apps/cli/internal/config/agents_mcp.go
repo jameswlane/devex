@@ -184,8 +184,8 @@ func validateHTTPMCPServer(srv AgentMCPServerConfig, prefix, label string, add f
 			if parsed.User != nil {
 				add(prefix+".url", fmt.Sprintf("MCP server %q url must not contain embedded credentials; use headers with ${env:VAR_NAME} instead", label))
 			}
-			if LooksLikeMCPSecretValue(parsed.Path) || LooksLikeMCPSecretValue(parsed.Fragment) {
-				add(prefix+".url", fmt.Sprintf("MCP server %q url path appears to contain a literal secret; use headers with ${env:VAR_NAME} instead", label))
+			if mcpURLPathOrFragmentHasSecret(parsed) {
+				add(prefix+".url", fmt.Sprintf("MCP server %q url path or fragment appears to contain a literal secret; use headers with ${env:VAR_NAME} instead", label))
 			}
 			query, qErr := url.ParseQuery(parsed.RawQuery)
 			if qErr != nil {
@@ -284,6 +284,31 @@ func hasMCPSecretAuthToken(upper string) bool {
 			}
 		}
 		return true
+	}
+	return false
+}
+
+// mcpURLPathOrFragmentHasSecret reports whether a decoded path segment or a
+// parameter-style fragment (#access_token=...) carries a literal credential.
+func mcpURLPathOrFragmentHasSecret(u *url.URL) bool {
+	for _, segment := range strings.Split(u.Path, "/") {
+		if LooksLikeMCPSecretValue(segment) {
+			return true
+		}
+	}
+	if LooksLikeMCPSecretValue(u.Fragment) {
+		return true
+	}
+	params, err := url.ParseQuery(u.Fragment)
+	if err != nil {
+		return false
+	}
+	for key, values := range params {
+		for _, v := range values {
+			if (IsMCPSecretKey(key) && strings.TrimSpace(v) != "") || LooksLikeMCPSecretValue(v) {
+				return true
+			}
+		}
 	}
 	return false
 }

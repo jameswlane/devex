@@ -30,7 +30,7 @@ devex agent init --overwrite
 
 - **Languages:** `go.mod` (Go), `package.json` (JavaScript, or TypeScript when `tsconfig.json` is present), `Cargo.toml` (Rust), `pyproject.toml` / `requirements.txt` / `setup.py` (Python), `Gemfile` (Ruby).
 - **Task runners:** `Taskfile.yml` / `Taskfile.yaml` (`task`), `mise.toml` / `.mise.toml` with `[tasks]` (`mise`), `justfile` (`just`), `Makefile` (`make`), and `package.json` `scripts` using the lockfile package manager (`pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, or `npm`).
-- **Test and lint commands:** prefers `test` and `lint` targets defined by the detected task runner, falling back to language defaults only when marker files support them. Commands that cannot be detected are omitted.
+- **Test and lint commands:** each command comes from the first source that defines it: a `test` or `lint` target of the detected task runner, then a `test` or `lint` script in `package.json` (for example when a `Makefile` only builds), then language defaults that the marker files support. Commands that cannot be detected are omitted.
 
 ## Existing files, backups, and preview
 
@@ -54,7 +54,9 @@ variable.
 
 Pass `--mcp` to render `.mcp.json` from `agents.mcp_servers` entries in
 `agents.yaml` whose `agents` list is empty or includes `claude`, plus the
-`devex` server when `agents.devex_mcp` is `true`:
+`devex` server (as the bare `devex` command, so the file works for everyone
+who commits it) when `agents.devex_mcp` is `true`. `agents.enabled` must
+include `claude`; otherwise `.mcp.json` is skipped:
 
 ```sh
 devex agent init --mcp
@@ -63,7 +65,7 @@ devex agent init --mcp
 `agents.yaml` is validated first so literal secrets are rejected before any
 files are written. Environment references (`${env:VAR}` and
 `Bearer ${env:VAR}`) are rendered in Claude Code's `.mcp.json` expansion syntax
-(`${VAR}` and `Bearer ${VAR}`). If no Claude-compatible servers are configured,
+(`${VAR}` and `Bearer ${VAR}`). If no servers target Claude Code,
 `.mcp.json` is skipped.
 
 ## Flags

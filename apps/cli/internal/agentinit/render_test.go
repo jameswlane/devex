@@ -86,6 +86,12 @@ var _ = Describe("Agent init rendering", func() {
 			out, changed := agentinit.PlanGitignoreAppend(existing, true)
 			Expect(changed).To(BeTrue())
 			Expect(string(out)).To(Equal(string(existing) + "# DevEx agent-local files\n.claude/settings.local.json\n"))
+
+			// A CR followed by spaces is part of the pattern for git.
+			crInside := []byte(".claude/settings.local.json\nCLAUDE.local.md\r  \n")
+			out, changed = agentinit.PlanGitignoreAppend(crInside, true)
+			Expect(changed).To(BeTrue())
+			Expect(string(out)).To(HaveSuffix("# DevEx agent-local files\nCLAUDE.local.md\n"))
 		})
 	})
 
@@ -195,17 +201,23 @@ var _ = Describe("Agent init rendering", func() {
 			Expect(out).To(BeNil())
 		})
 
-		It("rejects a literal token in an http server URL path", func() {
-			cfg := config.AgentsConfig{
-				Enabled: []string{"claude"},
-				MCPServers: []config.AgentMCPServerConfig{
-					{Name: "hook", Transport: config.MCPTransportHTTP, URL: "https://mcp.example.com/ghp_abcdefghijklmnop1234/mcp"},
-				},
-			}
-			_, _, err := agentinit.RenderClaudeMCPJSON(cfg)
-			Expect(err).To(MatchError(ContainSubstring("url path appears to contain a literal secret")))
-			Expect(err.Error()).NotTo(ContainSubstring("ghp_"))
-		})
+		DescribeTable("rejects literal credentials in an http server URL path or fragment",
+			func(rawURL string) {
+				cfg := config.AgentsConfig{
+					Enabled: []string{"claude"},
+					MCPServers: []config.AgentMCPServerConfig{
+						{Name: "hook", Transport: config.MCPTransportHTTP, URL: rawURL},
+					},
+				}
+				_, _, err := agentinit.RenderClaudeMCPJSON(cfg)
+				Expect(err).To(MatchError(ContainSubstring("url path or fragment appears to contain a literal secret")))
+				Expect(err.Error()).NotTo(ContainSubstring("opaque-example"))
+				Expect(err.Error()).NotTo(ContainSubstring("ghp_"))
+			},
+			Entry("token-shaped path segment", "https://mcp.example.com/ghp_abcdefghijklmnop1234/mcp"),
+			Entry("bearer value in a path segment", "https://mcp.example.com/Bearer%20opaque-example/mcp"),
+			Entry("credential key in a fragment", "https://mcp.example.com/mcp#access_token=opaque-example"),
+		)
 
 		It("rejects invalid agents config with a literal secret", func() {
 			cfg := config.AgentsConfig{
