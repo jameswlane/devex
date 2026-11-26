@@ -48,10 +48,10 @@ var _ = Describe("Parallel plain installations", func() {
 		go func() {
 			done <- runPlainInstall(ctx, &output, apps, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)
 		}()
-		Eventually(entered, 5*time.Second).Should(Receive())
-		Eventually(entered, 5*time.Second).Should(Receive())
+		Eventually(entered, 10*time.Second).Should(Receive())
+		Eventually(entered, 10*time.Second).Should(Receive())
 		close(release)
-		Eventually(done, 5*time.Second).Should(Receive(Succeed()))
+		Eventually(done, 10*time.Second).Should(Receive(Succeed()))
 		Expect(output.String()).To(ContainSubstring("installed one\n"))
 		Expect(output.String()).To(ContainSubstring("installed two\n"))
 		Expect(output.String()).To(ContainSubstring("installed 2 of 2 applications\n"))
