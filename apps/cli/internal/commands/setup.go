@@ -38,6 +38,7 @@ a customized development environment tailored to your needs.
 The setup process includes:
   • Programming language selection (Node.js, Python, Go, Ruby, etc.)
   • Database installation (PostgreSQL, MySQL, MongoDB, etc.)
+  • Optional AI coding agents and permission presets
   • Essential development tools and applications
   • Shell and theme customization
   • Automated plugin installation
@@ -111,6 +112,9 @@ Run 'devex setup' to begin the guided installation process.`,
 
 			// Validate before choosing a path so no mode accepts an unknown name.
 			if err := setup.ValidateDefaultExclusions(settings, detectedPlatform); err != nil {
+				return err
+			}
+			if err := setup.ValidateAIAgentSelection(settings, detectedPlatform); err != nil {
 				return err
 			}
 
@@ -210,6 +214,8 @@ Run 'devex setup' to begin the guided installation process.`,
 	cmd.Flags().String("git-name", "", "Git name for automated setup, only when unset; config key: setup.git.name")
 	cmd.Flags().String("git-email", "", "Git email for automated setup, only when unset; config key: setup.git.email")
 	cmd.Flags().String("shell", "", "Shell for automated setup (bash, zsh, fish); config key: setup.shell; defaults to the current shell")
+	cmd.Flags().StringSlice("ai-agents", nil, "Optional AI coding agents to install (repeatable or comma-separated); config key: setup.ai_agents.apps")
+	cmd.Flags().String("ai-agents-preset", "", "Permission preset for selected AI coding agents (balanced or strict); config key: setup.ai_agents.preset")
 	cmd.Flags().StringP("config", "c", "", "Path to custom setup configuration file (YAML)")
 	cmd.Flags().StringSlice("windows-prerequisites", nil, "On Windows, fix these prerequisites without asking: developer-mode, long-paths, powershell, windows-terminal or all; config key: setup.windows.prerequisites")
 
@@ -220,6 +226,8 @@ Run 'devex setup' to begin the guided installation process.`,
 	_ = viper.BindPFlag("setup.git.name", cmd.Flags().Lookup("git-name"))
 	_ = viper.BindPFlag("setup.git.email", cmd.Flags().Lookup("git-email"))
 	_ = viper.BindPFlag("setup.shell", cmd.Flags().Lookup("shell"))
+	_ = viper.BindPFlag("setup.ai_agents.apps", cmd.Flags().Lookup("ai-agents"))
+	_ = viper.BindPFlag("setup.ai_agents.preset", cmd.Flags().Lookup("ai-agents-preset"))
 	_ = viper.BindPFlag("config", cmd.Flags().Lookup("config"))
 	_ = viper.BindPFlag("setup.windows.prerequisites", cmd.Flags().Lookup("windows-prerequisites"))
 

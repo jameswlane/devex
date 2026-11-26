@@ -1,0 +1,40 @@
+---
+title: OpenCode
+description: Install, configure, and authenticate OpenCode with DevEx.
+---
+
+Open-source AI coding agent for the terminal (catalog name `OpenCode`, binary `opencode`, DevEx agent ID `opencode`).
+
+## Installation by OS
+
+```sh
+devex install "OpenCode"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `curlpipe` (user scope) | `https://opencode.ai/install` (installs `$HOME/.opencode/bin/opencode`) | Yes |
+| **macOS** | `brew` (tap `anomalyco/tap`) | `anomalyco/tap/opencode` | No |
+| **Windows** | Not yet in catalog | — | — |
+
+## Declarative Harness Config & Native Files
+
+OpenCode is supported by `agents.yaml` (`agents.enabled: [opencode]`). See [Coding Agents Configuration](/docs/configuration/agents).
+
+- **Config directory**: `$OPENCODE_CONFIG_DIR` > `$XDG_CONFIG_HOME/opencode` > `~/.config/opencode`
+- **Instructions file**: `<dir>/AGENTS.md` (managed DevEx block)
+- **Settings file**: `<dir>/opencode.json` (or existing `opencode.jsonc`) (`strict`: edit/shell `ask`; `balanced`: edit `allow`, shell `ask`)
+- **MCP config**: `<dir>/opencode.json(c)`, key `mcp`
+- **Credentials**: OpenCode's database (v2) or `$XDG_DATA_HOME/opencode/auth.json` (default `~/.local/share/opencode/auth.json`, v1)
+
+## Authentication
+
+```sh
+devex agent login opencode
+```
+
+This hands off directly to `opencode auth login`. `devex agent doctor --agent opencode` checks credential file presence via `stat` and environment variable names `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `OPENROUTER_API_KEY`. See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Sandboxing
+
+OpenCode has no built-in Linux OS sandbox and uses permission rules instead; isolate externally with Docker or dev containers if needed. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

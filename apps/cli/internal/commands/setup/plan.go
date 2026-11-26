@@ -65,6 +65,14 @@ func (m *SetupModel) installPlan() []planItem {
 		}
 	}
 
+	existing := make(map[string]bool, len(plan))
+	for _, item := range plan {
+		existing[strings.ToLower(strings.TrimSpace(item.app.Name))] = true
+	}
+	agentDeps, agentItems := m.expandAIAgentPlanItems(existing)
+	plan = append(plan, agentDeps...)
+	plan = append(plan, agentItems...)
+
 	return plan
 }
 

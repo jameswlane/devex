@@ -2,6 +2,7 @@
 	"title": "Examples",
 	"pages": [
 		"index",
+		"ai-assisted",
 		"web-development",
 		"backend-development",
 		"data-science",

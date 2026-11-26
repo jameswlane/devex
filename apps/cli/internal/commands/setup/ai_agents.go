@@ -1,0 +1,509 @@
+package setup
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/jameswlane/devex/apps/cli/internal/agentapply"
+	"github.com/jameswlane/devex/apps/cli/internal/agentdoctor"
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+	"github.com/spf13/viper"
+)
+
+// AI coding agent catalog category names and setup group headings.
+const (
+	CategoryAICodingAgents = "AI Coding Agents"
+	CategoryAIEditors      = "AI Editors"
+	CategoryLocalModels    = "Local Models"
+
+	setupAIAgentsAppsKey   = "setup.ai_agents.apps"
+	setupAIAgentsPresetKey = "setup.ai_agents.preset"
+)
+
+type aiAgentGroupSpec struct {
+	Heading  string
+	Category string
+}
+
+// aiAgentGroups defines the display order and heading for each AI agent category.
+// Groups with no platform-compatible apps in the catalog are hidden.
+var aiAgentGroups = []aiAgentGroupSpec{
+	{Heading: "Agent CLIs", Category: CategoryAICodingAgents},
+	{Heading: "AI editors", Category: CategoryAIEditors},
+	{Heading: "Local models", Category: CategoryLocalModels},
+}
+
+type aiAgentPresetOption struct {
+	Value string
+	Label string
+}
+
+var aiAgentPresetOptions = []aiAgentPresetOption{
+	{Value: "", Label: "Leave permission modes unchanged"},
+	{Value: config.AgentPresetBalanced, Label: "balanced"},
+	{Value: config.AgentPresetStrict, Label: "strict"},
+}
+
+// Package-level hooks replaced in tests.
+var (
+	newAgentDoctorProbe = agentdoctor.DefaultProbe
+	applyAIAgentsConfig = defaultApplyAIAgentsConfig
+)
+
+func osConfigForPlatform(app types.CrossPlatformApp, osName string) types.OSConfig {
+	switch osName {
+	case "linux":
+		if app.Linux.InstallMethod != "" || app.Linux.InstallCommand != "" {
+			return app.Linux
+		}
+	case "darwin":
+		if app.MacOS.InstallMethod != "" || app.MacOS.InstallCommand != "" {
+			return app.MacOS
+		}
+	case "windows":
+		if app.Windows.InstallMethod != "" || app.Windows.InstallCommand != "" {
+			return app.Windows
+		}
+	}
+	return app.AllPlatforms
+}
+
+func isAIAgentCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
+	if detectedPlatform.OS == "" {
+		return app.IsSupported()
+	}
+	cfg := osConfigForPlatform(app, detectedPlatform.OS)
+	return cfg.InstallMethod != "" || cfg.InstallCommand != ""
+}
+
+func aiAgentGroupHeading(category string) (string, int) {
+	for idx, g := range aiAgentGroups {
+		if strings.EqualFold(category, g.Category) {
+			return g.Heading, idx
+		}
+	}
+	return "", -1
+}
+
+// getAvailableAIAgentApps returns all catalog apps belonging to the AI coding
+// agent categories that can install on detectedPlatform, ordered by group and name.
+func getAvailableAIAgentApps(settings config.CrossPlatformSettings, detectedPlatform platform.DetectionResult) []types.CrossPlatformApp {
+	var apps []types.CrossPlatformApp
+	for _, app := range settings.GetAllApps() {
+		if _, idx := aiAgentGroupHeading(app.Category); idx < 0 {
+			continue
+		}
+		if !isAIAgentCompatibleWithPlatform(app, detectedPlatform) {
+			continue
+		}
+		apps = append(apps, app)
+	}
+	sort.SliceStable(apps, func(i, j int) bool {
+		_, leftGroup := aiAgentGroupHeading(apps[i].Category)
+		_, rightGroup := aiAgentGroupHeading(apps[j].Category)
+		if leftGroup != rightGroup {
+			return leftGroup < rightGroup
+		}
+		leftName := strings.ToLower(apps[i].Name)
+		rightName := strings.ToLower(apps[j].Name)
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		return apps[i].Name < apps[j].Name
+	})
+	return apps
+}
+
+func configuredAIAgentSelection(settings config.CrossPlatformSettings, detectedPlatform platform.DetectionResult) (map[string]bool, string, error) {
+	preset := strings.TrimSpace(viper.GetString(setupAIAgentsPresetKey))
+	if err := config.ValidateAgentPreset(preset); err != nil {
+		return nil, "", fmt.Errorf("invalid %s/--ai-agents-preset: %w", setupAIAgentsPresetKey, err)
+	}
+
+	var names []string
+	if raw, ok := viper.Get(setupAIAgentsAppsKey).(string); ok {
+		names = strings.Split(raw, ",")
+	} else {
+		names = viper.GetStringSlice(setupAIAgentsAppsKey)
+	}
+
+	available := getAvailableAIAgentApps(settings, detectedPlatform)
+	canonicalNames := make(map[string]string, len(available))
+	validNames := make([]string, 0, len(available))
+	for _, app := range available {
+		canonicalNames[strings.ToLower(app.Name)] = app.Name
+		validNames = append(validNames, app.Name)
+	}
+	sort.Strings(validNames)
+
+	selected := make(map[string]bool)
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		canonical, ok := canonicalNames[strings.ToLower(name)]
+		if !ok {
+			valid := strings.Join(validNames, ", ")
+			if valid == "" {
+				valid = "none"
+			}
+			return nil, "", fmt.Errorf("unknown AI coding agent %q in --ai-agents/%s; valid names on this platform: %s", name, setupAIAgentsAppsKey, valid)
+		}
+		selected[canonical] = true
+	}
+
+	return selected, preset, nil
+}
+
+// ValidateAIAgentSelection validates configured AI agent names and preset before setup runs.
+func ValidateAIAgentSelection(settings config.CrossPlatformSettings, detectedPlatform platform.DetectionResult) error {
+	_, _, err := configuredAIAgentSelection(settings, detectedPlatform)
+	return err
+}
+
+func (m *SetupModel) aiAgentEntries() []types.CrossPlatformApp {
+	return m.system.aiAgentApps
+}
+
+func (m *SetupModel) getSelectedAIAgentApps() []types.CrossPlatformApp {
+	var selected []types.CrossPlatformApp
+	for _, app := range m.system.aiAgentApps {
+		if m.selections.selectedAIAgents[app.Name] {
+			selected = append(selected, app)
+		}
+	}
+	return selected
+}
+
+func (m *SetupModel) getSelectedHarnessIDs() []string {
+	var ids []string
+	for _, app := range m.getSelectedAIAgentApps() {
+		if id, ok := agentapply.HarnessIDForCatalogApp(app.Name); ok {
+			ids = append(ids, id)
+		}
+	}
+	return agentapply.CanonicalHarnessIDs(ids)
+}
+
+func (m *SetupModel) hasSelectedHarnessAgent() bool {
+	return len(m.getSelectedHarnessIDs()) > 0
+}
+
+func (m *SetupModel) aiAgentPresetCursorIndex() int {
+	for i, opt := range aiAgentPresetOptions {
+		if opt.Value == m.selections.aiAgentPreset {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m *SetupModel) userConfigDir() string {
+	s := m.settings
+	if s.HomeDir == "" {
+		s.HomeDir = m.homeDir()
+	}
+	return s.GetUserConfigDir()
+}
+
+// expandAIAgentPlanItems returns prerequisite planItems (mise if needed and
+// sandbox prerequisites) followed by the selected AI agent planItems.
+func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]planItem, []planItem) {
+	selected := m.getSelectedAIAgentApps()
+	if len(selected) == 0 {
+		return nil, nil
+	}
+
+	catalog := make(map[string]types.CrossPlatformApp)
+	for _, app := range m.settings.GetAllApps() {
+		catalog[strings.ToLower(strings.TrimSpace(app.Name))] = app
+	}
+
+	var deps []planItem
+	var miseRequesters []string
+	prereqOrder := make([]string, 0)
+	prereqApps := make(map[string]types.CrossPlatformApp)
+	prereqRequesters := make(map[string][]string)
+
+	for _, app := range selected {
+		cfg := osConfigForPlatform(app, m.system.detectedPlatform.OS)
+		if cfg.InstallMethod == "mise" {
+			miseRequesters = append(miseRequesters, app.Name)
+		}
+		appKey := strings.ToLower(strings.TrimSpace(app.Name))
+		for _, prereqName := range cfg.SandboxPrerequisites {
+			key := strings.ToLower(strings.TrimSpace(prereqName))
+			if key == "" || key == appKey || existingNames[key] {
+				continue
+			}
+			prereqApp, ok := catalog[key]
+			if !ok || !isAIAgentCompatibleWithPlatform(prereqApp, m.system.detectedPlatform) {
+				continue
+			}
+			if _, seen := prereqApps[key]; !seen {
+				prereqOrder = append(prereqOrder, key)
+				prereqApps[key] = prereqApp
+			}
+			prereqRequesters[key] = append(prereqRequesters[key], app.Name)
+		}
+	}
+
+	if len(miseRequesters) > 0 && !existingNames["mise"] {
+		if miseApp := m.getMiseApp(); miseApp != nil {
+			deps = append(deps, planItem{
+				app:    *miseApp,
+				group:  planDependency,
+				reason: "AI agents: " + strings.Join(miseRequesters, ", "),
+			})
+			existingNames["mise"] = true
+		}
+	}
+
+	for _, key := range prereqOrder {
+		deps = append(deps, planItem{
+			app:    prereqApps[key],
+			group:  planDependency,
+			reason: "AI agents: " + strings.Join(prereqRequesters[key], ", "),
+		})
+		existingNames[key] = true
+	}
+
+	selectedItems := make([]planItem, 0, len(selected))
+	for _, app := range selected {
+		key := strings.ToLower(strings.TrimSpace(app.Name))
+		if existingNames[key] {
+			continue
+		}
+		existingNames[key] = true
+		selectedItems = append(selectedItems, planItem{app: app, group: planSelected})
+	}
+
+	return deps, selectedItems
+}
+
+func (m *SetupModel) succeededHarnessIDs() []string {
+	recorded := map[string]tui.AppOutcome{}
+	for _, res := range m.installation.outcomeRecorder().Results() {
+		recorded[res.Name] = res.Outcome
+	}
+
+	var ids []string
+	for _, app := range m.getSelectedAIAgentApps() {
+		id, ok := agentapply.HarnessIDForCatalogApp(app.Name)
+		if !ok {
+			continue
+		}
+		if outcome, hasOutcome := recorded[app.Name]; hasOutcome && (outcome == tui.OutcomeFailed || outcome == tui.OutcomeCanceled) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return agentapply.CanonicalHarnessIDs(ids)
+}
+
+func defaultApplyAIAgentsConfig(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap, cfg config.AgentsConfig) error {
+	if errs := config.ValidateAgentsConfig(cfg, "agents.yaml"); len(errs) > 0 {
+		return fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
+	}
+	if len(cfg.Enabled) == 0 {
+		return nil
+	}
+	spec := agentapply.BuildResolvedSpec(cfg, cfg.Enabled, "", nil, nil)
+	executor := agentapply.BootstrapExecutor{
+		GetBootstrap: func() *bootstrap.PluginBootstrap { return pluginBootstrap },
+	}
+	var out, errBuf bytes.Buffer
+	streams := sdk.OperationIO{
+		Stdout: &out,
+		Stderr: &errBuf,
+	}
+	return agentapply.Execute(ctx, executor, spec, streams, false)
+}
+
+// handleAIAgentsConfiguration writes a minimal agents.yaml when absent (leaving
+// any existing file untouched), applies harness defaults via tool-agents (recording
+// failures as warnings rather than setup errors), and runs agent doctor for the
+// selected agents to populate the final summary.
+func (m *SetupModel) handleAIAgentsConfiguration(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap) {
+	selectedApps := m.getSelectedAIAgentApps()
+	if len(selectedApps) == 0 {
+		return
+	}
+
+	if harnessIDs := m.succeededHarnessIDs(); len(harnessIDs) > 0 {
+		userConfigDir := m.userConfigDir()
+		agentsPath, created, err := agentapply.WriteDefaultAgentsYAMLIfMissing(userConfigDir, harnessIDs, m.selections.aiAgentPreset)
+		switch {
+		case err != nil:
+			log.Warn("Could not write agents.yaml", "path", agentsPath, "error", err)
+			m.installation.addAIAgentWarning(fmt.Sprintf("Could not write %s: %v", agentsPath, err))
+		case created:
+			change := fmt.Sprintf("Wrote %s (enabled: %s)", agentsPath, strings.Join(harnessIDs, ", "))
+			if m.selections.aiAgentPreset != "" {
+				change += fmt.Sprintf(", preset: %s", m.selections.aiAgentPreset)
+			}
+			m.installation.addChange(change)
+			cfg := config.AgentsConfig{
+				Enabled: harnessIDs,
+				Preset:  m.selections.aiAgentPreset,
+			}
+			if applyErr := applyAIAgentsConfig(ctx, pluginBootstrap, cfg); applyErr != nil {
+				log.Warn("Could not apply agents.yaml", "error", applyErr)
+				m.installation.addAIAgentWarning(fmt.Sprintf("Could not apply agents.yaml: %v (run 'devex agent apply' later)", applyErr))
+			} else {
+				m.installation.addChange("Applied agents.yaml via tool-agents")
+			}
+		default:
+			m.installation.addChange("kept your existing agents.yaml; run devex agent diff")
+			existingCfg, _, loadErr := agentapply.LoadAgentsYAML(agentsPath)
+			if loadErr != nil {
+				log.Warn("Could not read existing agents.yaml", "path", agentsPath, "error", loadErr)
+				m.installation.addAIAgentWarning(fmt.Sprintf("Could not read existing %s: %v", agentsPath, loadErr))
+			} else {
+				if !existingCfg.IsConfigured() && m.settings.Agents.IsConfigured() {
+					existingCfg = m.settings.Agents
+				}
+				if len(existingCfg.Enabled) > 0 {
+					if applyErr := applyAIAgentsConfig(ctx, pluginBootstrap, existingCfg); applyErr != nil {
+						log.Warn("Could not apply existing agents.yaml", "error", applyErr)
+						m.installation.addAIAgentWarning(fmt.Sprintf("Could not apply existing agents.yaml: %v (run 'devex agent apply' later)", applyErr))
+					} else {
+						m.installation.addChange("Applied existing agents.yaml via tool-agents")
+					}
+				}
+			}
+		}
+	}
+
+	m.collectAIAgentsDoctorSummary(ctx, selectedApps)
+}
+
+func (m *SetupModel) collectAIAgentsDoctorSummary(ctx context.Context, selectedApps []types.CrossPlatformApp) {
+	known := agentdoctor.KnownAgents()
+	byName := make(map[string]agentdoctor.AgentSpec, len(known))
+	for _, spec := range known {
+		byName[strings.ToLower(strings.TrimSpace(spec.Name))] = spec
+	}
+
+	specs := make([]agentdoctor.AgentSpec, 0, len(selectedApps))
+	seen := make(map[string]bool, len(selectedApps))
+	for _, app := range selectedApps {
+		spec, ok := byName[strings.ToLower(strings.TrimSpace(app.Name))]
+		if !ok || seen[spec.ID] {
+			continue
+		}
+		seen[spec.ID] = true
+		specs = append(specs, spec)
+	}
+	if len(specs) == 0 {
+		return
+	}
+
+	probe := newAgentDoctorProbe()
+	report := agentdoctor.Check(ctx, probe, specs)
+	secrets := agentdoctor.CollectSecretValues(probe.Getenv, os.Getenv)
+
+	var b strings.Builder
+	b.WriteString(agentdoctor.FormatTable(report, secrets))
+	b.WriteString("\nNext steps (log in to your selected agents):\n")
+	for _, spec := range specs {
+		switch {
+		case len(spec.LoginArgs) > 0:
+			fmt.Fprintf(&b, "  • %s: devex agent login %s\n", spec.Name, spec.ID)
+		case spec.NoLoginGuidance != "":
+			fmt.Fprintf(&b, "  • %s: %s\n", spec.Name, spec.NoLoginGuidance)
+		default:
+			fmt.Fprintf(&b, "  • %s: authenticate with %s's own CLI or secret manager\n", spec.Name, spec.Name)
+		}
+	}
+
+	m.installation.setAIAgentSummary(agentdoctor.Redact(b.String(), secrets))
+}
+
+func (is *InstallationState) addAIAgentWarning(warning string) {
+	is.mu.Lock()
+	defer is.mu.Unlock()
+	is.aiAgentWarnings = append(is.aiAgentWarnings, warning)
+}
+
+func (is *InstallationState) getAIAgentWarnings() []string {
+	is.mu.RLock()
+	defer is.mu.RUnlock()
+	return append([]string(nil), is.aiAgentWarnings...)
+}
+
+func (is *InstallationState) setAIAgentSummary(summary string) {
+	is.mu.Lock()
+	defer is.mu.Unlock()
+	is.aiAgentSummary = summary
+}
+
+func (is *InstallationState) getAIAgentSummary() string {
+	is.mu.RLock()
+	defer is.mu.RUnlock()
+	return is.aiAgentSummary
+}
+
+func (m *SetupModel) renderAIAgentsPreview() string {
+	harnessIDs := m.getSelectedHarnessIDs()
+	if len(harnessIDs) == 0 {
+		return ""
+	}
+	agentsPath := filepath.Join(m.userConfigDir(), "agents.yaml")
+	var b strings.Builder
+	if _, err := os.Stat(agentsPath); err == nil {
+		fmt.Fprintf(&b, "  • Keep existing %s unchanged; run 'devex agent diff' to review\n", agentsPath)
+		b.WriteString("  • Apply existing agents.yaml via tool-agents\n")
+		return b.String()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(&b, "  • Inspect %s: %v\n", agentsPath, err)
+		return b.String()
+	}
+
+	data, err := agentapply.RenderMinimalAgentsYAML(harnessIDs, m.selections.aiAgentPreset)
+	if err != nil {
+		return ""
+	}
+	fmt.Fprintf(&b, "  • Write %s:\n", agentsPath)
+	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+		fmt.Fprintf(&b, "      %s\n", line)
+	}
+	b.WriteString("  • Apply agents.yaml via tool-agents\n")
+	return b.String()
+}
+
+func (m *SetupModel) renderAIAgentsSummary() string {
+	warnings := m.installation.getAIAgentWarnings()
+	summary := m.installation.getAIAgentSummary()
+	if len(warnings) == 0 && summary == "" {
+		return ""
+	}
+	var b strings.Builder
+	if len(warnings) > 0 {
+		b.WriteString("AI coding agent warnings:\n")
+		for _, w := range warnings {
+			fmt.Fprintf(&b, "  • %s\n", w)
+		}
+		b.WriteString("\n")
+	}
+	if summary != "" {
+		b.WriteString(summary)
+		if !strings.HasSuffix(summary, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}

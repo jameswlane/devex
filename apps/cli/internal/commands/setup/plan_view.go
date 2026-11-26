@@ -66,14 +66,17 @@ func (m *SetupModel) renderInstallPlan() string {
 			lines = append(lines, line)
 			if !m.selections.alreadyInstalled[item.app.Name] {
 				config := item.app.GetOSConfig()
-				if len(config.Packages) > 0 {
+				switch {
+				case len(config.Packages) > 0:
 					data, _ := json.Marshal(struct {
 						Packages []string `json:"packages"`
 						Options  []string `json:"options,omitempty"`
 					}{config.Packages, config.Options})
 					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, data))
-				} else if config.InstallCommand != "" {
+				case config.InstallCommand != "":
 					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, config.InstallCommand))
+				case config.DownloadURL != "":
+					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, config.DownloadURL))
 				}
 				for _, hooks := range [][]types.InstallCommand{config.PreInstall, config.PostInstall} {
 					for _, hook := range hooks {
@@ -133,6 +136,7 @@ func (m *SetupModel) renderInstallPlan() string {
 		fmt.Fprintf(&b, "  • Theme preference: %s\n", theme)
 	}
 	b.WriteString(m.renderDesktopPreview())
+	b.WriteString(m.renderAIAgentsPreview())
 
 	if name := strings.TrimSpace(m.git.gitFullName); name != "" {
 		fmt.Fprintf(&b, "  • Git identity: %s <%s>", name, strings.TrimSpace(m.git.gitEmail))

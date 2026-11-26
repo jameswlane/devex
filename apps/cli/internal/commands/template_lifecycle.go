@@ -448,10 +448,17 @@ func knownResourcesByStep(resources []state.ManagedResource) map[string]template
 	return known
 }
 
+func isRemoveRequest(request templates.ExecutionRequest) bool {
+	if request.Command == "remove" || request.Command == "uninstall" {
+		return true
+	}
+	return request.Command == "devex" && len(request.Args) > 0 && request.Args[0] == "uninstall"
+}
+
 func removedResourceIDsForPlan(plan templates.ExecutionPlan, resources []state.ManagedResource) map[string]bool {
 	removed := make(map[string]bool)
 	for _, step := range plan.Steps {
-		if step.Request.Command != "remove" && step.Request.Command != "uninstall" {
+		if !isRemoveRequest(step.Request) {
 			continue
 		}
 		for _, resource := range resources {
@@ -469,7 +476,7 @@ func removedResourceIDsForSuccessfulOperations(operations []state.OperationRecor
 		if operation.Status != state.OperationStatusSucceeded {
 			continue
 		}
-		if operation.Request.Command != "remove" && operation.Request.Command != "uninstall" {
+		if !isRemoveRequest(operation.Request) {
 			continue
 		}
 		step := templates.PlannedStep{

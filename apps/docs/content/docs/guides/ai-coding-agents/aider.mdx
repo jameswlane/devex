@@ -1,0 +1,34 @@
+---
+title: Aider
+description: Install and authenticate Aider with DevEx.
+---
+
+AI pair programming in your terminal (catalog name `Aider`, binary `aider`, DevEx agent ID `aider`).
+
+## Installation by OS
+
+```sh
+devex install "Aider"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `mise` | `uv@latest pipx:aider-chat[python=3.12]@latest` | No |
+| **macOS** | `mise` | `uv@latest pipx:aider-chat[python=3.12]@latest` | No |
+| **Windows** | `mise` | `uv@latest pipx:aider-chat[python=3.12]@latest` | No |
+
+DevEx installs Aider via mise's `pipx`/`uv` backend with an isolated Python 3.12 runtime without modifying the system Python.
+
+## Native Files
+
+Aider is not currently rendered by `agents.yaml` and has no native MCP host configuration file.
+
+- **User config**: `~/.aider.conf.yml` / `.env` (managed outside DevEx)
+
+## Authentication
+
+Aider does not have an interactive login command (`devex agent login aider` prints guidance). Export your provider API key from your secret manager — `devex agent doctor --agent aider` checks for the presence (by name only) of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, and `DEEPSEEK_API_KEY`. See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Sandboxing
+
+Aider has no built-in Linux OS sandbox and runs directly on the host; run it inside Docker when filesystem isolation is needed. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

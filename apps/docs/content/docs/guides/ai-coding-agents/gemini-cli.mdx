@@ -1,0 +1,38 @@
+---
+title: Gemini CLI
+description: Install, configure, and authenticate Google Gemini CLI with DevEx.
+---
+
+Google's open-source terminal AI coding agent (catalog name `Gemini CLI`, binary `gemini`, DevEx agent ID `gemini`).
+
+## Installation by OS
+
+```sh
+devex install "Gemini CLI"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `mise` | `node@lts npm:@google/gemini-cli@latest` (requires Node.js >= 20) | Yes |
+| **macOS** | `mise` | `node@lts npm:@google/gemini-cli@latest` (requires Node.js >= 20) | Yes |
+| **Windows** | `mise` | `node@lts npm:@google/gemini-cli@latest` (requires Node.js >= 20) | Yes |
+
+Gemini CLI is marked `self_updating: true` so DevEx does not overwrite its built-in updater. `devex agent doctor --agent gemini` checks that Node.js >= `20.0.0` is available on `PATH`.
+
+## Declarative Harness Config & Native Files
+
+Gemini CLI is supported by `agents.yaml` (`agents.enabled: [gemini]`). See [Coding Agents Configuration](/docs/configuration/agents).
+
+- **Config directory**: `$GEMINI_CLI_HOME/.gemini` (default `~/.gemini`)
+- **Instructions file**: `<dir>/GEMINI.md` (managed DevEx block)
+- **Settings file**: `<dir>/settings.json` (`strict`: `general.defaultApprovalMode = "default"`; `balanced`: `general.defaultApprovalMode = "auto_edit"`)
+- **MCP config**: `<dir>/settings.json`, key `mcpServers`
+- **Credential cache**: `<dir>/oauth_creds.json`
+
+## Authentication
+
+Gemini CLI does not have a standalone CLI login subcommand (`devex agent login gemini` prints guidance). Start `gemini` and run `/auth` for Google OAuth, or export `GEMINI_API_KEY` (or `GOOGLE_API_KEY` with `GOOGLE_GENAI_USE_VERTEXAI=true`) from your secret manager. See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Sandboxing
+
+Gemini CLI uses container-based sandboxing (Docker or Podman) rather than `bubblewrap`, enabled via `gemini -s` or `GEMINI_SANDBOX=docker|podman`. DevEx installs no `bubblewrap`/`socat` prerequisites for Gemini CLI. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

@@ -1,0 +1,40 @@
+---
+title: Claude Code
+description: Install, configure, sandbox, and authenticate Claude Code with DevEx.
+---
+
+Anthropic's agentic coding CLI for the terminal (catalog name `Claude Code`, binary `claude`, DevEx agent ID `claude`).
+
+## Installation by OS
+
+```sh
+devex install "Claude Code"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `curlpipe` (user scope) | `https://claude.ai/install.sh` (verifies binary SHA-256 against `manifest.json`) | Yes |
+| **macOS** | `brew` (cask) | `claude-code` | No |
+| **Windows** | `winget` | `Anthropic.ClaudeCode` | No |
+
+## Declarative Harness Config & Native Files
+
+Claude Code is supported by `agents.yaml` (`agents.enabled: [claude]`). See [Coding Agents Configuration](/docs/configuration/agents).
+
+- **Config directory**: `$CLAUDE_CONFIG_DIR` (default `~/.claude`)
+- **Instructions file**: `<dir>/CLAUDE.md` (managed DevEx block)
+- **Settings file**: `<dir>/settings.json` (`strict`: `permissions.defaultMode = "default"`; `balanced`: `permissions.defaultMode = "acceptEdits"`)
+- **MCP config**: `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`), key `mcpServers` (applied via `claude mcp add-json/remove --scope user`)
+- **Credential file**: `<dir>/.credentials.json` (fallback when OS keyring is unavailable)
+
+## Authentication
+
+```sh
+devex agent login claude
+```
+
+This hands off directly to `claude auth login`. `devex agent doctor --agent claude` checks login via `claude auth status` (exit code only), credential file presence via `stat`, and environment variable names `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`. See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Linux Sandboxing
+
+On Linux, DevEx automatically installs `Bubblewrap` and `socat` before `Claude Code` (`linux.sandbox_prerequisites: [Bubblewrap, socat]`). Enable Claude Code's built-in Bash sandbox with `/sandbox` or `sandbox.enabled: true`, and verify kernel/AppArmor support with `devex agent sandbox`. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

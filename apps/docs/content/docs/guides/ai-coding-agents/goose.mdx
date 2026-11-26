@@ -1,0 +1,38 @@
+---
+title: Goose
+description: Install and authenticate Goose with DevEx.
+---
+
+Open-source extensible AI coding agent CLI (catalog name `Goose`, binary `goose`, DevEx agent ID `goose`).
+
+## Installation by OS
+
+```sh
+devex install "Goose"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `mise` | `aqua:aaif-goose/goose@latest` | No |
+| **macOS** | `brew` | `block-goose-cli` | No |
+| **Windows** | Not yet in catalog | — | — |
+
+## Native Files
+
+Goose is not currently rendered by `agents.yaml`.
+
+- **Config directory**: `$XDG_CONFIG_HOME/goose` (default `~/.config/goose`)
+- **MCP / extensions config**: `<dir>/config.yaml`, key `extensions`
+- **Credentials**: OS keyring by default, falling back to `<dir>/secrets.yaml` on headless hosts or when `GOOSE_DISABLE_KEYRING=1`
+
+## Authentication
+
+```sh
+devex agent login goose
+```
+
+This hands off directly to `goose configure`. `devex agent doctor --agent goose` checks `<dir>/secrets.yaml` via `stat` and environment variable names `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, and `DATABRICKS_TOKEN`. See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Sandboxing
+
+Goose relies on tool permission and approval controls and does not require `bubblewrap` or `socat` on Linux. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

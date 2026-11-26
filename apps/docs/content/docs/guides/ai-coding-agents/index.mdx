@@ -1,0 +1,82 @@
+---
+title: AI Coding Agents
+description: Install, configure, sandbox, and verify AI coding agent CLIs with DevEx.
+---
+
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+DevEx provides opt-in installation, Linux sandbox prerequisites, declarative cross-harness configuration, and safe diagnostics for terminal AI coding agents. All AI coding agent entries in the catalog default to `default: false` so nothing is installed unless you choose it.
+
+## Install
+
+You can install AI coding agents in three ways:
+
+1. **Guided setup (`devex setup`)**: Select agents in the optional **AI Coding Agents** step (grouped into Agent CLIs, and future AI editors and local models). If you select a harness supported by `agents.yaml` (`Claude Code`, `Codex CLI`, `Gemini CLI`, or `OpenCode`), setup also offers a conservative permission preset (`Leave permission modes unchanged`, `balanced`, or `strict`), writes a minimal `agents.yaml` only if none exists, applies it, and prints `devex agent doctor` output with login next steps.
+   - For non-interactive runs, pass `--ai-agents` and `--ai-agents-preset`, set `DEVEX_SETUP_AI_AGENTS_APPS` / `DEVEX_SETUP_AI_AGENTS_PRESET`, or configure `setup.ai_agents.apps` and `setup.ai_agents.preset` (see [`devex setup`](/docs/cli-reference/setup)).
+2. **Lifecycle template (`ai-assisted`)**: Install selected agents, Linux sandbox prerequisites (`Bubblewrap`, `socat`), and declarative harness defaults together:
+   ```sh
+   devex install --template ai-assisted --answer agents=claude-code,codex --answer preset=balanced --non-interactive
+   ```
+   See the [AI-Assisted Development example](/docs/examples/ai-assisted) and [Template Runtime](/docs/configuration/templates).
+3. **Direct catalog install (`devex install`)**: Install individual agents by catalog name or install the entire category:
+   ```sh
+   devex install "Claude Code" "Codex CLI"
+   devex install --categories "AI Coding Agents"
+   ```
+   On Linux, DevEx automatically expands and prepends declared `sandbox_prerequisites` (`Bubblewrap`, `socat`) before the agent.
+
+## Configure (`agents.yaml` and MCP)
+
+Declare shared global instructions, per-agent models, conservative permission presets, allowed/denied shell commands, and MCP servers once in `agents.yaml` (`$DEVEX_CONFIG_DIR/config/agents.yaml`, defaulting to `~/.config/devex/config/agents.yaml`), then preview and apply with:
+
+```sh
+devex agent diff
+devex agent apply
+```
+
+- [Coding Agents Configuration (`agents.yaml`)](/docs/configuration/agents) — schema, native file locations, permission presets, managed blocks, and [MCP Servers and Secret Policy](/docs/configuration/agents#mcp-servers-and-secret-policy).
+- [Agent Configuration CLI Reference (`apply` & `diff`)](/docs/cli-reference/agent-config).
+
+## Verify and Log In
+
+After installing agents, check binary resolution, `PATH` shadowing, Node.js versions, Linux sandbox health, MCP config syntax, and login state with:
+
+```sh
+devex agent doctor
+```
+
+Hand off interactive authentication directly to each agent's own CLI:
+
+```sh
+devex agent login claude
+devex agent login codex
+devex agent login copilot
+devex agent login opencode
+devex agent login goose
+devex agent login kimi
+```
+
+- [Agent Doctor CLI Reference](/docs/cli-reference/agent-doctor)
+- [Agent Login CLI Reference](/docs/cli-reference/agent-login)
+- [Agent Credentials](/docs/guides/agent-credentials)
+- [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes)
+
+## Security Guidance
+
+- **Never put secrets in DevEx configuration files.** DevEx never prompts for, stores, or logs API keys or OAuth tokens. Use `devex agent login <id>`, your OS keyring, or environment variables injected by a secret manager (see [Agent Credentials](/docs/guides/agent-credentials)).
+- **Use `${env:VAR_NAME}` references for MCP servers.** `agents.yaml` rejects literal tokens in MCP `env`, `headers`, arguments, and URLs, and `devex agent diff`/`apply` warns about literal secrets already present in native MCP configs (see [MCP Servers and Secret Policy](/docs/configuration/agents#mcp-servers-and-secret-policy)).
+- **Use conservative permission presets.** DevEx only supports leaving permission modes unchanged, `balanced`, or `strict`. It refuses to configure skip-all-permissions or unsandboxed modes (`bypassPermissions`, `danger-full-access`, `yolo`, or blanket `allow`).
+- **Verify Linux sandboxing before running commands.** When an agent relies on `bubblewrap` or `socat` on Linux, run `devex agent sandbox` (or `devex agent doctor`) to confirm unprivileged user namespaces work and follow any manual AppArmor remediation printed (see [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes)).
+
+## Supported Agent CLIs
+
+<Cards>
+  <Card title="Claude Code" href="/docs/guides/ai-coding-agents/claude-code" description="Anthropic's agentic coding CLI (harness config, Linux bubblewrap + socat sandbox)" />
+  <Card title="Codex CLI" href="/docs/guides/ai-coding-agents/codex" description="OpenAI's local coding agent CLI (harness config, Linux bubblewrap sandbox)" />
+  <Card title="Gemini CLI" href="/docs/guides/ai-coding-agents/gemini-cli" description="Google's open-source terminal AI coding agent (harness config, Node.js >= 20)" />
+  <Card title="GitHub Copilot CLI" href="/docs/guides/ai-coding-agents/copilot-cli" description="GitHub's terminal-native Copilot coding agent (Linux bubblewrap sandbox)" />
+  <Card title="OpenCode" href="/docs/guides/ai-coding-agents/opencode" description="Open-source AI coding agent for the terminal (harness config)" />
+  <Card title="Goose" href="/docs/guides/ai-coding-agents/goose" description="Open-source extensible AI coding agent CLI" />
+  <Card title="Aider" href="/docs/guides/ai-coding-agents/aider" description="AI pair programming in your terminal via isolated Python 3.12 uv environment" />
+  <Card title="Kimi Code" href="/docs/guides/ai-coding-agents/kimi-code" description="Moonshot AI's terminal coding agent CLI" />
+</Cards>

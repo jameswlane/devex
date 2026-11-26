@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/assets"
+	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -19,6 +20,7 @@ import (
 // starterAnswers are the answers that select every component of each
 // lifecycle starter, so a plan covers all of its steps on the planned OS.
 var starterAnswers = map[string][]string{
+	"ai-assisted":      {"agents=claude-code,codex,gemini-cli,copilot-cli,opencode,goose,aider,kimi-code", "preset=balanced"},
 	"databases":        {"databases=postgres,redis,mysql", "mysql_password=example"},
 	"devops":           {"tools=docker,kubectl,helm,kind,terraform,opentofu,awscli"},
 	"mobile":           {"targets=react-native,flutter,android,ios"},
@@ -27,10 +29,25 @@ var starterAnswers = map[string][]string{
 	"web-development":  {},
 }
 
+func catalogAppResolver(goos string) templates.AppResolver {
+	DeferCleanup(types.PinCatalogOSForTesting(goos))
+	DeferCleanup(types.PinCatalogArchForTesting("amd64"))
+	configDir, err := filepath.Abs("../../config")
+	Expect(err).NotTo(HaveOccurred())
+	apps, err := (config.FileApplicationLoader{}).LoadApplications([]string{configDir})
+	Expect(err).NotTo(HaveOccurred())
+	settings := config.CrossPlatformSettings{ApplicationOverrides: apps}
+	return templates.NewAppResolver(settings.GetApplicationByName)
+}
+
 func planStarter(id string, action templates.LifecycleAction, goos string, answers []string, known map[string]templates.ResourceDeclaration, available func(context.Context, string) bool) (*templates.ExecutionPlan, error) {
+	var resolver templates.AppResolver = testAppResolver{}
+	if id == "ai-assisted" {
+		resolver = catalogAppResolver(goos)
+	}
 	planner := templates.TemplatePlanner{
 		Manager:         templates.NewTemplateManager(GinkgoT().TempDir()),
-		AppResolver:     testAppResolver{},
+		AppResolver:     resolver,
 		PluginAvailable: available,
 		System:          map[string]string{"os": goos},
 	}
@@ -137,6 +154,8 @@ var _ = Describe("Shipped lifecycle templates", func() {
 				}
 			}
 		},
+		Entry("ai-assisted on Linux", "ai-assisted", "linux"),
+		Entry("ai-assisted on macOS", "ai-assisted", "darwin"),
 		Entry("devops on Linux", "devops", "linux"),
 		Entry("devops on macOS", "devops", "darwin"),
 		Entry("mobile on Linux", "mobile", "linux"),
@@ -347,6 +366,19 @@ applications:
 		It("requires a mobile target instead of installing everything", func() {
 			_, err := planStarter("mobile", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
 			Expect(err).To(MatchError(ContainSubstring("required input 'targets'")))
+		})
+
+		It("defaults ai-assisted to Claude Code with Linux sandbox prerequisites and unchanged preset", func() {
+			linuxPlan, err := planStarter("ai-assisted", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stepIDs(linuxPlan)).To(Equal([]string{"bubblewrap", "socat", "claude-code", "configure-agents"}))
+			Expect(plannedStep(linuxPlan, "claude-code").DependsOn).To(Equal([]string{"bubblewrap", "socat"}))
+			Expect(plannedStep(linuxPlan, "configure-agents").Request.Args).To(Equal([]string{"agent", "apply", "--init", "--agents", "claude-code"}))
+
+			macosPlan, err := planStarter("ai-assisted", templates.LifecycleInstall, "darwin", []string{"agents=claude-code,codex", "preset=strict"}, nil, allPluginsAvailable)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stepIDs(macosPlan)).To(Equal([]string{"claude-code", "codex", "configure-agents-preset"}))
+			Expect(plannedStep(macosPlan, "configure-agents-preset").Request.Args).To(Equal([]string{"agent", "apply", "--init", "--agents", "claude-code,codex", "--preset", "strict"}))
 		})
 	})
 

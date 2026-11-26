@@ -1,0 +1,14 @@
+{
+	"title": "AI Coding Agents",
+	"pages": [
+		"index",
+		"claude-code",
+		"codex",
+		"gemini-cli",
+		"copilot-cli",
+		"opencode",
+		"goose",
+		"aider",
+		"kimi-code"
+	]
+}

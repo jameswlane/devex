@@ -1,0 +1,39 @@
+---
+title: Kimi Code
+description: Install and authenticate Kimi Code with DevEx.
+---
+
+Moonshot AI's terminal coding agent CLI (catalog name `Kimi Code`, binary `kimi`, DevEx agent ID `kimi`).
+
+## Installation by OS
+
+```sh
+devex install "Kimi Code"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `curlpipe` (user scope; `mise` npm alternative) | `https://code.kimi.com/kimi-code/install.sh` (verifies binary SHA-256 against `manifest.json`; installs `$HOME/.kimi-code/bin/kimi`) | No |
+| **macOS** | `curlpipe` (user scope; `mise` npm alternative) | `https://code.kimi.com/kimi-code/install.sh` | No |
+| **Windows** | `mise` | `node@lts npm:@moonshot-ai/kimi-code@latest` (also requires Git for Windows) | No |
+
+When installed via the npm package (`@moonshot-ai/kimi-code`), Node.js >= `22.19.0` is required (`devex agent doctor --agent kimi` checks this automatically).
+
+## Native Files
+
+Kimi Code is not currently rendered by `agents.yaml`.
+
+- **Config directory**: `$KIMI_CODE_HOME` (default `~/.kimi-code`)
+- **MCP config**: `$KIMI_CODE_HOME/mcp.json` (default `~/.kimi-code/mcp.json`), key `mcpServers`
+
+## Authentication
+
+```sh
+devex agent login kimi
+```
+
+This hands off directly to `kimi login` (device-code login). `devex agent doctor --agent kimi` also checks for the presence (by name only) of `KIMI_API_KEY`, `MOONSHOT_API_KEY`, and `KIMI_MODEL_API_KEY`. See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Sandboxing
+
+Kimi Code has no built-in Linux OS sandbox; isolate externally with container sandboxes if needed. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

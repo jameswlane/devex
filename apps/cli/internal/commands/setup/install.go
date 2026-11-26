@@ -140,6 +140,10 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 		// Don't fail the entire setup for git config issues
 	}
 
+	// 4. AI coding agents configuration and diagnostics (scoped so apply failures
+	// are reported as warnings in the summary rather than failing setup).
+	m.handleAIAgentsConfiguration(ctx, pluginBootstrap)
+
 	// Save selected theme preference (using internal implementation)
 	if m.getSelectedTheme() != "" {
 		if err := m.saveThemePreference(); err != nil {

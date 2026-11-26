@@ -1,0 +1,40 @@
+---
+title: Codex CLI
+description: Install, configure, sandbox, and authenticate OpenAI Codex CLI with DevEx.
+---
+
+OpenAI's local coding agent CLI (catalog name `Codex CLI`, binary `codex`, DevEx agent ID `codex`).
+
+## Installation by OS
+
+```sh
+devex install "Codex CLI"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `mise` | `codex@latest` (resolves via mise registry to `aqua:openai/codex`) | No |
+| **macOS** | `brew` (cask) | `codex` | No |
+| **Windows** | `mise` | `node@lts npm:@openai/codex@latest` | No |
+
+## Declarative Harness Config & Native Files
+
+Codex CLI is supported by `agents.yaml` (`agents.enabled: [codex]`). See [Coding Agents Configuration](/docs/configuration/agents).
+
+- **Config directory**: `$CODEX_HOME` (default `~/.codex`)
+- **Instructions file**: `<dir>/AGENTS.md` (managed DevEx block)
+- **Settings & rules files**: `<dir>/config.toml`, `<dir>/rules/devex.rules` (`strict`: `approval_policy = "on-request"`, `sandbox_mode = "read-only"`; `balanced`: `approval_policy = "on-request"`, `sandbox_mode = "workspace-write"`)
+- **MCP config**: `<dir>/config.toml`, `[mcp_servers.<name>]` tables
+- **Credential file**: `<dir>/auth.json` (or OS keyring)
+
+## Authentication
+
+```sh
+devex agent login codex
+```
+
+This hands off directly to `codex login`. `devex agent doctor --agent codex` checks login via `codex login status` (exit code only), credential file presence via `stat`, and environment variable names `OPENAI_API_KEY` or `CODEX_API_KEY`. See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Linux Sandboxing
+
+On Linux, DevEx automatically installs `Bubblewrap` before `Codex CLI` (`linux.sandbox_prerequisites: [Bubblewrap]`). Codex CLI uses `bubblewrap` + `seccomp` (with a legacy Landlock fallback). Verify sandbox health with `devex agent sandbox`. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

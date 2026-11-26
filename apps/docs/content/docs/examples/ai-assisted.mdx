@@ -1,0 +1,69 @@
+---
+title: AI-Assisted Development
+description: Install AI coding agent CLIs, Linux sandbox prerequisites, and declarative agents.yaml defaults with the built-in ai-assisted lifecycle template
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# AI-Assisted Development
+
+The built-in `ai-assisted` lifecycle template installs your choice of catalog AI coding agent CLIs, prepends Linux sandbox prerequisites (`Bubblewrap`, `socat`), and writes and applies a minimal `agents.yaml` when none exists.
+
+```bash
+devex template info ai-assisted
+devex init --profile ai-assisted   # optional: record the profile in ~/.devex
+```
+
+## Inputs
+
+| Input | Type | Default | Options |
+| --- | --- | --- | --- |
+| `agents` | `multiselect` | `claude-code` | `claude-code`, `codex`, `gemini-cli`, `copilot-cli`, `opencode`, `goose`, `aider`, `kimi-code` |
+| `preset` | `select` | `unchanged` | `unchanged`, `balanced`, `strict` |
+
+## Install
+
+```bash
+# Default: Claude Code (+ Bubblewrap and socat on Linux) with permission modes unchanged
+devex install --template ai-assisted --non-interactive
+
+# Multiple agents with the balanced permission preset
+devex install --template ai-assisted \
+  --answer agents=claude-code,codex,gemini-cli \
+  --answer preset=balanced \
+  --non-interactive
+```
+
+## Limits
+
+<Callout type="warn">
+DevEx never prompts for or stores API keys or OAuth tokens. After install, run `devex agent login <id>` or export provider keys from your secret manager.
+</Callout>
+
+- **Existing `agents.yaml`**: Never overwritten. If you already have an `agents.yaml`, DevEx keeps it unchanged and applies it.
+- **Linux sandboxes**: On Ubuntu 24.04, unprivileged `bubblewrap` sandboxes may require loading an AppArmor profile manually. Run `devex agent sandbox` for the exact commands.
+- **Windows**: `opencode` and `goose` catalog entries target Linux and macOS only.
+- **Remove**: `remove` uninstalls the agents recorded by the template run, while keeping shared sandbox packages (`Bubblewrap`, `socat`) and your `agents.yaml`.
+
+## Maintain, status and remove
+
+```bash
+devex status --template ai-assisted --run latest
+devex maintain --template ai-assisted --run latest
+devex remove --template ai-assisted --run latest --force
+```
+
+## Smoke procedure
+
+Run this on a fresh Debian or Ubuntu VM:
+
+```bash
+devex template validate ai-assisted
+devex template plan ai-assisted --action install --answer agents=claude-code,codex --answer preset=balanced --non-interactive --format yaml
+devex install --template ai-assisted --answer agents=claude-code,codex --answer preset=balanced --non-interactive --dry-run
+devex install --template ai-assisted --answer agents=claude-code,codex --answer preset=balanced --non-interactive
+
+devex agent doctor
+devex status --template ai-assisted --run latest
+devex remove --template ai-assisted --run latest --force
+```

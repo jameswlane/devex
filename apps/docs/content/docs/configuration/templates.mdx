@@ -27,12 +27,14 @@ DevEx ships these lifecycle starters. Each one is also a `devex init --profile` 
 
 | ID | Installs | Required answers | Platforms |
 | --- | --- | --- | --- |
+| `ai-assisted` | Selected AI coding agent CLIs, Linux sandbox prerequisites (`Bubblewrap`, `socat`), and minimal `agents.yaml` defaults | none (`agents` defaults to `claude-code`, `preset` defaults to `unchanged`) | Linux, macOS |
 | `devops` | Docker Engine (Linux), kubectl, Helm, kind, Terraform, OpenTofu, AWS CLI | none (`tools` defaults to docker, kubectl, terraform, awscli) | Linux, macOS |
 | `mobile` | Node.js, JDK, Flutter, Android Studio, CocoaPods (macOS) | `targets` | Linux, macOS |
 | `data-science` | JupyterLab (Python, R, or both) and MLflow containers | none (`components` defaults to jupyter) | Linux, macOS |
 | `game-development` | Godot or Godot .NET | `engine=godot` (opt-in) | Linux, macOS |
 
 ```bash
+devex install --template ai-assisted --answer agents=claude-code,codex --answer preset=balanced --non-interactive
 devex install --template devops --answer tools=kubectl,helm --non-interactive
 devex install --template mobile --answer targets=react-native,android --non-interactive
 devex install --template data-science --answer components=jupyter,mlflow --non-interactive
