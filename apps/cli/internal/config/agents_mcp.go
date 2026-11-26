@@ -294,12 +294,22 @@ func hasMCPSecretAuthToken(upper string) bool {
 // so escaped delimiters stay inside a value and one malformed escape does not
 // hide the other pairs.
 func mcpURLPathOrFragmentHasSecret(u *url.URL) bool {
-	for _, segment := range strings.Split(u.EscapedPath(), "/") {
+	// Prefer the original encoding: the Escaped* accessors re-encode from the
+	// decoded form when the raw text is not canonical, which turns encoded
+	// delimiters into literal ones.
+	rawPath := u.RawPath
+	if rawPath == "" {
+		rawPath = u.EscapedPath()
+	}
+	for _, segment := range strings.Split(rawPath, "/") {
 		if LooksLikeMCPSecretValue(lenientUnescape(segment, url.PathUnescape)) {
 			return true
 		}
 	}
-	fragment := u.EscapedFragment()
+	fragment := u.RawFragment
+	if fragment == "" {
+		fragment = u.EscapedFragment()
+	}
 	if LooksLikeMCPSecretValue(u.Fragment) {
 		return true
 	}

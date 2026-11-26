@@ -221,6 +221,8 @@ var _ = Describe("Agent init rendering", func() {
 			Entry("escaped ampersand inside a fragment value", "https://mcp.example.com/mcp#state=x%26y&access_token=opaque-example"),
 			Entry("malformed sibling fragment pair", "https://mcp.example.com/mcp#a=1;b=2&access_token=opaque-example"),
 			Entry("bearer value starting with an escaped slash", "https://mcp.example.com/Bearer%20%2Fopaque-example/mcp"),
+			Entry("non-canonical path keeps its encoded slash", "https://mcp.example.com/Bearer%20%2Fopaque-example x/mcp"),
+			Entry("non-canonical fragment keeps its encoded ampersand", "https://mcp.example.com/mcp#access_token=%26opaque-example x"),
 		)
 
 		It("rejects invalid agents config with a literal secret", func() {
