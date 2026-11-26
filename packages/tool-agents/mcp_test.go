@@ -1538,6 +1538,29 @@ http_headers = { Authorization = "Bearer %s" }
 			Expect(out).To(ContainSubstring(`warning: claude MCP server "fallback" field env.GITHUB_TOKEN`))
 			Expect(out).NotTo(ContainSubstring(`MCP server "plain"`))
 			Expect(out).NotTo(ContainSubstring(secret))
+
+			// A changed preview redacts a literal Authorization fallback and keeps plain references visible.
+			Expect(os.WriteFile(filepath.Join(home, ".claude.json"), []byte(fmt.Sprintf(`{
+  "mcpServers": {
+    "plain": {"type": "http", "url": "https://plain.example.com/mcp", "headers": {"Authorization": "Bearer ${PLAIN_TOKEN}"}},
+    "fallback": {"type": "http", "url": "https://fallback.example.com/mcp", "headers": {"Authorization": "Bearer ${API_TOKEN:-%s}"}}
+  }
+}
+`, secret)), 0o600)).To(Succeed())
+			out, err = runPlugin(env, "diff", Spec{Agents: []AgentSpec{{
+				Name: AgentClaude,
+				MCPServers: []MCPServerSpec{{
+					Name:      "added",
+					Transport: MCPTransportHTTP,
+					URL:       "https://added.example.com/mcp",
+					Headers:   map[string]string{"Authorization": "Bearer ${env:ADDED_TOKEN}"},
+				}},
+			}}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out).To(ContainSubstring(`"added"`))
+			Expect(out).To(ContainSubstring("Bearer ${ADDED_TOKEN}"))
+			Expect(out).To(ContainSubstring(`"Authorization": "***"`))
+			Expect(out).NotTo(ContainSubstring(secret))
 		})
 
 		It("rejects an http URL whose query string cannot be parsed", func() {
