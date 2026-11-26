@@ -15,6 +15,11 @@ linux:
   install_command: ghostty
   uninstall_command: ghostty
   official_support: false
+  # Ubuntu packages Ghostty from 26.04; other distros use their alternative
+  # below, and an unmatched distro falls back to this entry.
+  platform_requirements:
+    - os: ubuntu
+      version: 26.04+
   alternatives:
     - install_method: apk
       install_command: ghostty
@@ -70,21 +75,6 @@ linux:
       official_support: true
       platform_requirements:
         - os: void
-    - install_method: apt
-      install_command: ghostty
-      uninstall_command: ghostty
-      official_support: false
-      platform_requirements:
-        - os: debian
-          version: '12'
-        - os: ubuntu
-          version: '22.04'
-      apt_sources:
-        - key_source: https://download.opensuse.org/repositories/home:clayrisser:bookworm/Debian_12/Release.key
-          key_name: /etc/apt/trusted.gpg.d/home_clayrisser_bookworm.gpg
-          source_repo: deb http://download.opensuse.org/repositories/home:/clayrisser:/bookworm/Debian_12/ /
-          source_name: /etc/apt/sources.list.d/home:clayrisser:bookworm.list
-          require_dearmor: true
     - install_method: dnf
       install_command: ghostty
       uninstall_command: ghostty
