@@ -14,3 +14,4 @@ rules:
 ignore:
   - node_modules
   - pnpm-lock.yaml
+  - apps/cli/internal/skillpacks/testdata/

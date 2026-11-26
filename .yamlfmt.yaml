@@ -9,6 +9,7 @@ exclude:
   - "**/node_modules/**"
   - "pnpm-lock.yaml"
   - "**/.pnpm/**"
+  - "apps/cli/internal/skillpacks/testdata/**"
 formatter:
   continue_on_error: true
   line_ending: lf

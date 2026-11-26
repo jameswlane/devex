@@ -474,7 +474,7 @@ func (r *rootRuntime) getPluginBootstrap() *bootstrap.PluginBootstrap {
 }
 
 func readAPICommand(cmd *cobra.Command) bool {
-	if mcpServeCommand(cmd) {
+	if mcpServeCommand(cmd) || isAgentSkillsCommand(cmd) {
 		return true
 	}
 	switch cmd.Name() {
@@ -507,6 +507,15 @@ func isAgentDiffCommand(cmd *cobra.Command) bool {
 
 func isAgentPluginCommand(cmd *cobra.Command) bool {
 	return (cmd.Name() == "apply" || cmd.Name() == "diff") && cmd.Parent() != nil && cmd.Parent().Name() == "agent"
+}
+
+func isAgentSkillsCommand(cmd *cobra.Command) bool {
+	for cur := cmd; cur != nil; cur = cur.Parent() {
+		if cur.Name() == "skills" && cur.Parent() != nil && cur.Parent().Name() == "agent" {
+			return true
+		}
+	}
+	return false
 }
 
 // rootArgs rejects positional arguments to the root command with the same

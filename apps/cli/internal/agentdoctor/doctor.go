@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
+	"github.com/jameswlane/devex/apps/cli/internal/skillpacks"
 )
 
 const (
@@ -36,15 +37,19 @@ const (
 // Probe injects every host-inspecting operation so Check stays pure and
 // testable without reading real credentials or executing real host binaries.
 type Probe struct {
-	Getenv       func(key string) string
-	Stat         func(path string) (os.FileInfo, error)
-	ReadFile     func(path string) ([]byte, error)
-	Run          func(ctx context.Context, name string, args ...string) ([]byte, error)
-	EvalSymlinks func(path string) (string, error)
-	UserHomeDir  func() (string, error)
-	GOOS         string
-	Now          func() time.Time
-	SandboxProbe agentsandbox.Probe
+	Getenv                   func(key string) string
+	Stat                     func(path string) (os.FileInfo, error)
+	ReadFile                 func(path string) ([]byte, error)
+	Run                      func(ctx context.Context, name string, args ...string) ([]byte, error)
+	EvalSymlinks             func(path string) (string, error)
+	UserHomeDir              func() (string, error)
+	Getwd                    func() (string, error)
+	GOOS                     string
+	Now                      func() time.Time
+	SandboxProbe             agentsandbox.Probe
+	SkillPackUserLockPath    string
+	SkillPackProjectLockPath string
+	SkillPackCatalog         *skillpacks.Catalog
 }
 
 // DefaultProbe returns a Probe wired to the local operating system.
@@ -52,7 +57,7 @@ func DefaultProbe() Probe {
 	return Probe{
 		Getenv: os.Getenv,
 		Stat:   os.Stat,
-		// ReadFile is only ever invoked on MCP config files, never credential files.
+		// ReadFile is only ever invoked on MCP config files and skill pack lock files, never credential files.
 		ReadFile: os.ReadFile,
 		Run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			cmdCtx, cancel := context.WithTimeout(ctx, commandTimeout)
@@ -65,6 +70,7 @@ func DefaultProbe() Probe {
 		},
 		EvalSymlinks: filepath.EvalSymlinks,
 		UserHomeDir:  os.UserHomeDir,
+		Getwd:        os.Getwd,
 		GOOS:         runtime.GOOS,
 		Now:          time.Now,
 		SandboxProbe: agentsandbox.DefaultProbe(),
@@ -171,10 +177,11 @@ type AgentReport struct {
 
 // Report is the complete diagnostic output of devex agent doctor.
 type Report struct {
-	CheckedAt time.Time     `json:"checked_at"`
-	GOOS      string        `json:"goos"`
-	Agents    []AgentReport `json:"agents"`
-	Problems  []Problem     `json:"problems"`
+	CheckedAt  time.Time         `json:"checked_at"`
+	GOOS       string            `json:"goos"`
+	Agents     []AgentReport     `json:"agents"`
+	SkillPacks []SkillPackReport `json:"skill_packs,omitempty"`
+	Problems   []Problem         `json:"problems"`
 }
 
 // Check runs diagnostics for agents (or all KnownAgents when agents is empty)
@@ -218,6 +225,8 @@ func Check(ctx context.Context, probe Probe, agents []AgentSpec) Report {
 		report.Agents = append(report.Agents, ar)
 		report.Problems = append(report.Problems, ar.Problems...)
 	}
+
+	report.SkillPacks = checkSkillPacks(probe, agents)
 
 	return report
 }
@@ -605,6 +614,14 @@ func redactReport(r Report, secrets []string) Report {
 		agents[i] = a
 	}
 	r.Agents = agents
+	if len(r.SkillPacks) > 0 {
+		packs := make([]SkillPackReport, len(r.SkillPacks))
+		for i, sp := range r.SkillPacks {
+			sp.Pack = red(sp.Pack)
+			packs[i] = sp
+		}
+		r.SkillPacks = packs
+	}
 	return r
 }
 
@@ -664,6 +681,23 @@ func FormatTable(r Report, secrets []string) string {
 				fmt.Fprintf(&b, "    %-14s %s (ok)\n", "mcp config:", mcp.Path)
 			} else {
 				fmt.Fprintf(&b, "    %-14s %s (%s)\n", "mcp config:", mcp.Path, mcp.Error)
+			}
+		}
+	}
+
+	if len(r.SkillPacks) > 0 {
+		b.WriteString("\nSkill Packs:\n")
+		for _, sp := range r.SkillPacks {
+			status := fmt.Sprintf("pinned %s", skillpacks.ShortSHA(sp.PinnedSHA))
+			if sp.UpdateAvailable {
+				status += fmt.Sprintf(" (update available: %s)", skillpacks.ShortSHA(sp.CatalogSHA))
+			}
+			if sp.Unreviewed {
+				status += " [unreviewed]"
+			}
+			fmt.Fprintf(&b, "  %-16s %-8s %-8s %s (%d skills)\n", sp.Pack, sp.Agent, sp.Scope, status, len(sp.Skills))
+			if len(sp.LocallyEdited) > 0 {
+				fmt.Fprintf(&b, "    %-14s %s\n", "local edits:", strings.Join(sp.LocallyEdited, ", "))
 			}
 		}
 	}

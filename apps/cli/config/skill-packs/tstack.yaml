@@ -1,0 +1,49 @@
+name: tstack
+description: Daily-use agent workflow skills from t3dotgg/tstack (PR lifecycle, multi-model review, and takeover)
+source: https://github.com/t3dotgg/tstack.git
+path: skills
+license: MIT
+ref: main
+sha: 11e37a74d0a6868c121cd0910ab2b3bd9873b92a
+requirements:
+  - command: gh
+    check:
+      - gh
+      - auth
+      - status
+    hint: "Install GitHub CLI (https://cli.github.com) and run: gh auth login"
+  - command: python3
+    skills:
+      - babysit-pr
+    hint: "Install Python 3 (sudo apt install python3)"
+skills:
+  full-send:
+    depends:
+      - sol-loop
+      - file-pr
+      - babysit-pr
+  full-stop:
+    depends:
+      - full-send
+  takeover:
+    depends:
+      - modernize
+      - file-pr
+      - babysit-pr
+      - leaving-pr-comments
+  file-pr:
+    depends:
+      - leaving-pr-comments
+  babysit-pr:
+    depends:
+      - leaving-pr-comments
+  modernize:
+    depends:
+      - leaving-pr-comments
+  leaving-pr-comments: {}
+  council:
+    notes:
+      - "Needs subagents on other providers' models (T3 Code delegate_task or an equivalent harness). DevEx does not configure that."
+  sol-loop:
+    notes:
+      - "Needs subagents on other providers' models (T3 Code delegate_task or an equivalent harness). DevEx does not configure that."
