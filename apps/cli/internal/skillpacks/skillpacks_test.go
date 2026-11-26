@@ -737,6 +737,15 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 		})
 		Expect(err).To(MatchError(ContainSubstring("--allow-unreviewed")))
 
+		// Credentials in the URL would be stored in the lock and printed.
+		for _, leaky := range []string{
+			"git+https://user:token@example.test/owner/custom-pack.git@main",
+			"git+https://example.test/owner/custom-pack.git?access_token=secret",
+		} {
+			_, err = mgr.Add(context.Background(), skillpacks.AddOptions{PackSpec: leaky, Skills: []string{"full-send"}, Agent: "claude", Scope: "user", AllowUnreviewed: true})
+			Expect(err).To(MatchError(ContainSubstring("must not contain credentials")), leaky)
+		}
+
 		// With --allow-unreviewed: warns loudly, installs ONLY requested skill (no dependency map), pins SHA.
 		res, err := mgr.Add(context.Background(), skillpacks.AddOptions{
 			PackSpec:        "git+" + rawURL + "@main",

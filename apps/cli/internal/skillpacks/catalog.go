@@ -370,6 +370,11 @@ func validateHTTPSURL(raw string) error {
 	if parsed.Host == "" {
 		return fmt.Errorf("host must not be empty")
 	}
+	// Sources are stored in lock files and printed in plans, so they must not
+	// carry credentials (or tokens smuggled into a query string).
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("URL must not contain credentials, a query or a fragment")
+	}
 	return nil
 }
 

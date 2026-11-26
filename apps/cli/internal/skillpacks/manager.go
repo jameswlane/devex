@@ -729,7 +729,7 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			}
 		}
 
-		groupID := strings.Join([]string{gk.lockPath, gk.pack, gk.scope, gk.source, gk.ref}, "\x00")
+		groupID := strings.Join([]string{gk.lockPath, gk.pack, gk.scope, gk.source, gk.skills, gk.ref}, "\x00")
 		if expected, ok := opts.ExpectedTargets[groupID]; opts.ExpectedTargets != nil && !ok {
 			return nil, saveDirtyLocks(fmt.Errorf("%s (%s scope) was not in the planned update; re-run the update to review it", gk.pack, gk.scope))
 		} else if ok && expected != targetSHA {
