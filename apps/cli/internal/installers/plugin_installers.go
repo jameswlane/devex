@@ -318,6 +318,8 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 		Default:            app.Default,
 		InstallMethod:      osConfig.InstallMethod,
 		InstallCommand:     osConfig.InstallCommand,
+		InstallScope:       osConfig.InstallScope,
+		SelfUpdating:       osConfig.SelfUpdating,
 		Packages:           osConfig.Packages,
 		Options:            osConfig.Options,
 		UninstallCommand:   osConfig.UninstallCommand,
@@ -551,6 +553,18 @@ func (p *PluginBasedInstaller) InstallArtifact(ctx context.Context, app types.Ap
 		app.Verification = verification
 	}
 	args := append([]string{"install"}, app.Verification.Arguments()...)
+	if app.InstallMethod == "curlpipe" && app.InstallScope == "user" {
+		hasUserFlag := false
+		for _, opt := range options {
+			if opt == "--user" {
+				hasUserFlag = true
+				break
+			}
+		}
+		if !hasUserFlag {
+			args = append(args, "--user")
+		}
+	}
 	args = append(args, packages...)
 	args = append(args, options...)
 	if executor, ok := p.pluginBootstrap.(pluginIOExecutor); ok {

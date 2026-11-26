@@ -103,6 +103,10 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 		v.addError(filename, platform+".install_method", "Install method is required", nil)
 	}
 
+	if osConfig.InstallScope != "" && osConfig.InstallScope != "user" {
+		v.addError(filename, platform+".install_scope", fmt.Sprintf("Unsupported install_scope %q (allowed: user)", osConfig.InstallScope), nil)
+	}
+
 	if osConfig.InstallCommand == "" && len(osConfig.Packages) == 0 && ((osConfig.InstallMethod != "curlpipe" && osConfig.InstallMethod != "appimage") || osConfig.DownloadURL == "") {
 		v.addError(filename, platform+".install_command", "Install command is required", nil)
 	}

@@ -1,0 +1,31 @@
+name: GitHub Copilot CLI
+description: GitHub's terminal-native Copilot coding agent
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: copilot-cli
+  uninstall_command: copilot-cli
+  brew_cask: true
+  self_updating: true
+  official_support: true
+windows:
+  install_method: winget
+  install_command: GitHub.Copilot
+  uninstall_command: GitHub.Copilot
+  self_updating: true
+  official_support: true
+linux:
+  # Unpinned bootstrap script: GitHub updates install.sh on release and does
+  # not publish a checksum for the script itself. The script downloads
+  # SHA256SUMS.txt from github/copilot-cli releases and verifies the binary
+  # tarball with sha256sum before extracting to $HOME/.local/bin/copilot.
+  install_method: curlpipe
+  download_url: https://raw.githubusercontent.com/github/copilot-cli/main/install.sh
+  install_scope: user
+  installed_binary: copilot
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/copilot"
+  official_support: true

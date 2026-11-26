@@ -1,0 +1,35 @@
+name: Aider
+description: AI pair programming in your terminal
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Aider's official docs warn against Homebrew due to dependency conflicts and
+  # recommend an isolated Python 3.12 tool environment via uv.
+  install_method: mise
+  install_command: pipx:aider-chat[python=3.12]@latest
+  uninstall_command: pipx:aider-chat
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+windows:
+  install_method: mise
+  install_command: pipx:aider-chat[python=3.12]@latest
+  uninstall_command: pipx:aider-chat
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # mise's pipx/pypi backend uses uv tool install with an isolated mise-managed
+  # Python 3.12 runtime (aider-chat requires Python >=3.10,<3.13) without
+  # touching the system Python.
+  install_method: mise
+  install_command: pipx:aider-chat[python=3.12]@latest
+  uninstall_command: pipx:aider-chat
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise

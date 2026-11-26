@@ -30,6 +30,8 @@ type AppConfig struct {
 	Default            bool               `mapstructure:"default" yaml:"default"`
 	InstallMethod      string             `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand     string             `mapstructure:"install_command" yaml:"install_command"`
+	InstallScope       string             `mapstructure:"install_scope" yaml:"install_scope,omitempty"`
+	SelfUpdating       bool               `mapstructure:"self_updating" yaml:"self_updating,omitempty"`
 	UninstallCommand   string             `mapstructure:"uninstall_command" yaml:"uninstall_command"`
 	Dependencies       []string           `mapstructure:"dependencies" yaml:"dependencies"`
 	SystemRequirements SystemRequirements `mapstructure:"system_requirements" yaml:"system_requirements,omitempty"`
@@ -353,6 +355,8 @@ type OSConfig struct {
 	Options              []string                 `mapstructure:"options" yaml:"options,omitempty"`
 	InstallMethod        string                   `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand       string                   `mapstructure:"install_command" yaml:"install_command"`
+	InstallScope         string                   `mapstructure:"install_scope" yaml:"install_scope,omitempty"`
+	SelfUpdating         bool                     `mapstructure:"self_updating" yaml:"self_updating,omitempty"`
 	UninstallCommand     string                   `mapstructure:"uninstall_command" yaml:"uninstall_command"`
 	OfficialSupport      bool                     `mapstructure:"official_support" yaml:"official_support,omitempty"`
 	PlatformRequirements []PlatformRequirement    `mapstructure:"platform_requirements" yaml:"platform_requirements,omitempty"`
@@ -682,6 +686,8 @@ func (app *CrossPlatformApp) ToLegacyAppConfig() AppConfig {
 		Default:            app.Default,
 		InstallMethod:      osConfig.InstallMethod,
 		InstallCommand:     osConfig.InstallCommand,
+		InstallScope:       osConfig.InstallScope,
+		SelfUpdating:       osConfig.SelfUpdating,
 		Packages:           osConfig.Packages,
 		Options:            osConfig.Options,
 		UninstallCommand:   osConfig.UninstallCommand,

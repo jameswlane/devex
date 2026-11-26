@@ -51,4 +51,22 @@ linux:
 		Expect(installer.InstallArtifact(context.Background(), types.AppConfig{InstallMethod: "deb", Packages: []string{"./a file.deb"}, Verification: sdk.ArtifactVerification{Policy: "required", SHA256: "digest"}})).To(Succeed())
 		Expect(executor.args).To(Equal([]string{"install", "--verification-policy", "required", "--sha256", "digest", "./a file.deb"}))
 	})
+	It("forwards --user to the curlpipe plugin when install_scope is user", func() {
+		executor := &recordingPluginExecutor{}
+		installer := &PluginBasedInstaller{method: "curlpipe", pluginBootstrap: executor}
+		Expect(installer.InstallArtifact(context.Background(), types.AppConfig{
+			InstallMethod: "curlpipe",
+			DownloadURL:   "https://claude.ai/install.sh",
+			InstallScope:  "user",
+		})).To(Succeed())
+		Expect(executor.name).To(Equal("package-manager-curlpipe"))
+		Expect(executor.args).To(Equal([]string{"install", "--user", "https://claude.ai/install.sh"}))
+
+		executor.args = nil
+		Expect(installer.InstallArtifact(context.Background(), types.AppConfig{
+			InstallMethod: "curlpipe",
+			DownloadURL:   "https://get.docker.com",
+		})).To(Succeed())
+		Expect(executor.args).To(Equal([]string{"install", "https://get.docker.com"}))
+	})
 })

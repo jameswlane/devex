@@ -89,6 +89,8 @@ func convertToAppConfig(app types.CrossPlatformApp) *types.AppConfig {
 		Default:          app.Default,
 		InstallMethod:    osConfig.InstallMethod,
 		InstallCommand:   osConfig.InstallCommand,
+		InstallScope:     osConfig.InstallScope,
+		SelfUpdating:     osConfig.SelfUpdating,
 		Packages:         osConfig.Packages,
 		Options:          osConfig.Options,
 		UninstallCommand: osConfig.UninstallCommand,

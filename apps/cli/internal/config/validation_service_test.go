@@ -97,4 +97,23 @@ var _ = Describe("Shared semantic validation", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
 	})
+
+	It("accepts install_scope user and rejects unknown install_scope values", func() {
+		validPath := filepath.Join(settings.GetUserConfigDir(), "applications", "ai-agents", "valid.yaml")
+		write(validPath, "name: valid-agent\ndescription: Valid agent\ncategory: AI Coding Agents\ndefault: false\nlinux:\n  install_method: curlpipe\n  download_url: https://claude.ai/install.sh\n  install_scope: user\n  self_updating: true\n  uninstall_command: rm -f \"$HOME/.local/bin/claude\"\n")
+		result, err := config.ValidateConfig(context.Background(), settings, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
+
+		invalidPath := filepath.Join(settings.GetUserConfigDir(), "applications", "ai-agents", "invalid.yaml")
+		write(invalidPath, "name: invalid-agent\ndescription: Invalid agent\ncategory: AI Coding Agents\ndefault: false\nlinux:\n  install_method: curlpipe\n  download_url: https://claude.ai/install.sh\n  install_scope: root\n")
+		result, err = config.ValidateConfig(context.Background(), settings, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Valid).To(BeFalse())
+		Expect(result.Diagnostics).To(ContainElement(And(
+			HaveField("File", invalidPath),
+			HaveField("Field", "linux.install_scope"),
+			HaveField("Message", ContainSubstring("Unsupported install_scope")),
+		)))
+	})
 })
