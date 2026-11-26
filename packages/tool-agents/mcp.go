@@ -19,7 +19,7 @@ var (
 	mcpEnvRefRe     = regexp.MustCompile(`^\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}$`)
 	mcpHeaderNameRe = regexp.MustCompile(`^[!#$%&'*+\-.^_` + "`" + `|~0-9A-Za-z]+$`)
 
-	claudeNativeRefRe   = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\}$`)
+	claudeNativeRefRe   = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*(?::-)?\}$`)
 	geminiNativeRefRe   = regexp.MustCompile(`^(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%)$`)
 	opencodeNativeRefRe = regexp.MustCompile(`^\{env:[A-Za-z_][A-Za-z0-9_]*\}$`)
 
@@ -168,7 +168,10 @@ func validateHTTPServer(srv MCPServerSpec, label string) error {
 	if parsed.User != nil {
 		return fmt.Errorf("mcp_servers[%q].url: must not contain embedded credentials; use headers with ${env:VAR_NAME} instead", label)
 	}
-	query := parsed.Query()
+	query, qErr := url.ParseQuery(parsed.RawQuery)
+	if qErr != nil {
+		return fmt.Errorf("mcp_servers[%q].url: query string is malformed; use headers with ${env:VAR_NAME} for credentials", label)
+	}
 	for _, qk := range sortedQueryKeys(query) {
 		for _, qv := range query[qk] {
 			if (isSecretKey(qk) && strings.TrimSpace(qv) != "") || looksLikeSecretValue(qv, nil) {
@@ -1037,8 +1040,12 @@ func planClaudeMCP(
 	}
 	prevMCP := prevMCPServersForPath(prev, resolvedPath)
 
+	noMCPWork := len(servers) == 0 && len(prevMCP) == 0
 	beforeRaw, exists, mode, readErr := readExistingFile(claudeJSONPath, settingsFileMode)
 	if readErr != nil {
+		if noMCPWork {
+			return nil, nil, "", nil, resolvedPath, false, nil, nil
+		}
 		return nil, nil, "", nil, resolvedPath, false, nil, readErr
 	}
 
@@ -1054,6 +1061,9 @@ func planClaudeMCP(
 		if rawMCP, ok := doc.Get("mcpServers"); ok {
 			obj, isObj := rawMCP.(*jsonObject)
 			if !isObj {
+				if noMCPWork {
+					return nil, nil, "", nil, resolvedPath, false, nil, nil
+				}
 				return nil, nil, "", nil, resolvedPath, false, nil, fmt.Errorf("%s: key \"mcpServers\" must be a JSON object", claudeJSONPath)
 			}
 			existingMCP = obj
@@ -1338,6 +1348,9 @@ func mergeOpenCodeMCPServers(
 	if raw, ok := doc.Get("mcp"); ok {
 		obj, isObj := raw.(*jsonObject)
 		if !isObj {
+			if len(servers) == 0 && len(prevManaged) == 0 {
+				return nil, nil, nil
+			}
 			return nil, nil, fmt.Errorf("%s: key %q must be a JSON object", settingsPath, "mcp")
 		}
 		mcpObj = obj
@@ -1454,6 +1467,9 @@ func mergeJSONMCPServers(
 	if raw, ok := doc.Get(rootKey); ok {
 		obj, isObj := raw.(*jsonObject)
 		if !isObj {
+			if len(servers) == 0 && len(prevManaged) == 0 {
+				return nil, nil, nil
+			}
 			return nil, nil, fmt.Errorf("%s: key %q must be a JSON object", settingsPath, rootKey)
 		}
 		existingMap = obj

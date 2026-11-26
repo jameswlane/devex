@@ -383,6 +383,16 @@ var _ = Describe("Agents configuration schema and validation", func() {
 		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[1].name")))
 	})
 
+	It("rejects an MCP http URL whose query string cannot be parsed", func() {
+		errs := ValidateAgentsConfig(AgentsConfig{
+			Enabled: []string{AgentClaude},
+			MCPServers: []AgentMCPServerConfig{
+				{Name: "remote", Transport: MCPTransportHTTP, URL: "https://mcp.example.com/mcp?access_token=%zzabc"},
+			},
+		}, "agents.yaml")
+		Expect(errs).To(ContainElement(HaveField("Message", ContainSubstring("query string is malformed"))))
+	})
+
 	It("rejects literal values for AUTH secret keys while allowing AUTH_MODE/TYPE/METHOD/PROVIDER/URL/ENABLED/DISABLED", func() {
 		errs := ValidateAgentsConfig(AgentsConfig{
 			Enabled: []string{AgentClaude},

@@ -184,7 +184,10 @@ func validateHTTPMCPServer(srv AgentMCPServerConfig, prefix, label string, add f
 			if parsed.User != nil {
 				add(prefix+".url", fmt.Sprintf("MCP server %q url must not contain embedded credentials; use headers with ${env:VAR_NAME} instead", label))
 			}
-			query := parsed.Query()
+			query, qErr := url.ParseQuery(parsed.RawQuery)
+			if qErr != nil {
+				add(prefix+".url", fmt.Sprintf("MCP server %q url query string is malformed; use headers with ${env:VAR_NAME} for credentials", label))
+			}
 			for _, qk := range sortedQueryKeys(query) {
 				for _, qv := range query[qk] {
 					if (IsMCPSecretKey(qk) && strings.TrimSpace(qv) != "") || LooksLikeMCPSecretValue(qv) {

@@ -1145,6 +1145,9 @@ http_headers = { Authorization = "Bearer %s" }
 		})
 
 		It("persists partial ownership checkpoints when a later write or Claude MCP command fails within the same agent", func() {
+			if os.Geteuid() == 0 {
+				Skip("root ignores directory permissions, so the read-only rules directory cannot force a write failure")
+			}
 			// Part A: Codex writes config.toml (MCP server) then fails writing rules/devex.rules
 			// because the rules directory is read-only (0500).
 			envCodex := newTestEnv(home, nil, "codex")
@@ -1517,6 +1520,56 @@ http_headers = { Authorization = "Bearer %s" }
 			raw, err := os.ReadFile(jsonPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(raw)).NotTo(ContainSubstring(`"url"`))
+		})
+
+		It("warns about a Claude env reference whose default is a literal secret", func() {
+			env, _ := newFakeClaudeEnv(home, nil, "claude")
+			secret := "ghp_defaultFallbackSecret123456"
+			Expect(os.WriteFile(filepath.Join(home, ".claude.json"), []byte(fmt.Sprintf(`{
+  "mcpServers": {
+    "fallback": {"type": "stdio", "command": "mcp", "args": [], "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN:-%s}"}},
+    "plain": {"type": "stdio", "command": "mcp", "args": [], "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}}
+  }
+}
+`, secret)), 0o600)).To(Succeed())
+			out, err := runPlugin(env, "diff", Spec{Agents: []AgentSpec{{Name: AgentClaude}}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out).To(ContainSubstring(`warning: claude MCP server "fallback" field env.GITHUB_TOKEN`))
+			Expect(out).NotTo(ContainSubstring(`MCP server "plain"`))
+			Expect(out).NotTo(ContainSubstring(secret))
+		})
+
+		It("rejects an http URL whose query string cannot be parsed", func() {
+			_, err := ParseSpec(mustMarshalSpec(Spec{
+				Agents: []AgentSpec{{
+					Name: AgentCodex,
+					MCPServers: []MCPServerSpec{{
+						Name:      "remote",
+						Transport: MCPTransportHTTP,
+						URL:       "https://mcp.example.com/mcp?access_token=%zzabc",
+					}},
+				}},
+			}))
+			Expect(err).To(MatchError(ContainSubstring("query string is malformed")))
+		})
+
+		It("applies non-MCP settings when an agent's MCP section is invalid and DevEx has no MCP work there", func() {
+			env, calls := newFakeClaudeEnv(home, nil, "claude", "gemini")
+			Expect(os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"mcpServers": []}`), 0o600)).To(Succeed())
+			Expect(os.MkdirAll(filepath.Join(home, ".gemini"), 0o700)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(home, ".gemini", "settings.json"), []byte(`{"mcpServers": 1}`), 0o600)).To(Succeed())
+			_, err := runPlugin(env, "apply", Spec{Agents: []AgentSpec{
+				{Name: AgentClaude, Model: "claude-sonnet-5-5"},
+				{Name: AgentGemini, Model: "gemini-2.5-pro"},
+			}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*calls).To(BeEmpty())
+			claudeSettings, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(claudeSettings)).To(ContainSubstring(`"model": "claude-sonnet-5-5"`))
+			geminiSettings, err := os.ReadFile(filepath.Join(home, ".gemini", "settings.json"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(geminiSettings)).To(ContainSubstring(`"mcpServers": 1`))
 		})
 	})
 })
