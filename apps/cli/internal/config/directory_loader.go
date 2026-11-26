@@ -408,6 +408,33 @@ func loadSystemDirectory(settings *CrossPlatformSettings, dir string) error {
 	return nil
 }
 
+func loadAgentsConfigFile(path string) (AgentsConfig, bool, error) {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return AgentsConfig{}, false, nil
+	}
+	if err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("inspect agents config %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return AgentsConfig{}, false, nil
+	}
+	if info.Size() > maxFileSize {
+		return AgentsConfig{}, false, fmt.Errorf("agents config %s exceeds maximum size (%d bytes)", path, maxFileSize)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("read agents config %s: %w", path, err)
+	}
+	var doc struct {
+		Agents AgentsConfig `yaml:"agents"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return AgentsConfig{}, false, fmt.Errorf("decode agents config %s: %w", path, err)
+	}
+	return doc.Agents, true, nil
+}
+
 func loadGitConfig(path string) ([]types.GitConfig, error) {
 	info, err := os.Stat(path)
 	if err != nil {

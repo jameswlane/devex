@@ -1,10 +1,14 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -66,17 +70,33 @@ func (e bootstrapAgentPluginExecutor) ExecuteAgentPlugin(ctx context.Context, pl
 	return nil
 }
 
+var (
+	agentLookPath   = exec.LookPath
+	agentExecutable = os.Executable
+)
+
 type resolvedAgentPluginSpec struct {
 	Agents []resolvedAgentSpec `json:"agents"`
 }
 
 type resolvedAgentSpec struct {
-	Name            string   `json:"name"`
-	Preset          string   `json:"preset,omitempty"`
-	Instructions    string   `json:"instructions,omitempty"`
-	Model           string   `json:"model,omitempty"`
-	AllowedCommands []string `json:"allowed_commands,omitempty"`
-	DeniedCommands  []string `json:"denied_commands,omitempty"`
+	Name            string                  `json:"name"`
+	Preset          string                  `json:"preset,omitempty"`
+	Instructions    string                  `json:"instructions,omitempty"`
+	Model           string                  `json:"model,omitempty"`
+	AllowedCommands []string                `json:"allowed_commands,omitempty"`
+	DeniedCommands  []string                `json:"denied_commands,omitempty"`
+	MCPServers      []resolvedMCPServerSpec `json:"mcp_servers,omitempty"`
+}
+
+type resolvedMCPServerSpec struct {
+	Name      string            `json:"name"`
+	Transport string            `json:"transport"`
+	Command   string            `json:"command,omitempty"`
+	Args      []string          `json:"args,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+	URL       string            `json:"url,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
 }
 
 func newAgentApplyCmd(settings config.CrossPlatformSettings, executor agentPluginExecutor) *cobra.Command {
@@ -88,9 +108,9 @@ func newAgentApplyCmd(settings config.CrossPlatformSettings, executor agentPlugi
 		Short:        "Render and apply declarative configuration to installed coding agents",
 		SilenceUsage: true,
 		Args:         cobra.NoArgs,
-		Long: `Render shared global instructions, model defaults, permission presets, and
-allowed/denied shell command rules from agents.yaml into each enabled,
-installed coding agent's native configuration files.
+		Long: `Render shared global instructions, model defaults, permission presets,
+allowed/denied shell command rules, and MCP servers from agents.yaml into each
+enabled, installed coding agent's native configuration files.
 
 Honors the global --dry-run flag (zero writes) and flags > env > config > defaults
 precedence (DEVEX_AGENTS, DEVEX_AGENTS_PRESET, DEVEX_DRY_RUN).`,
@@ -215,12 +235,37 @@ func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSett
 		allowDownload = false
 	}
 
+	var stderrBuf bytes.Buffer
+	stderrWriter := cmd.ErrOrStderr()
+	if stderrWriter == nil {
+		stderrWriter = io.Discard
+	}
 	streams := sdk.OperationIO{
 		Stdin:  cmd.InOrStdin(),
 		Stdout: cmd.OutOrStdout(),
-		Stderr: cmd.ErrOrStderr(),
+		Stderr: io.MultiWriter(stderrWriter, &stderrBuf),
 	}
-	return executor.ExecuteAgentPlugin(cmd.Context(), toolAgentsPluginName, pluginArgs, streams, allowDownload)
+	if err := executor.ExecuteAgentPlugin(cmd.Context(), toolAgentsPluginName, pluginArgs, streams, allowDownload); err != nil {
+		if hasMCPServersConfigured(spec) && isUnknownMCPFieldError(err, stderrBuf.String()) {
+			return fmt.Errorf("installed %s plugin does not support mcp_servers; update it with 'devex plugin update %s': %w", toolAgentsPluginName, toolAgentsPluginName, err)
+		}
+		return err
+	}
+	return nil
+}
+
+func hasMCPServersConfigured(spec resolvedAgentPluginSpec) bool {
+	for _, a := range spec.Agents {
+		if len(a.MCPServers) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func isUnknownMCPFieldError(err error, stderr string) bool {
+	combined := strings.ToLower(err.Error() + "\n" + stderr)
+	return strings.Contains(combined, "unknown field") && strings.Contains(combined, "mcp_servers")
 }
 
 func resolveTargetAgents(enabled []string, filterCSV string) ([]string, error) {
@@ -254,6 +299,10 @@ func buildResolvedAgentSpec(cfg config.AgentsConfig, targetAgents []string, pres
 	out := resolvedAgentPluginSpec{
 		Agents: make([]resolvedAgentSpec, 0, len(targetAgents)),
 	}
+	devexCmd := ""
+	if cfg.DevExMCP {
+		devexCmd = resolveDevExMCPCommand(agentLookPath, agentExecutable)
+	}
 	for _, name := range targetAgents {
 		override := cfg.Overrides[name]
 		preset := cfg.Preset
@@ -263,6 +312,29 @@ func buildResolvedAgentSpec(cfg config.AgentsConfig, targetAgents []string, pres
 		if presetOverride != "" {
 			preset = presetOverride
 		}
+		var mcpServers []resolvedMCPServerSpec
+		for _, srv := range cfg.MCPServers {
+			if len(srv.Agents) > 0 && !slices.Contains(srv.Agents, name) {
+				continue
+			}
+			mcpServers = append(mcpServers, resolvedMCPServerSpec{
+				Name:      srv.Name,
+				Transport: srv.Transport,
+				Command:   srv.Command,
+				Args:      slices.Clone(srv.Args),
+				Env:       maps.Clone(srv.Env),
+				URL:       srv.URL,
+				Headers:   maps.Clone(srv.Headers),
+			})
+		}
+		if cfg.DevExMCP {
+			mcpServers = append(mcpServers, resolvedMCPServerSpec{
+				Name:      "devex",
+				Transport: config.MCPTransportStdio,
+				Command:   devexCmd,
+				Args:      []string{"mcp", "serve"},
+			})
+		}
 		out.Agents = append(out.Agents, resolvedAgentSpec{
 			Name:            name,
 			Preset:          preset,
@@ -270,7 +342,37 @@ func buildResolvedAgentSpec(cfg config.AgentsConfig, targetAgents []string, pres
 			Model:           override.Model,
 			AllowedCommands: config.MergeAgentCommands(cfg.AllowedCommands, override.AllowedCommands),
 			DeniedCommands:  config.MergeAgentCommands(cfg.DeniedCommands, override.DeniedCommands),
+			MCPServers:      mcpServers,
 		})
 	}
 	return out
+}
+
+func resolveDevExMCPCommand(lookPath func(string) (string, error), executable func() (string, error)) string {
+	exePath, err := executable()
+	if err != nil || strings.TrimSpace(exePath) == "" {
+		return "devex"
+	}
+	if abs, absErr := filepath.Abs(exePath); absErr == nil {
+		exePath = abs
+	}
+	if lookedUp, err := lookPath("devex"); err == nil && sameExecutableFile(lookedUp, exePath) {
+		return "devex"
+	}
+	return exePath
+}
+
+func sameExecutableFile(a, b string) bool {
+	if ra, err := filepath.EvalSymlinks(a); err == nil {
+		a = ra
+	}
+	if rb, err := filepath.EvalSymlinks(b); err == nil {
+		b = rb
+	}
+	if a == b {
+		return true
+	}
+	ia, errA := os.Stat(a)
+	ib, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ia, ib)
 }

@@ -16,6 +16,9 @@ const (
 	AgentPresetStrict   = "strict"
 	AgentPresetBalanced = "balanced"
 
+	MCPTransportStdio = "stdio"
+	MCPTransportHTTP  = "http"
+
 	AgentBlockStart = "<!-- >>> devex agents >>> -->"
 	AgentBlockEnd   = "<!-- <<< devex agents <<< -->"
 
@@ -31,6 +34,20 @@ type AgentsConfig struct {
 	AllowedCommands []string                       `mapstructure:"allowed_commands" yaml:"allowed_commands"`
 	DeniedCommands  []string                       `mapstructure:"denied_commands" yaml:"denied_commands"`
 	Overrides       map[string]AgentOverrideConfig `mapstructure:"overrides" yaml:"overrides"`
+	MCPServers      []AgentMCPServerConfig         `mapstructure:"mcp_servers" yaml:"mcp_servers"`
+	DevExMCP        bool                           `mapstructure:"devex_mcp" yaml:"devex_mcp"`
+}
+
+// AgentMCPServerConfig declares one MCP server to render into target agents.
+type AgentMCPServerConfig struct {
+	Name      string            `mapstructure:"name" yaml:"name"`
+	Transport string            `mapstructure:"transport" yaml:"transport"`
+	Command   string            `mapstructure:"command" yaml:"command"`
+	Args      []string          `mapstructure:"args" yaml:"args"`
+	Env       map[string]string `mapstructure:"env" yaml:"env"`
+	URL       string            `mapstructure:"url" yaml:"url"`
+	Headers   map[string]string `mapstructure:"headers" yaml:"headers"`
+	Agents    []string          `mapstructure:"agents" yaml:"agents"`
 }
 
 // AgentOverrideConfig overrides shared settings for a single coding agent.
@@ -49,13 +66,14 @@ type AgentCapabilities struct {
 	Preset          bool
 	AllowedCommands bool
 	DeniedCommands  bool
+	MCPServers      bool
 }
 
 var agentCapabilities = map[string]AgentCapabilities{
-	AgentClaude:   {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true},
-	AgentCodex:    {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true},
-	AgentGemini:   {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true},
-	AgentOpenCode: {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true},
+	AgentClaude:   {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true, MCPServers: true},
+	AgentCodex:    {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true, MCPServers: true},
+	AgentGemini:   {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true, MCPServers: true},
+	AgentOpenCode: {Instructions: true, Model: true, Preset: true, AllowedCommands: true, DeniedCommands: true, MCPServers: true},
 }
 
 // SupportedAgents returns the canonical list of supported coding agents.
@@ -107,7 +125,9 @@ func (c AgentsConfig) IsConfigured() bool {
 		strings.TrimSpace(c.Instructions) != "" ||
 		len(c.AllowedCommands) > 0 ||
 		len(c.DeniedCommands) > 0 ||
-		len(c.Overrides) > 0
+		len(c.Overrides) > 0 ||
+		len(c.MCPServers) > 0 ||
+		c.DevExMCP
 }
 
 // ValidateAgentsConfig validates values in AgentsConfig and returns structured
@@ -225,6 +245,8 @@ func validateAgentsConfigWithCaps(cfg AgentsConfig, file string, capsMap map[str
 			}
 		}
 	}
+
+	validateAgentMCPServers(cfg, seenEnabled, capsMap, add)
 
 	return errs
 }

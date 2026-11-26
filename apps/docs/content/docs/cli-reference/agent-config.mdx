@@ -14,8 +14,16 @@ devex agent apply --agents claude,codex --preset strict
 
 ## Subcommands
 
-- `devex agent diff` — previews per-file status (`created`, `changed`, `deleted`, `unchanged`, or `skipped (not installed)`) and unified diffs. Performs zero writes (no backups, no directories, no state file).
-- `devex agent apply` — applies changes atomically through symlinks, creates a one-time `<file>.devex-bak-*` backup before first modifying any existing file, and records DevEx-managed command list entries in `$DEVEX_STATE_DIR/agents/managed.json`. With `--dry-run`, behaves identically to `devex agent diff`.
+- `devex agent diff` — previews per-file and MCP status (`created`, `changed`, `deleted`, `unchanged`, or `skipped (not installed)`) and unified diffs, plus warnings for any literal secrets found in existing native MCP configs. Performs zero writes and runs zero agent CLI commands (no backups, no directories, no state file).
+- `devex agent apply` — applies changes atomically through symlinks (and invokes `claude mcp add-json/remove --scope user` for Claude Code MCP servers), creates a one-time `<file>.devex-bak-*` backup before first modifying any existing file, and records DevEx-managed command list entries and MCP server names in `$DEVEX_STATE_DIR/agents/managed.json`. With `--dry-run`, behaves identically to `devex agent diff`.
+
+## Plugin Compatibility
+
+If `agents.yaml` configures `mcp_servers` or `devex_mcp: true` and an older installed `tool-agents` plugin rejects `mcp_servers`, update the plugin with:
+
+```sh
+devex plugin update tool-agents
+```
 
 ## Flags and Precedence
 

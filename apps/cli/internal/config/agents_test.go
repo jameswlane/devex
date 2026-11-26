@@ -195,4 +195,143 @@ var _ = Describe("Agents configuration schema and validation", func() {
 			HaveField("Message", ContainSubstring("has no native equivalent for model")),
 		)))
 	})
+
+	It("loads agents.yaml with mcp_servers and devex_mcp preserving env/header key case and passing strict validation", func() {
+		writeAgentsYAML(`agents:
+  enabled: [claude, codex, gemini, opencode]
+  devex_mcp: true
+  mcp_servers:
+    - name: github
+      transport: http
+      url: https://api.githubcopilot.com/mcp/
+      headers:
+        Authorization: "Bearer ${env:GITHUB_TOKEN}"
+        X-Org-Name: acme
+      agents: [claude, codex]
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/me/src"]
+      env:
+        GITHUB_TOKEN: "${env:GITHUB_TOKEN}"
+        LOG_LEVEL: info
+`)
+		loaded, err := LoadCrossPlatformSettings(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.Agents.DevExMCP).To(BeTrue())
+		Expect(loaded.Agents.MCPServers).To(HaveLen(2))
+		Expect(loaded.Agents.MCPServers[0].Headers).To(HaveKeyWithValue("Authorization", "Bearer ${env:GITHUB_TOKEN}"))
+		Expect(loaded.Agents.MCPServers[0].Headers).To(HaveKeyWithValue("X-Org-Name", "acme"))
+		Expect(loaded.Agents.MCPServers[1].Env).To(HaveKeyWithValue("GITHUB_TOKEN", "${env:GITHUB_TOKEN}"))
+		Expect(loaded.Agents.MCPServers[1].Env).To(HaveKeyWithValue("LOG_LEVEL", "info"))
+
+		result, err := ValidateConfig(context.Background(), loaded, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
+		Expect(result.Warnings).To(BeZero())
+	})
+
+	It("rejects unknown keys inside mcp_servers under strict schema validation", func() {
+		path := writeAgentsYAML(`agents:
+  enabled: [claude]
+  mcp_servers:
+    - name: github
+      transport: http
+      url: https://api.githubcopilot.com/mcp/
+      bogus_mcp_key: true
+`)
+		result, err := ValidateConfig(context.Background(), settings, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Valid).To(BeFalse())
+		Expect(result.Diagnostics).To(ContainElement(And(
+			HaveField("File", path),
+			HaveField("Field", "agents.mcp_servers[0].bogus_mcp_key"),
+			HaveField("Severity", SeverityError),
+		)))
+	})
+
+	It("validates MCP server names, transports, transport-specific fields, agents subset, and devex_mcp reservation", func() {
+		errs := ValidateAgentsConfig(AgentsConfig{
+			Enabled:  []string{AgentClaude, AgentCodex},
+			DevExMCP: true,
+			MCPServers: []AgentMCPServerConfig{
+				{
+					Name:      "devex",
+					Transport: MCPTransportStdio,
+					Command:   "devex",
+				},
+				{
+					Name:      "bad name!",
+					Transport: "sse",
+				},
+				{
+					Name:      "dup",
+					Transport: MCPTransportStdio,
+					URL:       "https://example.com",
+					Headers:   map[string]string{"X-Test": "1"},
+					Agents:    []string{AgentGemini, "bogus"},
+				},
+				{
+					Name:      "dup",
+					Transport: MCPTransportHTTP,
+					URL:       "ftp://example.com",
+					Command:   "npx",
+					Args:      []string{"foo"},
+					Env:       map[string]string{"A": "1"},
+				},
+			},
+		}, "agents.yaml")
+
+		Expect(errs).To(ContainElement(HaveField("Message", ContainSubstring(`name "devex" is reserved`))))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[1].name")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[1].transport")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[2].command")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[2].url")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[2].headers")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[2].agents[0]")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[2].agents[1]")))
+		Expect(errs).To(ContainElement(HaveField("Message", ContainSubstring(`duplicate MCP server name "dup"`))))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[3].command")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[3].args")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[3].env")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.mcp_servers[3].url")))
+	})
+
+	It("rejects literal secrets in MCP env, headers, args, and URL without echoing the secret", func() {
+		secret1 := "ghp_1234567890abcdef"
+		secret2 := "raw-password-value"
+		secret3 := "sk-ant-literal99999"
+		secret4 := "raw-url-secret-value"
+		errs := ValidateAgentsConfig(AgentsConfig{
+			Enabled: []string{AgentClaude},
+			MCPServers: []AgentMCPServerConfig{
+				{
+					Name:      "local",
+					Transport: MCPTransportStdio,
+					Command:   "npx",
+					Args:      []string{"--tok=" + secret1},
+					Env: map[string]string{
+						"DB_PASSWORD": secret2,
+						"PLAIN":       secret3,
+					},
+				},
+				{
+					Name:      "remote",
+					Transport: MCPTransportHTTP,
+					URL:       "https://api.example.com/mcp?token=" + secret4,
+					Headers: map[string]string{
+						"Authorization": "Bearer " + secret2,
+					},
+				},
+			},
+		}, "agents.yaml")
+
+		Expect(errs).To(HaveLen(5))
+		for _, e := range errs {
+			Expect(e.Message).NotTo(ContainSubstring(secret1))
+			Expect(e.Message).NotTo(ContainSubstring(secret2))
+			Expect(e.Message).NotTo(ContainSubstring(secret3))
+			Expect(e.Message).NotTo(ContainSubstring(secret4))
+		}
+	})
 })

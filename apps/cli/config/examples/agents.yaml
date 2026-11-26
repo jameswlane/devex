@@ -36,3 +36,22 @@ agents:
       model: gemini-2.5-pro
     opencode:
       model: anthropic/claude-sonnet-5-5
+  # MCP servers rendered into every target agent's native MCP configuration.
+  # Secrets must use environment variable references (${env:VAR_NAME}); literal
+  # tokens are rejected and keyring lookups are not supported in v1.
+  mcp_servers:
+    - name: github
+      transport: http
+      url: https://api.githubcopilot.com/mcp/
+      headers:
+        Authorization: "Bearer ${env:GITHUB_TOKEN}"
+      # Optional subset of agents.enabled; omit to target all enabled agents.
+      agents: [claude, codex]
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/me/src"]
+      env:
+        GITHUB_TOKEN: "${env:GITHUB_TOKEN}"
+  # Register DevEx's own read-only MCP server (`devex mcp serve`) under "devex".
+  devex_mcp: true
