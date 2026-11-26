@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
@@ -126,6 +127,8 @@ var _ = Describe("Agent sandbox prerequisite check", func() {
 			ContainSubstring("profile bwrap /usr/bin/bwrap flags=(unconfined)"),
 			ContainSubstring("sudo apparmor_parser -r /etc/apparmor.d/bwrap"),
 		))
+		// The command is one pasteable line under its header (no heredoc).
+		Expect(strings.Split(report.Remediation[0], "\n")).To(HaveLen(2))
 		Expect(report.Remediation[1]).To(ContainSubstring("sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"))
 		Expect(fake.runCommands).To(Equal([]string{"/usr/bin/bwrap"}))
 	})

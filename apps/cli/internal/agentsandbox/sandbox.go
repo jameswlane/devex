@@ -164,7 +164,9 @@ func Check(ctx context.Context, probe Probe) Report {
 	// Copilot CLI) unshare user/mount/PID/IPC/UTS/net namespaces and mount
 	// /dev, so exercising the full unshare set catches both AppArmor userns
 	// blocks and container capability restrictions.
-	out, err := probe.Run(ctx, report.BwrapPath, "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-all", "true")
+	probeCtx, cancel := context.WithTimeout(ctx, bwrapProbeTimeout)
+	defer cancel()
+	out, err := probe.Run(probeCtx, report.BwrapPath, "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-all", "true")
 	if err == nil {
 		report.BwrapWorks = true
 		if report.SocatPath == "" {
@@ -317,16 +319,7 @@ func restrictedRemediation(probe Probe, apparmorRestricted, usernsCloneDisabled,
 		} else {
 			steps = append(steps,
 				"Create and load a minimal AppArmor profile for bwrap (preferred):\n"+
-					"  sudo tee /etc/apparmor.d/bwrap <<'EOF'\n"+
-					"  abi <abi/4.0>,\n"+
-					"  include <tunables/global>\n"+
-					"\n"+
-					"  profile bwrap /usr/bin/bwrap flags=(unconfined) {\n"+
-					"    userns,\n"+
-					"    include if exists <local/bwrap>\n"+
-					"  }\n"+
-					"  EOF\n"+
-					"  sudo apparmor_parser -r /etc/apparmor.d/bwrap",
+					"  "+minimalBwrapProfileCommand,
 			)
 		}
 		steps = append(steps,
@@ -348,6 +341,16 @@ func restrictedRemediation(probe Probe, apparmorRestricted, usernsCloneDisabled,
 	}
 	return steps
 }
+
+// minimalBwrapProfileCommand writes an unconfined AppArmor profile that lets
+// /usr/bin/bwrap create user namespaces. It is a single line so it can be
+// pasted as is (an indented heredoc terminator would not end the heredoc).
+const minimalBwrapProfileCommand = "printf '%s\\n' 'abi <abi/4.0>,' 'include <tunables/global>' " +
+	"'profile bwrap /usr/bin/bwrap flags=(unconfined) {' '  userns,' '  include if exists <local/bwrap>' '}' " +
+	"| sudo tee /etc/apparmor.d/bwrap >/dev/null && sudo apparmor_parser -r /etc/apparmor.d/bwrap"
+
+// bwrapProbeTimeout bounds the sandbox start check; `true` exits immediately.
+const bwrapProbeTimeout = 15 * time.Second
 
 func formatRunError(output []byte, err error) string {
 	trimmed := strings.TrimSpace(string(output))
