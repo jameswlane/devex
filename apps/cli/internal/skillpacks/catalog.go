@@ -333,7 +333,7 @@ func ParsePackSpec(spec string) (nameOrSource, ref string, isRaw bool) {
 // its repository URL, optional ref, and derived pack identifier.
 func ParseRawSource(raw string) (sourceURL, ref, packName string, err error) {
 	if !strings.HasPrefix(raw, "git+") {
-		return "", "", "", fmt.Errorf("raw source %q must begin with git+https://", raw)
+		return "", "", "", fmt.Errorf("raw source %q must begin with git+https://", DisplaySource(raw))
 	}
 	rest := strings.TrimPrefix(raw, "git+")
 	if lastSlash := strings.LastIndex(rest, "/"); lastSlash >= 0 {
@@ -341,28 +341,48 @@ func ParseRawSource(raw string) (sourceURL, ref, packName string, err error) {
 			ref = rest[at+1:]
 			rest = rest[:at]
 			if strings.TrimSpace(ref) == "" {
-				return "", "", "", fmt.Errorf("empty ref after '@' in source %q", raw)
+				return "", "", "", fmt.Errorf("empty ref after '@' in source %q", DisplaySource(raw))
 			}
 		}
 	}
 	if err := validateHTTPSURL(rest); err != nil {
-		return "", "", "", fmt.Errorf("raw source %q must be an https:// URL: %w", raw, err)
+		return "", "", "", fmt.Errorf("raw source %q must be an https:// URL: %w", DisplaySource(raw), err)
 	}
 	parsed, err := url.Parse(rest)
 	if err != nil {
-		return "", "", "", fmt.Errorf("parse raw source %q: %w", raw, err)
+		return "", "", "", fmt.Errorf("raw source %q is not a valid URL", DisplaySource(raw))
 	}
 	cleanPath := strings.TrimSuffix(strings.Trim(parsed.Path, "/"), ".git")
 	if cleanPath == "" {
-		return "", "", "", fmt.Errorf("raw source %q must include a repository path", raw)
+		return "", "", "", fmt.Errorf("raw source %q must include a repository path", DisplaySource(raw))
 	}
 	return rest, ref, cleanPath, nil
+}
+
+// DisplaySource returns source with any user info, query and fragment
+// removed, so error messages and output never echo credentials.
+func DisplaySource(source string) string {
+	prefix := ""
+	if strings.HasPrefix(source, "git+") {
+		prefix, source = "git+", strings.TrimPrefix(source, "git+")
+	}
+	parsed, err := url.Parse(source)
+	if err != nil {
+		return "<invalid URL>"
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
+	return prefix + parsed.String()
 }
 
 func validateHTTPSURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return err
+		// url.Parse errors quote the input, which may hold credentials.
+		return fmt.Errorf("not a valid URL")
 	}
 	if parsed.Scheme != "https" {
 		return fmt.Errorf("scheme must be https, got %q", parsed.Scheme)

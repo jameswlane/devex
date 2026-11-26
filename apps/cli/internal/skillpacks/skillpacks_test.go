@@ -742,9 +742,33 @@ var _ = Describe("Skill packs installer (local fixture git repo)", func() {
 			"git+https://user:token@example.test/owner/custom-pack.git@main",
 			"git+https://example.test/owner/custom-pack.git?access_token=secret",
 		} {
-			_, err = mgr.Add(context.Background(), skillpacks.AddOptions{PackSpec: leaky, Skills: []string{"full-send"}, Agent: "claude", Scope: "user", AllowUnreviewed: true})
-			Expect(err).To(MatchError(ContainSubstring("must not contain credentials")), leaky)
+			for _, allow := range []bool{false, true} {
+				_, err = mgr.Add(context.Background(), skillpacks.AddOptions{PackSpec: leaky, Skills: []string{"full-send"}, Agent: "claude", Scope: "user", AllowUnreviewed: allow})
+				Expect(err).To(HaveOccurred(), leaky)
+				if allow {
+					Expect(err).To(MatchError(ContainSubstring("must not contain credentials")), leaky)
+				}
+				Expect(err.Error()).NotTo(Or(ContainSubstring("user"), ContainSubstring("token"), ContainSubstring("secret")), leaky)
+			}
 		}
+
+		// A lock entry carrying credentials is rejected on update without
+		// echoing them, with or without --allow-unreviewed.
+		leakyLock := skillpacks.NewLockFile()
+		leakyDest := filepath.Join(home, ".claude", "skills", "council")
+		leakyLock.Skills[skillpacks.DestinationKey(leakyDest)] = skillpacks.InstalledSkill{
+			Pack: "owner/custom-pack", Skill: "council", Agent: "claude", Scope: "user",
+			Destination: leakyDest, Source: "https://user:token@example.test/owner/custom-pack.git?access_token=secret",
+			SkillsPath: "skills", Ref: "main", SHA: sha1, Unreviewed: true,
+		}
+		leakyLockPath := filepath.Join(home, "state", skillpacks.LockFileName)
+		Expect(skillpacks.SaveLock(leakyLockPath, leakyLock)).To(Succeed())
+		for _, allow := range []bool{false, true} {
+			_, err = mgr.Update(context.Background(), skillpacks.UpdateOptions{Scope: "user", AllowUnreviewed: allow})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).NotTo(Or(ContainSubstring("user:"), ContainSubstring("token"), ContainSubstring("secret")))
+		}
+		Expect(os.Remove(leakyLockPath)).To(Succeed())
 
 		// With --allow-unreviewed: warns loudly, installs ONLY requested skill (no dependency map), pins SHA.
 		res, err := mgr.Add(context.Background(), skillpacks.AddOptions{

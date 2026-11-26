@@ -143,7 +143,7 @@ func (m *Manager) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 
 	if isRaw {
 		if !opts.AllowUnreviewed {
-			return nil, fmt.Errorf("raw source %q is unreviewed; inspect the repository and re-run with --allow-unreviewed", opts.PackSpec)
+			return nil, fmt.Errorf("raw source %q is unreviewed; inspect the repository and re-run with --allow-unreviewed", DisplaySource(opts.PackSpec))
 		}
 		var rawRef string
 		sourceURL, rawRef, packName, err = ParseRawSource(nameOrSource)
@@ -652,10 +652,10 @@ func (m *Manager) Update(ctx context.Context, opts UpdateOptions) (*UpdateResult
 			gk := groupKey{lockPath: lp, pack: entry.Pack, scope: entry.Scope}
 			if entry.Unreviewed {
 				if !opts.AllowUnreviewed {
-					return nil, fmt.Errorf("skill %q was installed from unreviewed source %q; review it and re-run with --allow-unreviewed", entry.Skill, entry.Source)
+					return nil, fmt.Errorf("skill %q was installed from unreviewed source %q; review it and re-run with --allow-unreviewed", entry.Skill, DisplaySource(entry.Source))
 				}
 				if err := validateHTTPSURL(entry.Source); err != nil {
-					return nil, fmt.Errorf("lock entry for %q has an invalid source %q: %w", entry.Destination, entry.Source, err)
+					return nil, fmt.Errorf("lock entry for %q has an invalid source %q: %w", entry.Destination, DisplaySource(entry.Source), err)
 				}
 				if err := validateRelativeSkillsPath(entry.SkillsPath); err != nil {
 					return nil, fmt.Errorf("lock entry for %q has an invalid skills path %q: %w", entry.Destination, entry.SkillsPath, err)
