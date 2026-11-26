@@ -45,6 +45,7 @@ type CrossPlatformSettings struct {
 	Dotfiles             DotfilesConfig             `mapstructure:",squash"`
 	DesktopEnvironments  DesktopEnvironmentsConfig  `mapstructure:",inline"`
 	Security             SecurityConfigField        `mapstructure:"security"`
+	Agents               AgentsConfig               `mapstructure:"agents"`
 	// ResolvedSecurity, when set, is the effective command-security policy
 	// resolved for a confirmed install. It is used instead of resolving the
 	// embedded settings or reading security.yaml again.

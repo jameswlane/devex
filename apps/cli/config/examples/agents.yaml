@@ -1,0 +1,38 @@
+# Example declarative coding-agent configuration for DevEx.
+# Copy to ~/.config/devex/config/agents.yaml (or $DEVEX_CONFIG_DIR/config/agents.yaml),
+# validate with `devex config validate`, preview with `devex agent diff`,
+# and render with `devex agent apply`.
+agents:
+  enabled:
+    - claude
+    - codex
+    - gemini
+    - opencode
+  # Conservative permission preset: strict | balanced (omit to leave permission modes untouched).
+  preset: balanced
+  # Shared global instructions rendered into each installed agent's instructions file
+  # inside a DevEx-managed block while keeping all user text outside the block.
+  instructions: |
+    Prefer small, focused diffs.
+    Run the relevant test suite before finishing a task.
+  # Shell command prefixes allowed without confirmation (merged with user entries).
+  allowed_commands:
+    - "git status"
+    - "git diff"
+    - "go test ./..."
+  # Shell command prefixes explicitly denied.
+  denied_commands:
+    - "git push --force"
+  # Per-agent overrides: model, preset, and additional allowed/denied commands.
+  overrides:
+    claude:
+      model: claude-sonnet-5
+      preset: strict
+      allowed_commands:
+        - "gh pr view"
+    codex:
+      model: gpt-5
+    gemini:
+      model: gemini-2.5-pro
+    opencode:
+      model: anthropic/claude-sonnet-5-5

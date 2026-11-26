@@ -125,9 +125,10 @@ describe("selectPlugins", () => {
 describe("command line", () => {
 	it("prints a JSON matrix for the repository", () => {
 		const output = execFileSync(process.execPath, [script, "--sdk", "false"], {
-			input: "packages/desktop-gnome/main.go\napps/cli/main.go\n",
+			input:
+				"packages/desktop-gnome/main.go\npackages/tool-agents/main.go\napps/cli/main.go\n",
 		});
-		assert.deepEqual(JSON.parse(output), ["desktop-gnome"]);
+		assert.deepEqual(JSON.parse(output), ["desktop-gnome", "tool-agents"]);
 	});
 
 	it("selects the repository's recorder adopters for SDK changes", () => {

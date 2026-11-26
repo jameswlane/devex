@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
+	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -100,12 +101,15 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			// Even offline bootstrap can create plugin state or execute local plugins.
 			// Preview commands resolve their plans without initializing the runtime.
 			if viper.GetBool("dry-run") {
+				if isAgentPluginCommand(cmd) {
+					return runtime.discoverLocalPlugins(cmd.Context())
+				}
 				return nil
 			}
 			if readAPICommand(cmd) {
-				// JSON status probes plugins that are already installed; it never
-				// downloads plugins or creates plugin state.
-				if cmd.Name() == "status" {
+				// JSON status and agent diff probe plugins that are already installed;
+				// they never download plugins or create plugin state.
+				if cmd.Name() == "status" || isAgentDiffCommand(cmd) {
 					return runtime.discoverLocalPlugins(cmd.Context())
 				}
 				return nil
@@ -217,7 +221,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewDotfilesCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
 	cmd.AddCommand(NewMCPCmd(repo, settings))
-	cmd.AddCommand(NewAgentCmd())
+	cmd.AddCommand(NewAgentCmdWithDeps(settings, runtime.getPluginBootstrap, agentsandbox.DefaultProbe(), nil))
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))
 	cmd.AddCommand(NewCompletionCmd())
@@ -487,7 +491,7 @@ func readAPICommand(cmd *cobra.Command) bool {
 		template, _ := cmd.Flags().GetString("template")
 		format, _ := cmd.Flags().GetString("format")
 		return !fix && template == "" && format == "json"
-	case "install-skill", "sandbox":
+	case "install-skill", "sandbox", "diff":
 		return cmd.Parent() != nil && cmd.Parent().Name() == "agent"
 	case "keygen", "sign", "verify":
 		return cmd.Parent() != nil && cmd.Parent().Name() == "approval"
@@ -495,6 +499,14 @@ func readAPICommand(cmd *cobra.Command) bool {
 		return cmd.Parent() != nil && (cmd.Parent().Name() == "config" || (cmd.Name() == "show" && cmd.Parent().Name() == "policy"))
 	}
 	return false
+}
+
+func isAgentDiffCommand(cmd *cobra.Command) bool {
+	return cmd.Name() == "diff" && cmd.Parent() != nil && cmd.Parent().Name() == "agent"
+}
+
+func isAgentPluginCommand(cmd *cobra.Command) bool {
+	return (cmd.Name() == "apply" || cmd.Name() == "diff") && cmd.Parent() != nil && cmd.Parent().Name() == "agent"
 }
 
 // rootArgs rejects positional arguments to the root command with the same

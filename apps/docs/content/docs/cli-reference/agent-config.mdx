@@ -1,0 +1,32 @@
+---
+title: Agent configuration (apply & diff)
+description: Preview and render declarative agents.yaml configuration into Claude Code, Codex, Gemini CLI, and OpenCode.
+---
+
+`devex agent diff` and `devex agent apply` render your declarative `agents.yaml` configuration into each enabled, installed coding agent's native configuration files through the `tool-agents` plugin.
+
+```sh
+devex agent diff
+devex agent apply
+devex agent apply --dry-run
+devex agent apply --agents claude,codex --preset strict
+```
+
+## Subcommands
+
+- `devex agent diff` — previews per-file status (`created`, `changed`, `deleted`, `unchanged`, or `skipped (not installed)`) and unified diffs. Performs zero writes (no backups, no directories, no state file).
+- `devex agent apply` — applies changes atomically through symlinks, creates a one-time `<file>.devex-bak-*` backup before first modifying any existing file, and records DevEx-managed command list entries in `$DEVEX_STATE_DIR/agents/managed.json`. With `--dry-run`, behaves identically to `devex agent diff`.
+
+## Flags and Precedence
+
+Configuration follows `flags > environment variables > config file > defaults`:
+
+| Flag | Environment Variable | Description |
+| --- | --- | --- |
+| `--agents` | `DEVEX_AGENTS` | Comma-separated subset of enabled agents to target (e.g. `claude,codex`) |
+| `--preset` | `DEVEX_AGENTS_PRESET` | Override configured permission preset (`strict` or `balanced`) |
+| `--dry-run` (global) | `DEVEX_DRY_RUN` | On `apply`, run `diff` without writing files, backups, or state |
+
+## When No Agents Are Configured
+
+If `agents.yaml` does not exist or `agents.enabled` is empty, `devex agent apply` and `devex agent diff` print the path where `agents.yaml` can be created along with a link to the [Coding Agents Configuration](/docs/configuration/agents) guide and exit `0`.

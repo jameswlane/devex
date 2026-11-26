@@ -165,7 +165,7 @@ func loadLegacyConfigDirectory(configDir string) (*viper.Viper, error) {
 
 func isLegacyConfigFile(filename string) bool {
 	switch filename {
-	case "dotfiles.yaml", "security.yaml":
+	case "dotfiles.yaml", "security.yaml", "agents.yaml":
 		return false
 	default:
 		return true

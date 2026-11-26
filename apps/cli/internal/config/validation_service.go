@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -142,6 +143,20 @@ func ValidateConfigDirs(ctx context.Context, settings CrossPlatformSettings, dir
 	}
 	for _, d := range applicationCapabilityWarnings(apps, sources) {
 		result.Add(d)
+	}
+	agentsFile := ""
+	for _, dir := range dirs {
+		candidate := filepath.Join(dir, "agents.yaml")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			agentsFile = candidate
+		}
+	}
+	agentsCfg := loaded.Agents
+	if !agentsCfg.IsConfigured() && settings.Agents.IsConfigured() {
+		agentsCfg = settings.Agents
+	}
+	for _, e := range ValidateAgentsConfig(agentsCfg, agentsFile) {
+		result.Add(fromValidationError(SeverityError, CategorySchema, e))
 	}
 	return result, nil
 }

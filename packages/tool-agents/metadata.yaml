@@ -1,0 +1,53 @@
+# Plugin Metadata for Coding Agents Configuration Tool
+name: tool-agents
+type: tool
+description: Declarative configuration renderer for coding agents (Claude Code, Codex, Gemini CLI, OpenCode)
+version: 1.0.0
+author: DevEx Team
+license: Apache-2.0
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/tool-agents
+# Platform Support
+platforms:
+  linux:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts: []
+# Capabilities
+supports:
+  claude_configuration: true
+  codex_configuration: true
+  gemini_configuration: true
+  opencode_configuration: true
+  diff_preview: true
+# Priority (lower number = higher priority)
+priority: 80
+# Tags for discovery
+tags:
+  - tool
+  - agents
+  - ai
+  - claude
+  - codex
+  - gemini
+  - opencode
+  - configuration
+  - cross-platform

@@ -20,6 +20,7 @@
 		"mcp",
 		"agent-skills",
 		"agent-sandbox",
+		"agent-config",
 		"global-flags"
 	]
 }
