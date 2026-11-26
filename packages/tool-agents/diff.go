@@ -130,17 +130,14 @@ func computeLineDiff(a, b []string) []diffOp {
 
 	// The LCS table costs na*nb cells; past maxDiffCells, show the changed
 	// middle as one removal and one addition instead of exhausting memory.
-	if na > maxDiffCells || nb > maxDiffCells || (na > 0 && nb > maxDiffCells/na) {
-		for _, line := range midA {
-			ops = append(ops, diffOp{kind: '-', line: line})
-		}
-		for _, line := range midB {
-			ops = append(ops, diffOp{kind: '+', line: line})
-		}
-		for k := n - suffix; k < n; k++ {
-			ops = append(ops, diffOp{kind: ' ', line: a[k]})
-		}
-		return ops
+	if na > maxDiffCells {
+		return replaceDiffOps(ops, midA, midB, a[n-suffix:])
+	}
+	if nb > maxDiffCells {
+		return replaceDiffOps(ops, midA, midB, a[n-suffix:])
+	}
+	if na > 0 && nb > maxDiffCells/na {
+		return replaceDiffOps(ops, midA, midB, a[n-suffix:])
 	}
 
 	dp := make([][]int, na+1)
@@ -177,6 +174,21 @@ func computeLineDiff(a, b []string) []diffOp {
 
 	for k := n - suffix; k < n; k++ {
 		ops = append(ops, diffOp{kind: ' ', line: a[k]})
+	}
+	return ops
+}
+
+// replaceDiffOps shows a changed block as removing every old line and adding
+// every new one, followed by the unchanged suffix.
+func replaceDiffOps(ops []diffOp, removed, added, suffix []string) []diffOp {
+	for _, line := range removed {
+		ops = append(ops, diffOp{kind: '-', line: line})
+	}
+	for _, line := range added {
+		ops = append(ops, diffOp{kind: '+', line: line})
+	}
+	for _, line := range suffix {
+		ops = append(ops, diffOp{kind: ' ', line: line})
 	}
 	return ops
 }
