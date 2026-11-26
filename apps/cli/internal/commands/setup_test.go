@@ -103,6 +103,21 @@ var _ = Describe("Setup Command", func() {
 		})
 	})
 
+	Describe("Windows prerequisites flag", func() {
+		It("binds --windows-prerequisites to setup.windows.prerequisites", func() {
+			cmd := commands.NewSetupCmd(repo, settings)
+			Expect(cmd.ParseFlags([]string{"--windows-prerequisites", "long-paths,powershell"})).To(Succeed())
+			Expect(viper.GetStringSlice("setup.windows.prerequisites")).To(Equal([]string{"long-paths", "powershell"}))
+		})
+
+		It("rejects an unknown prerequisite before setup changes anything", func() {
+			cmd := commands.NewSetupCmd(repo, settings)
+			cmd.SetArgs([]string{"--non-interactive", "--windows-prerequisites", "wsl"})
+			cmd.SilenceUsage, cmd.SilenceErrors = true, true
+			Expect(cmd.Execute()).To(MatchError(ContainSubstring(`unknown Windows prerequisite "wsl"`)))
+		})
+	})
+
 	Describe("isInteractiveMode", func() {
 		// Helper function to test the private isInteractiveMode function
 		var testIsInteractiveMode = func() bool {

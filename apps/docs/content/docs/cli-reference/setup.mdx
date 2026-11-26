@@ -37,6 +37,7 @@ The setup command includes:
 | `--non-interactive` | | `bool` | `false` | Run automated setup without user interaction |
 | `--verbose` | `-v` | `bool` | `false` | Enable verbose output |
 | `--dry-run` | `-n` | `bool` | `false` | Show what would be installed without executing |
+| `--windows-prerequisites` | | `strings` | | On Windows, fix these prerequisites without asking: `developer-mode`, `long-paths`, `powershell`, `windows-terminal` or `all` (config key `setup.windows.prerequisites`) |
 
 ## Interactive Setup Flow
 
@@ -361,6 +362,7 @@ Setup adapts to your platform:
   </Tab>
   
   <Tab value="Windows">
+    - Checks Developer Mode, long paths, PowerShell 7 and Windows Terminal first ([details](/docs/platforms/windows#prerequisite-checks-in-devex-setup))
     - Uses winget as primary package manager
     - Falls back to Chocolatey or Scoop
     - Configures Windows Terminal

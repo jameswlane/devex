@@ -1,0 +1,12 @@
+name: PowerShell
+description: PowerShell 7, the cross-platform shell and scripting language
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+windows:
+  install_method: winget
+  install_command: Microsoft.PowerShell
+  uninstall_command: Microsoft.PowerShell
+  installed_binary: pwsh
+  official_support: true

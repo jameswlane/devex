@@ -1,0 +1,12 @@
+name: Windows Terminal
+description: Microsoft's tabbed terminal for PowerShell, Command Prompt and WSL
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+windows:
+  install_method: winget
+  install_command: Microsoft.WindowsTerminal
+  uninstall_command: Microsoft.WindowsTerminal
+  installed_binary: wt
+  official_support: true

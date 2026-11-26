@@ -8,6 +8,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/setup"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
@@ -15,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/jameswlane/devex/apps/cli/internal/winprereq"
 )
 
 func init() {
@@ -110,6 +114,33 @@ Run 'devex setup' to begin the guided installation process.`,
 				return err
 			}
 
+			prerequisites, err := winprereq.ParseSelection(viper.GetStringSlice("setup.windows.prerequisites"))
+			if err != nil {
+				return err
+			}
+			if detectedPlatform.OS == "windows" {
+				out := cmd.OutOrStdout()
+				preflight := setup.WindowsPreflight{
+					Probe:       winprereq.SystemProbe(),
+					Elevated:    sdk.NewPrivilegeResolver().Elevated,
+					DryRun:      viper.GetBool("dry-run"),
+					Interactive: setup.IsInteractiveMode(),
+					Selected:    prerequisites,
+					In:          cmd.InOrStdin(),
+					Out:         out,
+					InstallApps: func(ctx context.Context, names []string) error {
+						apps, selected, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: names})
+						if err != nil {
+							return err
+						}
+						return runPlainInstall(ctx, out, apps, repo, selected, nil)
+					},
+				}
+				if err := preflight.Run(ctx); err != nil {
+					return err
+				}
+			}
+
 			if viper.GetBool("dry-run") && !viper.IsSet("applications") {
 				return setup.RunAutomatedSetup(ctx, repo, settings)
 			}
@@ -180,6 +211,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	cmd.Flags().String("git-email", "", "Git email for automated setup, only when unset; config key: setup.git.email")
 	cmd.Flags().String("shell", "", "Shell for automated setup (bash, zsh, fish); config key: setup.shell; defaults to the current shell")
 	cmd.Flags().StringP("config", "c", "", "Path to custom setup configuration file (YAML)")
+	cmd.Flags().StringSlice("windows-prerequisites", nil, "On Windows, fix these prerequisites without asking: developer-mode, long-paths, powershell, windows-terminal or all; config key: setup.windows.prerequisites")
 
 	_ = viper.BindPFlag("verbose", cmd.Flags().Lookup("verbose"))
 	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
@@ -189,6 +221,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	_ = viper.BindPFlag("setup.git.email", cmd.Flags().Lookup("git-email"))
 	_ = viper.BindPFlag("setup.shell", cmd.Flags().Lookup("shell"))
 	_ = viper.BindPFlag("config", cmd.Flags().Lookup("config"))
+	_ = viper.BindPFlag("setup.windows.prerequisites", cmd.Flags().Lookup("windows-prerequisites"))
 
 	return cmd
 }
