@@ -6,56 +6,41 @@ default: false
 desktop_environments:
   - all
 macos:
-  # mise's github backend installs the project's macOS release binary; the
-  # pinned release archive installer below is Linux-only. Depends on Amp.
+  # mise's github backend installs the project's release binary. Depends on Amp.
   install_method: mise
   install_command: github:tao12345666333/amp-acp@latest
   uninstall_command: github:tao12345666333/amp-acp
   installed_binary: amp-acp
   self_updating: false
   official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v amp >/dev/null 2>&1 || echo "amp-acp runs Amp, which is not installed: run 'devex install \"Amp\"'."
   dependencies:
     - mise
     - Amp
 linux:
-  # The project's v0.13.0 GitHub release archive (the version the ACP
-  # registry lists), pinned and verified against its SHA-256, installed to
-  # /usr/local/bin/amp-acp. It drives the `amp` CLI, so it depends on Amp.
-  # Uninstall removes only /usr/local/bin/amp-acp.
-  install_method: curlpipe
+  # mise's github backend installs the project's release binary into the
+  # user's mise tools (the same v0.13+ releases the ACP registry lists), so
+  # devex upgrade can move it; uninstall removes only amp-acp. It drives the
+  # `amp` CLI, so it depends on Amp.
+  install_method: mise
+  install_command: github:tao12345666333/amp-acp@latest
+  uninstall_command: github:tao12345666333/amp-acp
   installed_binary: amp-acp
-  download_url: https://github.com/tao12345666333/amp-acp/releases/download/v0.13.0/amp-acp-linux-x86_64.tar.gz
-  destination: /usr/local/bin
-  verification:
-    sha256: 205c819383b6fd389b408120ebea9cdde5c2957530b5ce4ebc912998d4118f8b
   self_updating: false
   official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v amp >/dev/null 2>&1 || echo "amp-acp runs Amp, which is not installed: run 'devex install \"Amp\"'."
   dependencies:
+    - mise
     - Amp
-  platform_requirements:
-    - os: linux
-      arch: amd64
-  uninstall_command: |
-    set -eu
-    SUDO=""
-    if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
-    $SUDO rm -f /usr/local/bin/amp-acp
-  alternatives:
-    - install_method: curlpipe
-      installed_binary: amp-acp
-      download_url: https://github.com/tao12345666333/amp-acp/releases/download/v0.13.0/amp-acp-linux-aarch64.tar.gz
-      destination: /usr/local/bin
-      verification:
-        sha256: ad7e1c23ec29bf47f757d656fc4c9a957dd60533da034213a6bc7d33d1813d32
-      self_updating: false
-      official_support: true
-      dependencies:
-        - Amp
-      platform_requirements:
-        - os: linux
-          arch: arm64
-      uninstall_command: |
-        set -eu
-        SUDO=""
-        if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
-        $SUDO rm -f /usr/local/bin/amp-acp

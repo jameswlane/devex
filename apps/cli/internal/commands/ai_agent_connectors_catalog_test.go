@@ -92,7 +92,7 @@ var _ = Describe("AI Agent Connectors catalog", func() {
 		}
 	})
 
-	DescribeTable("installs each connector together with the agent it wraps on Ubuntu 24.04",
+	DescribeTable("plans each connector with the agent it wraps on Ubuntu 24.04",
 		func(name, wantMethod, wantTarget, wantUninstall string, wantDeps []string) {
 			app, ok := connectors[name]
 			Expect(ok).To(BeTrue(), name)
@@ -108,6 +108,9 @@ var _ = Describe("AI Agent Connectors catalog", func() {
 			Expect(cfg.UninstallCommand).To(Equal(wantUninstall))
 			Expect(cfg.Dependencies).To(Equal(wantDeps))
 			for _, dep := range wantDeps {
+				if dep == "mise" {
+					continue // bootstrapped by the mise plugin, not a catalog app
+				}
 				_, err := settings.GetApplicationByName(dep)
 				Expect(err).NotTo(HaveOccurred(), "%s depends on %q, which must be a catalog app", name, dep)
 			}
@@ -116,7 +119,9 @@ var _ = Describe("AI Agent Connectors catalog", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(plan.DependencyOrder).To(ContainElement(name))
 			for _, dep := range wantDeps {
-				Expect(plan.DependencyOrder).To(ContainElement(dep))
+				if dep != "mise" {
+					Expect(plan.DependencyOrder).To(ContainElement(dep))
+				}
 			}
 
 			var out bytes.Buffer
@@ -134,15 +139,16 @@ var _ = Describe("AI Agent Connectors catalog", func() {
 		Entry("Codex ACP", "Codex ACP", "mise", "node@24 npm:@agentclientprotocol/codex-acp@latest", "npm:@agentclientprotocol/codex-acp", []string{"Node.js", "Codex CLI"}),
 		Entry("MiniMax Code ACP", "MiniMax Code ACP", "mise", "node@24 npm:@minimax-ai/code-acp@latest", "npm:@minimax-ai/code-acp", []string{"Node.js", "MiniMax Code"}),
 		Entry("DeepAgents ACP", "DeepAgents ACP", "mise", "node@24 npm:deepagents-acp@latest", "npm:deepagents-acp", []string{"Node.js"}),
-		Entry("amp-acp", "amp-acp", "curlpipe", "https://github.com/tao12345666333/amp-acp/releases/download/v0.13.0/amp-acp-linux-x86_64.tar.gz", "set -eu\nSUDO=\"\"\nif [ \"$(id -u)\" -ne 0 ]; then SUDO=\"sudo\"; fi\n$SUDO rm -f /usr/local/bin/amp-acp\n", []string{"Amp"}),
+		Entry("amp-acp", "amp-acp", "mise", "github:tao12345666333/amp-acp@latest", "github:tao12345666333/amp-acp", []string{"mise", "Amp"}),
 	)
 
-	It("pins amp-acp's release archive for both Linux architectures", func() {
-		app := connectors["amp-acp"]
-		Expect(app.Linux.Verification.SHA256).To(Equal("205c819383b6fd389b408120ebea9cdde5c2957530b5ce4ebc912998d4118f8b"))
-		Expect(app.Linux.Alternatives).To(HaveLen(1))
-		Expect(app.Linux.Alternatives[0].DownloadURL).To(HaveSuffix("amp-acp-linux-aarch64.tar.gz"))
-		Expect(app.Linux.Alternatives[0].Verification.SHA256).To(Equal("ad7e1c23ec29bf47f757d656fc4c9a957dd60533da034213a6bc7d33d1813d32"))
+	It("points each wrapping connector at its agent when it is missing (#721)", func() {
+		for name, binary := range map[string]string{"pi-acp": "pi", "Claude Agent ACP": "claude", "Codex ACP": "codex", "MiniMax Code ACP": "mcode", "amp-acp": "amp"} {
+			hooks := connectors[name].Linux.PostInstall
+			Expect(hooks).To(HaveLen(1), name)
+			Expect(hooks[0].Shell).To(ContainSubstring("command -v "+binary), name)
+			Expect(hooks[0].Shell).To(ContainSubstring("devex install"), name)
+		}
 	})
 
 	DescribeTable("plans connector upgrades and uninstalls without touching the wrapped agent or config",
@@ -170,5 +176,9 @@ var _ = Describe("AI Agent Connectors catalog", func() {
 		Entry("pi-acp", "pi-acp", `devex-plugin-package-manager-mise "update" "npm:pi-acp"`, "mise: npm:pi-acp"),
 		Entry("Claude Agent ACP", "Claude Agent ACP", `devex-plugin-package-manager-mise "update" "npm:@agentclientprotocol/claude-agent-acp"`, "mise: npm:@agentclientprotocol/claude-agent-acp"),
 		Entry("Codex ACP", "Codex ACP", `devex-plugin-package-manager-mise "update" "npm:@agentclientprotocol/codex-acp"`, "mise: npm:@agentclientprotocol/codex-acp"),
+		Entry("MiniMax Code ACP", "MiniMax Code ACP", `devex-plugin-package-manager-mise "update" "npm:@minimax-ai/code-acp"`, "mise: npm:@minimax-ai/code-acp"),
+		Entry("DeepAgents ACP", "DeepAgents ACP", `devex-plugin-package-manager-mise "update" "npm:deepagents-acp"`, "mise: npm:deepagents-acp"),
+		Entry("Agoragentic", "Agoragentic", `devex-plugin-package-manager-mise "update" "npm:agoragentic-mcp"`, "mise: npm:agoragentic-mcp"),
+		Entry("amp-acp", "amp-acp", `devex-plugin-package-manager-mise "update" "github:tao12345666333/amp-acp"`, "mise: github:tao12345666333/amp-acp"),
 	)
 })

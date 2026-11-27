@@ -16,6 +16,13 @@ macos:
   installed_binary: pi-acp
   self_updating: false
   official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v pi >/dev/null 2>&1 || echo "pi-acp runs Pi, which is not installed: run 'devex install \"Pi\"'."
   dependencies:
     - Node.js
     - Pi
@@ -30,6 +37,13 @@ linux:
   installed_binary: pi-acp
   self_updating: false
   official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v pi >/dev/null 2>&1 || echo "pi-acp runs Pi, which is not installed: run 'devex install \"Pi\"'."
   dependencies:
     - Node.js
     - Pi

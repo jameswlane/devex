@@ -93,7 +93,7 @@ Uninstalling an APT-backed editor removes the package, the DevEx-managed APT sou
 
 ## AI Agent Connectors
 
-The `AI Agent Connectors` category (`applications/ai-agent-connectors/`) ships opt-in (`default: false`) adapters and bridges that let an Agent Client Protocol (ACP) client such as T3 Code or Zed run an agent. A connector is not an agent you run on its own, so it is kept out of `AI Coding Agents`. Agents with built-in ACP support (Gemini CLI, Goose, OpenCode and others) need no connector. Each connector that wraps an agent declares it as a dependency, so `devex install pi-acp` also installs Pi. Install the category with `devex install --categories "AI Agent Connectors"`; interactive `devex setup` lists them under **Agent connectors**. Uninstall removes only the connector, never the wrapped agent or its config.
+The `AI Agent Connectors` category (`applications/ai-agent-connectors/`) ships opt-in (`default: false`) adapters and bridges that let an Agent Client Protocol (ACP) client such as T3 Code or Zed run an agent. A connector is not an agent you run on its own, so it is kept out of `AI Coding Agents`. Agents with built-in ACP support (Gemini CLI, Goose, OpenCode and others) need no connector. Each connector that wraps an agent declares it as a dependency, which `devex install --dry-run --format json` lists in the plan; until install execution installs catalog dependencies (#721), a connector prints the `devex install` command for its agent when the agent is missing. Install the category with `devex install --categories "AI Agent Connectors"`; interactive `devex setup` lists them under **Agent connectors**. Uninstall removes only the connector, never the wrapped agent or its config.
 
 | Connector | Install | Wraps |
 | --- | --- | --- |
@@ -101,7 +101,7 @@ The `AI Agent Connectors` category (`applications/ai-agent-connectors/`) ships o
 | Codex ACP | `mise node@24 npm:@agentclientprotocol/codex-acp` | Codex CLI |
 | pi-acp | `mise node@24 npm:pi-acp` (community) | Pi |
 | MiniMax Code ACP | `mise node@24 npm:@minimax-ai/code-acp` | MiniMax Code |
-| amp-acp | Pinned GitHub release archive to `/usr/local/bin` (`amd64`/`arm64`, SHA-256 verified); mise on macOS (community) | Amp |
+| amp-acp | `mise github:tao12345666333/amp-acp` (community) | Amp |
 | DeepAgents ACP | `mise node@24 npm:deepagents-acp` (LangChain's JavaScript Deep Agents) | Standalone |
 | GLM Agent | `mise node@24 npm:glm-acp-agent` (community) | Standalone (Zhipu GLM API) |
 | Agoragentic | `mise node@24 npm:agoragentic-mcp`, launched with `--acp` | Standalone (marketplace) |

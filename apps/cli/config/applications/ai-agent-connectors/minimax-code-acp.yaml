@@ -16,6 +16,13 @@ macos:
   installed_binary: code-acp
   self_updating: false
   official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v mcode >/dev/null 2>&1 || echo "MiniMax Code ACP runs MiniMax Code, which is not installed: run 'devex install \"MiniMax Code\"'."
   dependencies:
     - Node.js
     - MiniMax Code
@@ -30,6 +37,13 @@ linux:
   installed_binary: code-acp
   self_updating: false
   official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v mcode >/dev/null 2>&1 || echo "MiniMax Code ACP runs MiniMax Code, which is not installed: run 'devex install \"MiniMax Code\"'."
   dependencies:
     - Node.js
     - MiniMax Code
