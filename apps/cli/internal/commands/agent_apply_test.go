@@ -617,12 +617,12 @@ var _ = Describe("Agent apply and diff commands", func() {
 			},
 		}
 		failing := &fakeAgentPluginExecutor{err: errors.New("tool-agents plugin is not installed")}
-		newCmd := func(args ...string) (*cobra.Command, *bytes.Buffer) {
+		newCmd := func(planOffline bool, args ...string) (*cobra.Command, *bytes.Buffer) {
 			cmd := NewAgentCmdFromDeps(AgentCmdDeps{
 				Settings:               combined,
 				Executor:               failing,
 				LocalModelsProbe:       probe,
-				LocalModelsPlanOptions: localmodels.PlanOptions{OllamaBaseURL: ollamaSrv.URL, Offline: true},
+				LocalModelsPlanOptions: localmodels.PlanOptions{OllamaBaseURL: ollamaSrv.URL, Offline: planOffline},
 			})
 			var out bytes.Buffer
 			cmd.SetOut(&out)
@@ -631,16 +631,67 @@ var _ = Describe("Agent apply and diff commands", func() {
 			return cmd, &out
 		}
 
-		cmd, out := newCmd("diff")
+		cmd, out := newCmd(true, "diff")
 		Expect(cmd.Execute()).To(MatchError(ContainSubstring("tool-agents plugin is not installed")))
 		Expect(out.String()).To(ContainSubstring("qwen2.5-coder:7b: pull (size unknown)"))
 
 		viper.Set("offline", true)
 		DeferCleanup(viper.Reset)
 		failing.err = nil
-		cmd, out = newCmd("apply")
+		// Only the CLI offline setting is on here, so it alone must stop the pull.
+		cmd, out = newCmd(false, "apply")
 		Expect(cmd.Execute()).To(Succeed())
 		Expect(pulled).To(BeEmpty())
 		Expect(out.String()).To(ContainSubstring("skipped pulling in offline mode"))
+	})
+	It("handles local_models from an existing agents.yaml under apply --init", func() {
+		ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"models":[]}`))
+		}))
+		DeferCleanup(ollamaSrv.Close)
+
+		existing := config.CrossPlatformSettings{
+			HomeDir: home,
+			Agents:  config.AgentsConfig{LocalModels: []string{"qwen2.5-coder:7b"}},
+		}
+		var pulled [][]string
+		probe := &localmodels.Probe{
+			GOOS:       "linux",
+			HTTPClient: ollamaSrv.Client(),
+			LookPath: func(name string) (string, error) {
+				if name == "ollama" {
+					return "/usr/local/bin/ollama", nil
+				}
+				return "", exec.ErrNotFound
+			},
+			Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				pulled = append(pulled, append([]string{name}, args...))
+				return nil, nil
+			},
+		}
+		run := func(offline bool, args ...string) string {
+			cmd := NewAgentCmdFromDeps(AgentCmdDeps{
+				Settings:               existing,
+				Executor:               fake,
+				LocalModelsProbe:       probe,
+				LocalModelsPlanOptions: localmodels.PlanOptions{OllamaBaseURL: ollamaSrv.URL, Offline: offline},
+			})
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(args)
+			Expect(cmd.Execute()).To(Succeed())
+			return out.String()
+		}
+
+		viper.Set("dry-run", true)
+		Expect(run(true, "apply", "--init")).To(ContainSubstring("qwen2.5-coder:7b: pull (size unknown)"))
+		Expect(pulled).To(BeEmpty())
+
+		viper.Set("dry-run", false)
+		DeferCleanup(viper.Reset)
+		run(false, "apply", "--init")
+		Expect(pulled).To(Equal([][]string{{"/usr/local/bin/ollama", "pull", "qwen2.5-coder:7b"}}))
+		Expect(fake.called).To(BeFalse())
 	})
 })

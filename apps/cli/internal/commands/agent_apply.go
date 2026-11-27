@@ -67,7 +67,7 @@ DEVEX_DRY_RUN).`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dryRun := viper.GetBool("dry-run")
 			if initFlag {
-				return runAgentApplyInit(cmd, settings, executor, agentsFlag, presetFlag, dryRun)
+				return runAgentApplyInit(cmd, settings, executor, lmProbe, lmOpts, agentsFlag, presetFlag, dryRun)
 			}
 			return runAgentPluginCommand(cmd, settings, executor, lmProbe, lmOpts, agentsFlag, presetFlag, dryRun)
 		},
@@ -106,7 +106,7 @@ models it would pull, without writing any files, backups, or state.`,
 	return cmd
 }
 
-func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, agentsFlag, presetFlag string, dryRun bool) error {
+func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, lmProbe *localmodels.Probe, lmOpts localmodels.PlanOptions, agentsFlag, presetFlag string, dryRun bool) error {
 	preset := ""
 	if cmd.Flags().Changed("preset") {
 		preset = strings.TrimSpace(presetFlag)
@@ -147,17 +147,26 @@ func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings
 		// The loaded settings already merge every configuration tier, so apply
 		// them as they are instead of re-reading one file.
 		cmd.Printf("Kept your existing agents configuration (%s); run 'devex agent diff' to review.\n", agentsPath)
+		models := settings.Agents.LocalModels
 		if dryRun {
-			return nil
-		}
-		if len(settings.Agents.Enabled) == 0 {
-			cmd.Printf("No coding agents enabled in %s; add them under agents.enabled.\n", agentsPath)
-			return nil
+			if len(models) == 0 {
+				return nil
+			}
+			return runLocalModels(cmd, models, lmProbe, lmOpts, true)
 		}
 		if errs := config.ValidateAgentsConfig(settings.Agents, "agents.yaml"); len(errs) > 0 {
 			return fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
 		}
-		return applyResolvedAgents(cmd, settings.Agents, settings.Agents.Enabled, executor)
+		var agentsErr error
+		if len(settings.Agents.Enabled) == 0 {
+			cmd.Printf("No coding agents enabled in %s; add them under agents.enabled.\n", agentsPath)
+		} else {
+			agentsErr = applyResolvedAgents(cmd, settings.Agents, settings.Agents.Enabled, executor)
+		}
+		if len(models) == 0 {
+			return agentsErr
+		}
+		return errors.Join(agentsErr, runLocalModels(cmd, models, lmProbe, lmOpts, false))
 	}
 
 	if len(harnessIDs) == 0 {

@@ -253,9 +253,12 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 			miseRequesters = append(miseRequesters, app.Name)
 		}
 		appKey := strings.ToLower(strings.TrimSpace(app.Name))
-		for _, prereqName := range cfg.SandboxPrerequisites {
+		// Declared dependencies (for example Ollama's curl and zstd) install
+		// before the app, like sandbox prerequisites; mise is planned below.
+		prereqNames := append(append([]string(nil), cfg.Dependencies...), cfg.SandboxPrerequisites...)
+		for _, prereqName := range prereqNames {
 			key := strings.ToLower(strings.TrimSpace(prereqName))
-			if key == "" || key == appKey || existingNames[key] {
+			if key == "" || key == "mise" || key == appKey || existingNames[key] {
 				continue
 			}
 			prereqApp, ok := catalog[key]

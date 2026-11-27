@@ -268,6 +268,29 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			Expect(planView).To(ContainSubstring("preset: balanced"))
 		})
 
+		It("installs a selected local model runtime's declared dependencies before it", func() {
+			withOllama := aiAgentCatalogSettings(homeDir)
+			withOllama.ApplicationOverrides = append(withOllama.ApplicationOverrides,
+				types.CrossPlatformApp{Name: "zstd", Category: "Dependency", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "zstd"}},
+				types.CrossPlatformApp{Name: "Ollama", Category: CategoryLocalModels, Linux: types.OSConfig{
+					InstallMethod:   "curlpipe",
+					InstalledBinary: "/usr/local/bin/ollama",
+					Dependencies:    []string{"zstd"},
+					PostInstall:     []types.InstallCommand{{Scope: "system", Shell: "true"}},
+				}},
+			)
+			model := NewSetupModel(repo, withOllama, platform.DetectionResult{OS: "linux"})
+			model.selections.selectedAIAgents["Ollama"] = true
+
+			apps := model.buildAppList()
+			names := make([]string, 0, len(apps))
+			for _, app := range apps {
+				names = append(names, app.Name)
+			}
+			Expect(names).To(ContainElements("zstd", "Ollama"))
+			Expect(indexOf(names, "zstd")).To(BeNumerically("<", indexOf(names, "Ollama")))
+		})
+
 		It("leaves agents and agents.yaml out of the plan when nothing is selected", func() {
 			model := NewSetupModel(repo, settings, platform.DetectionResult{OS: "linux"})
 			apps := model.buildAppList()

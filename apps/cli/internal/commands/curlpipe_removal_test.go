@@ -65,6 +65,7 @@ var _ = Describe("Inline curlpipe removal", func() {
 		if runtime.GOOS == "windows" {
 			Skip("curlpipe inline uninstall uses POSIX sh")
 		}
+		GinkgoT().Setenv("DEVEX_UNINSTALL_KEEP_DATA", "1") // inherited value must not leak into a full uninstall
 		marker := filepath.Join(GinkgoT().TempDir(), "keep")
 		app := types.AppConfig{BaseConfig: types.BaseConfig{Name: "example"}, InstallMethod: "curlpipe",
 			UninstallCommand: fmt.Sprintf("printf '%%s' \"${DEVEX_UNINSTALL_KEEP_DATA:-unset}\" > '%s'", marker)}
