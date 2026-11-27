@@ -50,7 +50,9 @@ linux:
   official_support: true
   alternatives:
     - install_method: mise
-      install_command: node@lts npm:@moonshot-ai/kimi-code@latest
+      # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+      # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+      install_command: node@24 npm:@moonshot-ai/kimi-code@latest
       uninstall_command: npm:@moonshot-ai/kimi-code
       self_updating: false
       official_support: true
