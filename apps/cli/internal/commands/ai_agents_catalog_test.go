@@ -94,7 +94,12 @@ var _ = Describe("AI Coding Agents catalog", func() {
 
 		for name, app := range agents {
 			Expect(app.Default).To(BeFalse(), "%s must opt in with default: false", name)
-			Expect(app.Category).To(Equal("AI Coding Agents"), name)
+			wantCategory := "AI Coding Agents"
+			if name == "Ollama" || name == "LM Studio" {
+				// Grouped under setup's "Local models" heading, not agent CLIs.
+				wantCategory = "Local Models"
+			}
+			Expect(app.Category).To(Equal(wantCategory), name)
 			Expect(app.Linux.InstallMethod).NotTo(BeEmpty(), "%s must define a Linux install method", name)
 			Expect(app.Linux.OfficialSupport).To(BeTrue(), "%s Linux primary must have official_support: true", name)
 			Expect(app.Linux.CleanupFiles).To(BeEmpty(), "%s must not list user data in cleanup_files", name)

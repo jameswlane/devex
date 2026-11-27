@@ -274,7 +274,7 @@ func isDesktopApp(app types.CrossPlatformApp) bool {
 }
 
 func hasInstallTarget(cfg types.OSConfig) bool {
-	return cfg.InstallMethod != "" && (cfg.InstallCommand != "" || cfg.DownloadURL != "" || len(cfg.Packages) > 0)
+	return cfg.InstallMethod != "" && (cfg.InstallCommand != "" || cfg.DownloadURL != "" || len(cfg.Packages) > 0 || cfg.IsHookDrivenCurlpipe())
 }
 
 func isCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {

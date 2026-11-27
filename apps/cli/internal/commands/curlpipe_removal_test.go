@@ -60,4 +60,22 @@ var _ = Describe("Inline curlpipe removal", func() {
 		Expect(errors.Is(err, context.Canceled)).To(BeTrue())
 		Expect(marker).NotTo(BeAnExistingFile())
 	})
+
+	It("tells the uninstall shell about --keep-data only when it is set", func() {
+		if runtime.GOOS == "windows" {
+			Skip("curlpipe inline uninstall uses POSIX sh")
+		}
+		marker := filepath.Join(GinkgoT().TempDir(), "keep")
+		app := types.AppConfig{BaseConfig: types.BaseConfig{Name: "example"}, InstallMethod: "curlpipe",
+			UninstallCommand: fmt.Sprintf("printf '%%s' \"${DEVEX_UNINSTALL_KEEP_DATA:-unset}\" > '%s'", marker)}
+		for _, tc := range []struct {
+			keep bool
+			want string
+		}{{true, "1"}, {false, "unset"}} {
+			Expect(uninstallConfiguredApplication(context.Background(), app, nil, nil, tc.keep)).To(Succeed())
+			contents, err := os.ReadFile(marker)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(contents)).To(Equal(tc.want), "keepData=%v", tc.keep)
+		}
+	})
 })

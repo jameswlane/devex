@@ -1,6 +1,6 @@
 name: Ollama
 description: Run large language models locally with a systemd service and GPU acceleration
-category: AI Coding Agents
+category: Local Models
 default: false
 desktop_environments:
   - all
@@ -109,8 +109,8 @@ linux:
         else
           echo "Ollama service was not started: systemd is unavailable. Start Ollama manually with 'ollama serve'."
         fi
-        if [ "$has_nvidia_gpu" -eq 1 ] && ! command -v nvidia-smi >/dev/null 2>&1; then
-          echo "NVIDIA GPU detected, but nvidia-smi is not available; Ollama will run on CPU until NVIDIA drivers are installed."
+        if [ "$has_nvidia_gpu" -eq 1 ] && ! nvidia-smi >/dev/null 2>&1; then
+          echo "NVIDIA GPU detected without a working driver (nvidia-smi missing or failing); Ollama will run on CPU until NVIDIA drivers are installed."
           echo "  Ubuntu: sudo ubuntu-drivers install"
           echo "  Debian: https://wiki.debian.org/NvidiaGraphicsDrivers"
         fi
@@ -127,10 +127,15 @@ linux:
       $SUDO systemctl daemon-reload 2>/dev/null || true
     fi
     $SUDO rm -rf /usr/local/bin/ollama /usr/local/lib/ollama
-    if id ollama >/dev/null 2>&1; then
-      $SUDO userdel ollama || true
+    if [ "${DEVEX_UNINSTALL_KEEP_DATA:-}" = "1" ]; then
+      # The ollama account owns the model store, so keep both for a reinstall.
+      echo "Kept the ollama user and downloaded models in /usr/share/ollama (--keep-data)."
+    else
+      if id ollama >/dev/null 2>&1; then
+        $SUDO userdel ollama || true
+      fi
+      if getent group ollama >/dev/null 2>&1; then
+        $SUDO groupdel ollama || true
+      fi
+      $SUDO rm -rf /usr/share/ollama
     fi
-    if getent group ollama >/dev/null 2>&1; then
-      $SUDO groupdel ollama || true
-    fi
-    $SUDO rm -rf /usr/share/ollama

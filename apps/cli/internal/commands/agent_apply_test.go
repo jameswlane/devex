@@ -21,6 +21,7 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -586,5 +587,60 @@ var _ = Describe("Agent apply and diff commands", func() {
 		cmdMissing.SetErr(&out)
 		cmdMissing.SetArgs([]string{"apply"})
 		Expect(cmdMissing.Execute()).To(MatchError(ContainSubstring("Ollama is not installed: run `devex install ollama`")))
+	})
+	It("still previews local_models when the tool-agents step fails, and skips pulls offline", func() {
+		ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"models":[]}`))
+		}))
+		DeferCleanup(ollamaSrv.Close)
+
+		combined := config.CrossPlatformSettings{
+			HomeDir: home,
+			Agents: config.AgentsConfig{
+				Enabled:     []string{"claude"},
+				LocalModels: []string{"qwen2.5-coder:7b"},
+			},
+		}
+		var pulled [][]string
+		probe := &localmodels.Probe{
+			GOOS:       "linux",
+			HTTPClient: ollamaSrv.Client(),
+			LookPath: func(name string) (string, error) {
+				if name == "ollama" {
+					return "/usr/local/bin/ollama", nil
+				}
+				return "", exec.ErrNotFound
+			},
+			Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				pulled = append(pulled, append([]string{name}, args...))
+				return nil, nil
+			},
+		}
+		failing := &fakeAgentPluginExecutor{err: errors.New("tool-agents plugin is not installed")}
+		newCmd := func(args ...string) (*cobra.Command, *bytes.Buffer) {
+			cmd := NewAgentCmdFromDeps(AgentCmdDeps{
+				Settings:               combined,
+				Executor:               failing,
+				LocalModelsProbe:       probe,
+				LocalModelsPlanOptions: localmodels.PlanOptions{OllamaBaseURL: ollamaSrv.URL, Offline: true},
+			})
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(args)
+			return cmd, &out
+		}
+
+		cmd, out := newCmd("diff")
+		Expect(cmd.Execute()).To(MatchError(ContainSubstring("tool-agents plugin is not installed")))
+		Expect(out.String()).To(ContainSubstring("qwen2.5-coder:7b: pull (size unknown)"))
+
+		viper.Set("offline", true)
+		DeferCleanup(viper.Reset)
+		failing.err = nil
+		cmd, out = newCmd("apply")
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(pulled).To(BeEmpty())
+		Expect(out.String()).To(ContainSubstring("skipped pulling in offline mode"))
 	})
 })

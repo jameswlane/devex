@@ -23,7 +23,7 @@ var uninstallApplication = func(cmd *cobra.Command, app types.CrossPlatformApp, 
 	if installer == nil && osConfig.InstallMethod != "curlpipe" {
 		return fmt.Errorf("install method %q is not supported on this platform", osConfig.InstallMethod)
 	}
-	return uninstallConfiguredApplication(cmd.Context(), legacy, installer, repo)
+	return uninstallConfiguredApplication(cmd.Context(), legacy, installer, repo, false)
 }
 
 func removeInstalledApplication(cmd *cobra.Command, name string, settings config.CrossPlatformSettings, repo types.Repository, force, dryRun bool, provider pluginBootstrapProvider) (bool, error) {

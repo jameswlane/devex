@@ -1,6 +1,6 @@
 name: LM Studio
 description: Desktop application for discovering, downloading, and running local LLMs
-category: AI Coding Agents
+category: Local Models
 default: false
 desktop_environments:
   - all

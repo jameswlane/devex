@@ -19,14 +19,20 @@ On Linux, `devex install ollama` installs directly from Ollama's official `.tar.
 To remove the system installation completely—stopping and disabling the service, removing `/etc/systemd/system/ollama.service`, `/usr/local/bin/ollama`, `/usr/local/lib/ollama`, `/usr/share/ollama`, and the `ollama` user/group:
 
 ```sh
-devex uninstall ollama
+devex uninstall --app Ollama
+```
+
+Add `--keep-data` to keep the downloaded models in `/usr/share/ollama`, along with the `ollama` user that owns them, so a later reinstall can use them again:
+
+```sh
+devex uninstall --app Ollama --keep-data
 ```
 
 ## GPU Detection and Driver Policy
 
 DevEx inspects PCI display devices (`/sys/bus/pci/devices/*`), `nvidia-smi`, and AMD ROCm kernel interfaces (`/sys/module/amdgpu` and `/dev/kfd`) in read-only mode to report what hardware acceleration Ollama will use. **DevEx never installs GPU drivers automatically.**
 
-- **NVIDIA (CUDA)**: When an NVIDIA GPU (`0x10de`) is detected and `nvidia-smi` succeeds, Ollama uses NVIDIA CUDA. If `nvidia-smi` is missing, Ollama falls back to CPU until you install drivers manually:
+- **NVIDIA (CUDA)**: When an NVIDIA GPU (`0x10de`) is detected and `nvidia-smi` succeeds, Ollama uses NVIDIA CUDA. If `nvidia-smi` is missing or fails, Ollama falls back to CPU until you install drivers manually:
   - **Ubuntu**: `sudo ubuntu-drivers install` (then reboot)
   - **Debian**: Follow the [Debian NVIDIA Graphics Drivers guide](https://wiki.debian.org/NvidiaGraphicsDrivers) (then reboot)
 - **AMD (ROCm)**: On Linux `amd64`, `devex install ollama` automatically extracts Ollama's official ROCm add-on archive (`ollama-linux-amd64-rocm.tar.zst`) when an AMD display GPU (`0x1002`) is present, and adds the `ollama` user to the `render` and `video` groups when they exist. ROCm acceleration is active when both the `amdgpu` kernel module and `/dev/kfd` are available; otherwise DevEx prints a manual setup hint and Ollama runs on CPU.
