@@ -37,6 +37,7 @@ func DefaultConfig() Config {
 			"claude.ai",
 			"opencode.ai",
 			"code.kimi.com",
+			"chatgpt.com",
 			"zed.dev",
 		},
 	}

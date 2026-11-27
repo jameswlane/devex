@@ -119,9 +119,8 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 	// `mise unuse --global` (equivalent to `mise unuse -g`) edits the global
 	// config (~/.config/mise/config.toml) that HandleInstall wrote, leaving a
 	// project's own mise.toml pin alone (or, with MISE_LOCAL, edits the local
-	// config), and prunes the install when nothing else needs it. `mise
-	// uninstall` would delete the files but leave the config entry, so `mise
-	// current` would still report the tool. One call edits
+	// config). `mise uninstall` would delete the files but leave the config
+	// entry, so `mise current` would still report the tool. One call edits
 	// the config once, so tools never race on the file.
 	unuseArgs := []string{"unuse"}
 	if m.useGlobalConfig() {
@@ -130,6 +129,17 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 	if err := sdk.ExecCommandWithContext(ctx, false, "mise", append(unuseArgs, args...)...); err != nil {
 		m.logger.Warning("Failed to remove tools %s: %v", strings.Join(args, ", "), err)
 		return err
+	}
+
+	// unuse can keep the install and its shim, which leaves the tool on
+	// PATH. prune removes only versions no tracked config still uses, so a
+	// project that pins the tool keeps it.
+	pruneArgs := []string{"prune", "--yes"}
+	for _, tool := range args {
+		pruneArgs = append(pruneArgs, toolName(tool))
+	}
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", pruneArgs...); err != nil {
+		m.logger.Warning("Failed to prune removed tools %s: %v", strings.Join(args, ", "), err)
 	}
 
 	m.logger.Success("Removed tools: %s", strings.Join(args, ", "))
@@ -264,4 +274,14 @@ func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error
 		return &sdk.NotInstalledError{Packages: missing}
 	}
 	return nil
+}
+
+// toolName drops a trailing @version from a tool spec while keeping an npm
+// scope: npm:@google/gemini-cli@latest becomes npm:@google/gemini-cli.
+func toolName(spec string) string {
+	i := strings.LastIndex(spec, "@")
+	if i <= 0 || spec[i-1] == ':' {
+		return spec
+	}
+	return spec[:i]
 }

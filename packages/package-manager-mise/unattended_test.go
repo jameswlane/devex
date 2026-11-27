@@ -24,6 +24,7 @@ var _ = Describe("Unattended mise execution", func() {
 		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
 			{Args: []string{"use", "--global", "node@22"}},
 			{Args: []string{"unuse", "--global", "node@22"}},
+			{Args: []string{"prune", "--yes", "node"}},
 			{Args: []string{"plugins", "update"}},
 			{Args: []string{"upgrade"}},
 		}))
@@ -79,6 +80,20 @@ var _ = Describe("Unattended mise execution", func() {
 		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
 			{Args: []string{"use", "node@22"}},
 			{Args: []string{"unuse", "node@22"}},
+			{Args: []string{"prune", "--yes", "node"}},
+		}))
+	})
+
+	It("prunes removed tools so their shims leave PATH, keeping npm scopes", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		GinkgoT().Setenv("MISE_LOCAL", "0")
+		plugin := main.NewMisePlugin()
+		Expect(plugin.HandleRemove(context.Background(), []string{"npm:@google/gemini-cli", "pipx:aider-chat"})).To(Succeed())
+		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
+			{Args: []string{"unuse", "--global", "npm:@google/gemini-cli", "pipx:aider-chat"}},
+			{Args: []string{"prune", "--yes", "npm:@google/gemini-cli", "pipx:aider-chat"}},
 		}))
 	})
 
@@ -91,6 +106,19 @@ var _ = Describe("Unattended mise execution", func() {
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin := main.NewMisePlugin()
 		Expect(plugin.Execute("ensure-installed", nil)).To(Succeed())
+		Expect(recorder.Calls("which")).To(Equal([]sdktest.Call{{Args: []string{"mise"}}}))
+	})
+
+	It("sets mise up before install when mise is not on PATH yet", func() {
+		// mise is absent from PATH. The scripted `which` reports it present,
+		// so ensure-installed skips the download; install then reports that
+		// mise is still unreachable instead of exiting the process.
+		recorder := sdktest.NewRecorder(GinkgoT(), "which")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		plugin := main.NewMisePlugin()
+		err := plugin.Execute("install", []string{"codex@latest"})
+		Expect(err).To(MatchError(ContainSubstring("mise was installed but is not on PATH")))
 		Expect(recorder.Calls("which")).To(Equal([]sdktest.Call{{Args: []string{"mise"}}}))
 	})
 

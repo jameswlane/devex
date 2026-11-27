@@ -34,6 +34,18 @@ func (m *MisePlugin) Execute(command string, args []string) error {
 		return m.HandleEnsureInstalled(ctx, args)
 	}
 
+	// `devex install <app>` runs install directly, with no ensure-installed
+	// step before it, so install sets mise up itself on a fresh machine.
+	if command == "install" && !m.IsAvailable() {
+		if err := m.HandleEnsureInstalled(ctx, nil); err != nil {
+			return err
+		}
+		addUserBinToPath()
+		if !m.IsAvailable() {
+			return fmt.Errorf("mise was installed but is not on PATH; open a new shell and retry")
+		}
+	}
+
 	// Ensure Mise is available
 	m.EnsureAvailable()
 

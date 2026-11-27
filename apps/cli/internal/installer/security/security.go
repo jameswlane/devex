@@ -326,6 +326,7 @@ func DefaultTrustedDomains() []string {
 		"claude.ai",
 		"opencode.ai",
 		"code.kimi.com",
+		"chatgpt.com",
 		"zed.dev",
 	}
 }
