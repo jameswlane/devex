@@ -63,7 +63,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			if unmarshalErr := yaml.Unmarshal(data, &app); unmarshalErr != nil {
 				return unmarshalErr
 			}
-			if app.Category != "AI Coding Agents" {
+			if app.Category != "AI Coding Agents" && app.Category != "Local Models" {
 				return nil
 			}
 			agents[app.Name] = app
