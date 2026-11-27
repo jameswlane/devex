@@ -407,5 +407,168 @@ var _ = Describe("Install Channels CLI", func() {
 			Expect(ok).To(BeTrue())
 			Expect(rec.Channel).To(Equal("curlpipe"))
 		})
+
+		It("keeps the recorded non-default channel on install when no explicit preference is set (S1)", func() {
+			snapGhostty, err := settings.ApplicationOverrides[1].WithChannel("snap")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.AddApp(snapGhostty.Name)).To(Succeed())
+			Expect(inventory.Record(context.Background(), repo, snapGhostty, inventory.RecordOptions{
+				Query: func(context.Context, string, string) (bool, string, error) {
+					return true, "1.0.0", nil
+				},
+			})).To(Succeed())
+
+			// Text dry-run with no explicit preference must keep snap and not switch to apt.
+			Expect(runRoot("install", "Ghostty", "--dry-run", "--offline")).To(Succeed())
+			Expect(out.String()).NotTo(ContainSubstring("Would switch"))
+			Expect(out.String()).To(ContainSubstring("Would install Ghostty via channel snap"))
+
+			// JSON dry-run with no explicit preference must keep snap as well.
+			Expect(runRoot("install", "Ghostty", "--dry-run", "--format", "json", "--offline")).To(Succeed())
+			var env channelInstallPlanEnvelope
+			Expect(json.Unmarshal(out.Bytes(), &env)).To(Succeed())
+			Expect(env.Error).To(BeNil())
+			Expect(env.Apps).To(HaveLen(1))
+			Expect(env.Apps[0].Channel).To(Equal("snap"))
+
+			// Explicit --channel apt does describe the switch on plain dry-run.
+			Expect(runRoot("install", "Ghostty", "--channel", "apt", "--dry-run", "--offline")).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("Would switch Ghostty from channel snap to apt"))
+		})
+
+		It("refuses uninstall without clearing receipt when recorded channel is no longer in catalog and saved definition does not match (S5)", func() {
+			// Save a mismatched apt definition alongside a receipt naming a removed channel.
+			aptGhostty, err := settings.ApplicationOverrides[1].WithChannel("apt")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.AddApp("Ghostty")).To(Succeed())
+			defData, err := json.Marshal(aptGhostty)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.Set("installed-app-definition:ghostty", string(defData))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"legacy-mgr","channel":"legacy-ppa","packages":["ghostty"]}`)).To(Succeed())
+
+			inst := &channelTestInstaller{}
+			DeferCleanup(SetUninstallInstallerForTest(func(context.Context, string) types.BaseInstaller {
+				return inst
+			}))
+
+			cmd := NewUninstallCmd(repo, settings)
+			cmd.SetOut(&out)
+			cmd.SetErr(&errOut)
+			cmd.SetArgs([]string{"--app", "Ghostty", "--force"})
+			err = cmd.Execute()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("legacy-ppa"))
+			Expect(inst.uninstalled).To(BeEmpty())
+
+			// Receipt must still be present.
+			rec, ok := inventory.ReadReceipt(repo, "Ghostty")
+			Expect(ok).To(BeTrue())
+			Expect(rec.Channel).To(Equal("legacy-ppa"))
+
+			// channel_switch must also reject the mismatched saved definition rather than uninstalling apt.
+			snapGhostty, err := settings.ApplicationOverrides[1].WithChannel("snap")
+			Expect(err).NotTo(HaveOccurred())
+			err = prepareChannelSwitches(context.Background(), &out, []types.CrossPlatformApp{snapGhostty}, repo)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("legacy-ppa"))
+			Expect(inst.uninstalled).To(BeEmpty())
+		})
+
+		It("shows selected channel and offered channels in text dry-run even when not switching (S10)", func() {
+			Expect(runRoot("install", "Kimi Code", "--channel", "mise", "--dry-run", "--offline")).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("Would install Kimi Code via channel mise (channels: curlpipe (official, default), mise (official))"))
+
+			Expect(runRoot("install", "Kimi Code", "--dry-run", "--offline")).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("Would install Kimi Code via channel curlpipe (channels: curlpipe (official, default), mise (official))"))
+		})
+
+		It("refuses channel switches on JSON dry-run, --expect-plan, and executeSnapshotObserved (S3)", func() {
+			// Prepare a valid plan digest for Ghostty via snap before Ghostty is installed.
+			Expect(runRoot("install", "Ghostty", "--channel", "snap", "--dry-run", "--format", "json", "--offline")).To(Succeed())
+			var planned struct {
+				Digest string          `json:"digest"`
+				Error  *agentapi.Error `json:"error"`
+			}
+			Expect(json.Unmarshal(out.Bytes(), &planned)).To(Succeed())
+			Expect(planned.Error).To(BeNil())
+			Expect(planned.Digest).NotTo(BeEmpty())
+
+			// Now record Ghostty as installed through apt.
+			aptGhostty, err := settings.ApplicationOverrides[1].WithChannel("apt")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.AddApp(aptGhostty.Name)).To(Succeed())
+			Expect(inventory.Record(context.Background(), repo, aptGhostty, inventory.RecordOptions{
+				Query: func(context.Context, string, string) (bool, string, error) {
+					return true, "1.0.0", nil
+				},
+			})).To(Succeed())
+
+			expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall Ghostty' first, then install it with --channel snap`
+
+			// JSON dry-run refuses the switch.
+			err = runRoot("install", "Ghostty", "--channel", "snap", "--dry-run", "--format", "json", "--offline")
+			Expect(err).To(HaveOccurred())
+			var switchErrEnv channelInstallPlanEnvelope
+			Expect(json.Unmarshal(out.Bytes(), &switchErrEnv)).To(Succeed())
+			Expect(switchErrEnv.Error).NotTo(BeNil())
+			Expect(switchErrEnv.Error.Message).To(ContainSubstring(expectedMsg))
+
+			// Confirmed plan (--expect-plan) refuses the switch before any removal or install.
+			DeferCleanup(SetUninstallInstallerForTest(func(context.Context, string) types.BaseInstaller {
+				Fail("confirmed plan must never uninstall an existing channel")
+				return nil
+			}))
+			err = runRoot("install", "Ghostty", "--channel", "snap", "--expect-plan", planned.Digest, "--offline")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(expectedMsg))
+
+			// Re-check inside executeSnapshotObserved also refuses directly.
+			snapGhostty, err := settings.ApplicationOverrides[1].WithChannel("snap")
+			Expect(err).NotTo(HaveOccurred())
+			err = executeSnapshotObserved(context.Background(), &out, &errOut, agentapi.ExecutionSnapshot{
+				Roots:    []types.CrossPlatformApp{snapGhostty},
+				Settings: settings,
+			}, repo, nil, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(expectedMsg))
+
+			// Receipt remains intact.
+			rec, ok := inventory.ReadReceipt(repo, "Ghostty")
+			Expect(ok).To(BeTrue())
+			Expect(rec.Channel).To(Equal("apt"))
+		})
+
+		It("refuses channel switches on --rollback-on-failure before any removal (S6)", func() {
+			aptGhostty, err := settings.ApplicationOverrides[1].WithChannel("apt")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.AddApp(aptGhostty.Name)).To(Succeed())
+			Expect(inventory.Record(context.Background(), repo, aptGhostty, inventory.RecordOptions{
+				Query: func(context.Context, string, string) (bool, string, error) {
+					return true, "1.0.0", nil
+				},
+			})).To(Succeed())
+
+			DeferCleanup(SetUninstallInstallerForTest(func(context.Context, string) types.BaseInstaller {
+				Fail("--rollback-on-failure must never uninstall an existing channel")
+				return nil
+			}))
+
+			expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall Ghostty' first, then install it with --channel snap`
+
+			err = runRoot("install", "Ghostty", "--channel", "snap", "--rollback-on-failure", "--offline")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(expectedMsg))
+
+			// Direct runRollbackBatch call also refuses before any removal or install.
+			snapGhostty, err := settings.ApplicationOverrides[1].WithChannel("snap")
+			Expect(err).NotTo(HaveOccurred())
+			err = runRollbackBatch(context.Background(), &errOut, []types.CrossPlatformApp{snapGhostty}, repo, settings, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(expectedMsg))
+
+			rec, ok := inventory.ReadReceipt(repo, "Ghostty")
+			Expect(ok).To(BeTrue())
+			Expect(rec.Channel).To(Equal("apt"))
+		})
 	})
 })

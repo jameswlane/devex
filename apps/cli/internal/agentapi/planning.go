@@ -42,10 +42,12 @@ func APIError(err error) *Error {
 }
 
 type PlanRequest struct {
-	Names           []string
-	Categories      []string
-	Channel         string
-	RecordedChannel func(types.CrossPlatformApp) string
+	Names               []string
+	Categories          []string
+	Channel             string
+	RecordedChannel     func(types.CrossPlatformApp) string
+	Repo                types.Repository
+	RefuseChannelSwitch bool
 }
 
 // PlanChannel describes one available install channel for an application on the
@@ -153,7 +155,12 @@ func SelectApplicationsWithWarnings(ctx context.Context, s config.CrossPlatformS
 	}
 	filtered, headlessWarnings := filterHeadlessApplications(apps)
 	// A graphical sandbox prerequisite is skipped on headless hosts too.
-	expanded, prereqWarnings := filterHeadlessApplications(expandSandboxPrerequisites(filtered, s, planChannelPreferences(r).WithoutExplicitChannel()))
+	expanded, prereqWarnings := filterHeadlessApplications(expandSandboxPrerequisites(filtered, s, planChannelPreferences(r).WithoutExplicitChannel(), r.Repo))
+	if r.RefuseChannelSwitch && r.Repo != nil {
+		if switchErr := channels.CheckRefusedChannelSwitches(r.Repo, expanded); switchErr != nil {
+			return SelectionResult{Settings: s}, &Error{Category: "invalid_request", Message: switchErr.Error(), cause: switchErr}
+		}
+	}
 	warnings := make([]string, 0, len(osWarnings)+len(headlessWarnings)+len(prereqWarnings))
 	warnings = append(warnings, osWarnings...)
 	warnings = append(warnings, headlessWarnings...)
@@ -210,7 +217,18 @@ func selectRequestedApplications(ctx context.Context, s config.CrossPlatformSett
 	if len(apps) == 0 && len(warnings) == 0 && !present {
 		return nil, s, nil, &Error{Category: "not_found", Message: "no applications matched the install request"}
 	}
-	resolved, err := channels.ResolveAll(apps, planChannelPreferences(r), r.RecordedChannel)
+	var resolved []types.CrossPlatformApp
+	if r.RecordedChannel != nil {
+		resolved, err = channels.ResolveAll(apps, planChannelPreferences(r), r.RecordedChannel)
+	} else {
+		var installedLookup func(types.CrossPlatformApp) string
+		if r.Repo != nil {
+			installedLookup = func(app types.CrossPlatformApp) string {
+				return channels.InstalledChannelForApp(r.Repo, app)
+			}
+		}
+		resolved, err = channels.ResolveAllForInstall(apps, planChannelPreferences(r), installedLookup)
+	}
 	if err != nil {
 		return nil, s, nil, &Error{Category: "invalid_request", Message: err.Error(), cause: err}
 	}
@@ -223,7 +241,7 @@ func selectRequestedApplications(ctx context.Context, s config.CrossPlatformSett
 // catalog applications supported on this platform. The order depends only on
 // the set of selected apps' declarations, so resolving the expanded names again
 // (as MCP confirmation does) yields the same roots in the same order.
-func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings, prereqPrefs channels.Preferences) []types.CrossPlatformApp {
+func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings, prereqPrefs channels.Preferences, repo types.Repository) []types.CrossPlatformApp {
 	if len(apps) == 0 {
 		return apps
 	}
@@ -244,7 +262,8 @@ func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.C
 			if !ok || !prerequisite.IsSupported() {
 				continue
 			}
-			if selected, _, err := channels.Resolve(prerequisite, prereqPrefs, ""); err == nil {
+			recorded := channels.InstalledChannelForApp(repo, prerequisite)
+			if selected, _, err := channels.ResolveForInstall(prerequisite, prereqPrefs, recorded); err == nil {
 				prerequisite = selected
 			}
 			isPrerequisite[key] = true
@@ -295,7 +314,8 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 	aliases := map[string]string{}
 	depPrefs := planChannelPreferences(r).WithoutExplicitChannel()
 	for _, app := range s.GetAllApps() {
-		if selected, _, resolveErr := channels.Resolve(app, depPrefs, ""); resolveErr == nil {
+		recorded := channels.InstalledChannelForApp(r.Repo, app)
+		if selected, _, resolveErr := channels.ResolveForInstall(app, depPrefs, recorded); resolveErr == nil {
 			app = selected
 		}
 		byName[normalizeInstallLookup(app.Name)] = app

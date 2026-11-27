@@ -19,9 +19,10 @@ const (
 
 // planItem is one app in the install plan.
 type planItem struct {
-	app    types.CrossPlatformApp
-	group  planGroup
-	reason string // for dependencies: what needs it
+	app        types.CrossPlatformApp
+	group      planGroup
+	reason     string // for dependencies: what needs it
+	channelErr error  // invalid channel selection or refused channel switch
 }
 
 // installPlan returns every app setup will install, in install order. Both
@@ -35,7 +36,8 @@ func (m *SetupModel) installPlan() []planItem {
 			if m.selections.excludedDefaults[app.Name] {
 				continue
 			}
-			plan = append(plan, planItem{app: m.appWithSelectedChannel(app), group: planDefault})
+			resolved, chErr := m.resolvePlanApp(app, false)
+			plan = append(plan, planItem{app: resolved, group: planDefault, channelErr: chErr})
 		}
 	}
 
@@ -60,7 +62,8 @@ func (m *SetupModel) installPlan() []planItem {
 	if m.system.hasDesktop {
 		for _, name := range m.getSelectedDesktopApps() {
 			if app := m.getDesktopAppByName(name); app != nil {
-				plan = append(plan, planItem{app: m.appWithSelectedChannel(*app), group: planSelected})
+				resolved, chErr := m.resolvePlanApp(*app, false)
+				plan = append(plan, planItem{app: resolved, group: planSelected, channelErr: chErr})
 			}
 		}
 	}
@@ -114,5 +117,12 @@ func (m *SetupModel) refreshInstalledApps() {
 		ctx = context.Background()
 	}
 	m.refreshDesktopPreview(ctx)
-	m.selections.alreadyInstalled = tui.SkippableInstalledApps(m.repo, installedAppsCheck(ctx, planApps(m.installPlan())))
+	plan := m.installPlan()
+	checkable := make([]types.CrossPlatformApp, 0, len(plan))
+	for _, item := range plan {
+		if item.channelErr == nil {
+			checkable = append(checkable, item.app)
+		}
+	}
+	m.selections.alreadyInstalled = tui.SkippableInstalledApps(m.repo, installedAppsCheck(ctx, checkable))
 }

@@ -35,8 +35,17 @@ func (m *SetupModel) installSelectedApps() {
 		return
 	}
 
+	// Validate channel selections and refuse channel switches before installing anything.
+	plan := m.installPlan()
+	if errs := planChannelErrors(plan); len(errs) > 0 {
+		for _, err := range errs {
+			m.installation.addError(err.Error())
+		}
+		return
+	}
+
 	// Convert selections to CrossPlatformApp objects
-	apps := m.buildAppList()
+	apps := planApps(plan)
 
 	log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
 

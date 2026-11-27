@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/inventory"
-	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -120,12 +118,4 @@ Nothing is changed. Use --check in automation to exit nonzero on drift.`,
 	cmd.Flags().BoolVar(&check, "check", false, "Exit nonzero when there is drift")
 	cmd.Flags().BoolVar(&unmanaged, "include-unmanaged", false, "Also list catalog applications installed natively but not tracked by DevEx")
 	return cmd
-}
-
-// recordInstallReceipt records the installed version, manager and machine
-// for devex inventory. It only warns on failure: the install itself succeeded.
-func recordInstallReceipt(ctx context.Context, repo types.Repository, app types.CrossPlatformApp) {
-	if err := inventory.Record(ctx, repo, app, inventory.RecordOptions{}); err != nil {
-		log.Warn("Could not record the installed version", "app", app.Name, "error", err)
-	}
 }

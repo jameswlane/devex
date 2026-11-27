@@ -1,15 +1,20 @@
 package setup
 
 import (
+	"context"
+	"encoding/json"
+
 	tea "github.com/charmbracelet/bubbletea"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -185,5 +190,150 @@ var _ = Describe("Setup TUI Install Channels", func() {
 		Expect(ghostty).NotTo(BeNil())
 		Expect(ghostty.SelectedChannel()).To(Equal("snap"))
 		Expect(ghostty.GetOSConfig().InstallMethod).To(Equal("snap"))
+	})
+
+	It("refuses channel switches in interactive setup before installed-state skip checks and before installing (S2)", func() {
+		aptGhostty, err := settings.ApplicationOverrides[2].WithChannel("apt")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo.AddApp(aptGhostty.Name)).To(Succeed())
+		Expect(inventory.Record(context.Background(), repo, aptGhostty, inventory.RecordOptions{
+			Query: func(context.Context, string, string) (bool, string, error) { return true, "1.0.0", nil },
+		})).To(Succeed())
+
+		oldCheck := installedAppsCheck
+		DeferCleanup(func() { installedAppsCheck = oldCheck })
+		installedAppsCheck = func(_ context.Context, apps []types.CrossPlatformApp) map[string]bool {
+			res := map[string]bool{}
+			for _, app := range apps {
+				res[app.Name] = true
+			}
+			return res
+		}
+
+		model := NewSetupModel(repo, settings, plat)
+		model.selections.skipDefaultApps = true
+		model.selections.selectedDesktopApps["Ghostty"] = true
+		model.selections.selectedChannels["Ghostty"] = "snap"
+		model.step = StepConfirmation
+		model.refreshInstalledApps()
+
+		expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall Ghostty' first, then install it with --channel snap`
+
+		// Error is shown in the plan and is NOT masked by "already installed, will skip".
+		confirmView := model.View()
+		Expect(confirmView).To(ContainSubstring(expectedMsg))
+		Expect(confirmView).NotTo(ContainSubstring("already installed, will skip"))
+
+		// Pressing Enter on Confirmation refuses to start installation.
+		updated, cmd := model.handleEnter()
+		Expect(updated.step).To(Equal(StepConfirmation))
+		Expect(cmd).To(BeNil())
+
+		// Direct installSelectedApps call records the refusal error without installing.
+		model.installSelectedApps()
+		Expect(model.HasErrors()).To(BeTrue())
+		Expect(model.installation.getErrors()).To(ContainElement(ContainSubstring(expectedMsg)))
+	})
+
+	It("refuses channel switches in automated setup before installing anything (S2)", func() {
+		curlKimi, err := settings.ApplicationOverrides[1].WithChannel("curlpipe")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo.AddApp(curlKimi.Name)).To(Succeed())
+		Expect(inventory.Record(context.Background(), repo, curlKimi, inventory.RecordOptions{
+			Query: func(context.Context, string, string) (bool, string, error) { return true, "1.0.0", nil },
+		})).To(Succeed())
+
+		oldInstall := installAutomatedApp
+		oldCheck := installedAppsCheck
+		DeferCleanup(func() {
+			installAutomatedApp = oldInstall
+			installedAppsCheck = oldCheck
+		})
+		installed := false
+		installAutomatedApp = func(context.Context, types.CrossPlatformApp, config.CrossPlatformSettings, types.Repository) error {
+			installed = true
+			return nil
+		}
+		installedAppsCheck = func(context.Context, []types.CrossPlatformApp) map[string]bool {
+			return map[string]bool{"Kimi Code": true}
+		}
+
+		viper.Set("no-defaults", true)
+		viper.Set("setup.ai_agents.apps", []string{"Kimi Code"})
+		viper.Set("channel", "mise")
+
+		err = RunAutomatedSetup(context.Background(), repo, settings)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(`Kimi Code is installed through channel "curlpipe"; run 'devex uninstall Kimi Code' first, then install it with --channel mise`))
+		Expect(installed).To(BeFalse())
+	})
+
+	It("surfaces unknown --channel and invalid per-app channel errors with offered channels before installing (S7)", func() {
+		viper.Set("no-defaults", true)
+		viper.Set("setup.ai_agents.apps", []string{"Kimi Code"})
+		viper.Set("channel", "bogus")
+
+		err := RunAutomatedSetup(context.Background(), repo, settings)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(`Kimi Code has no channel "bogus" on linux`))
+		Expect(err.Error()).To(ContainSubstring(`curlpipe (official, default)`))
+		Expect(err.Error()).To(ContainSubstring(`mise (official)`))
+
+		// Invalid per-app channels: preference is also surfaced with offered channels.
+		viper.Set("channel", "")
+		viper.Set("channels", map[string]any{"kimi-code": "bogus"})
+		err = RunAutomatedSetup(context.Background(), repo, settings)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(`Kimi Code has no channel "bogus" on linux`))
+		Expect(err.Error()).To(ContainSubstring(`available channels:`))
+
+		// Interactive confirmation view also surfaces the selection error and blocks Enter.
+		model := NewSetupModel(repo, settings, plat)
+		model.selections.skipDefaultApps = true
+		model.selections.selectedAIAgents["Kimi Code"] = true
+		model.step = StepConfirmation
+		Expect(model.View()).To(ContainSubstring(`Kimi Code has no channel "bogus" on linux`))
+		updated, cmd := model.handleEnter()
+		Expect(updated.step).To(Equal(StepConfirmation))
+		Expect(cmd).To(BeNil())
+	})
+
+	It("registers apps and records inventory receipts with the selected channel after automated installs (S8)", func() {
+		oldBatch := preparePackageBatch
+		oldInstall := installAutomatedApp
+		DeferCleanup(func() {
+			preparePackageBatch = oldBatch
+			installAutomatedApp = oldInstall
+		})
+		preparePackageBatch = func(context.Context, []types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) (tui.PackageBatch, error) {
+			return tui.PackageBatch{}, nil
+		}
+		installAutomatedApp = func(context.Context, types.CrossPlatformApp, config.CrossPlatformSettings, types.Repository) error {
+			return nil
+		}
+
+		miseKimi, err := settings.ApplicationOverrides[1].WithChannel("mise")
+		Expect(err).NotTo(HaveOccurred())
+
+		outcomes := tui.NewOutcomeRecorder()
+		failures, err := installAutomatedApps(context.Background(), []types.CrossPlatformApp{miseKimi}, nil, outcomes, settings, repo)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(failures).To(BeEmpty())
+
+		tracked, err := repo.GetApp("Kimi Code")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(tracked).NotTo(BeNil())
+
+		def, err := repo.Get("installed-app-definition:kimi code")
+		Expect(err).NotTo(HaveOccurred())
+		var saved types.CrossPlatformApp
+		Expect(json.Unmarshal([]byte(def), &saved)).To(Succeed())
+		Expect(saved.SelectedChannel()).To(Equal("mise"))
+		Expect(saved.GetOSConfig().InstallMethod).To(Equal("mise"))
+
+		receipt, ok := inventory.ReadReceipt(repo, "Kimi Code")
+		Expect(ok).To(BeTrue())
+		Expect(receipt.Channel).To(Equal("mise"))
+		Expect(receipt.Manager).To(Equal("mise"))
 	})
 })

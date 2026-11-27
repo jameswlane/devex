@@ -15,18 +15,25 @@ func (m *SetupModel) renderInstallPlan() string {
 	plan := m.installPlan()
 	noteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
 
 	var b strings.Builder
 	b.WriteString("Setup will make these changes:\n\n")
 
 	toInstall := 0
+	blocked := 0
 	needsAptUpdate := false
 	section := func(title string, group planGroup) {
 		items := plan
 		if group == planDefault && !m.selections.skipDefaultApps {
 			items = make([]planItem, 0, len(m.getDefaultApps()))
 			for _, app := range m.getDefaultApps() {
-				items = append(items, planItem{app: m.appWithSelectedChannel(app), group: planDefault})
+				if m.selections.excludedDefaults[app.Name] {
+					items = append(items, planItem{app: m.appWithSelectedChannel(app), group: planDefault})
+					continue
+				}
+				resolved, chErr := m.resolvePlanApp(app, false)
+				items = append(items, planItem{app: resolved, group: planDefault, channelErr: chErr})
 			}
 		}
 
@@ -57,6 +64,12 @@ func (m *SetupModel) renderInstallPlan() string {
 			}
 			if item.reason != "" {
 				line += noteStyle.Render(" (for " + item.reason + ")")
+			}
+			if item.channelErr != nil {
+				blocked++
+				line += " — " + errorStyle.Render(item.channelErr.Error())
+				lines = append(lines, line)
+				continue
 			}
 			if m.selections.alreadyInstalled[item.app.Name] {
 				line += noteStyle.Render(" — already installed, will skip")
@@ -152,10 +165,16 @@ func (m *SetupModel) renderInstallPlan() string {
 	b.WriteString("\n")
 
 	fmt.Fprintf(&b, "Total: %d apps to install", toInstall)
-	if skipped := len(plan) - toInstall; skipped > 0 {
+	if skipped := len(plan) - toInstall - blocked; skipped > 0 {
 		fmt.Fprintf(&b, ", %d already installed", skipped)
 	}
+	if blocked > 0 {
+		fmt.Fprintf(&b, ", %d channel error(s)", blocked)
+	}
 	b.WriteString("\n\n")
+	if blocked > 0 {
+		b.WriteString(errorStyle.Render("Resolve the channel error(s) above before starting installation.") + "\n\n")
+	}
 
 	toggle := "skip"
 	if m.selections.skipDefaultApps {

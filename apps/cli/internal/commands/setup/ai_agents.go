@@ -249,17 +249,22 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 	var miseRequesters []string
 	prereqOrder := make([]string, 0)
 	prereqApps := make(map[string]types.CrossPlatformApp)
+	prereqErrs := make(map[string]error)
 	prereqRequesters := make(map[string][]string)
 
-	resolvedSelected := make([]types.CrossPlatformApp, 0, len(selected))
+	type resolvedAgent struct {
+		app types.CrossPlatformApp
+		err error
+	}
+	resolvedSelected := make([]resolvedAgent, 0, len(selected))
 	for _, app := range selected {
-		app = m.appWithSelectedChannel(app)
-		resolvedSelected = append(resolvedSelected, app)
-		cfg := osConfigForPlatform(app, m.system.detectedPlatform.OS)
+		resolved, chErr := m.resolvePlanApp(app, false)
+		resolvedSelected = append(resolvedSelected, resolvedAgent{app: resolved, err: chErr})
+		cfg := osConfigForPlatform(resolved, m.system.detectedPlatform.OS)
 		if cfg.InstallMethod == "mise" {
-			miseRequesters = append(miseRequesters, app.Name)
+			miseRequesters = append(miseRequesters, resolved.Name)
 		}
-		appKey := strings.ToLower(strings.TrimSpace(app.Name))
+		appKey := strings.ToLower(strings.TrimSpace(resolved.Name))
 		for _, prereqName := range cfg.SandboxPrerequisites {
 			key := strings.ToLower(strings.TrimSpace(prereqName))
 			if key == "" || key == appKey || existingNames[key] {
@@ -271,9 +276,11 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 			}
 			if _, seen := prereqApps[key]; !seen {
 				prereqOrder = append(prereqOrder, key)
-				prereqApps[key] = m.appWithSelectedChannel(prereqApp)
+				resolvedPrereq, prereqErr := m.resolvePlanApp(prereqApp, true)
+				prereqApps[key] = resolvedPrereq
+				prereqErrs[key] = prereqErr
 			}
-			prereqRequesters[key] = append(prereqRequesters[key], app.Name)
+			prereqRequesters[key] = append(prereqRequesters[key], resolved.Name)
 		}
 	}
 
@@ -290,21 +297,22 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 
 	for _, key := range prereqOrder {
 		deps = append(deps, planItem{
-			app:    prereqApps[key],
-			group:  planDependency,
-			reason: "AI agents: " + strings.Join(prereqRequesters[key], ", "),
+			app:        prereqApps[key],
+			group:      planDependency,
+			reason:     "AI agents: " + strings.Join(prereqRequesters[key], ", "),
+			channelErr: prereqErrs[key],
 		})
 		existingNames[key] = true
 	}
 
 	selectedItems := make([]planItem, 0, len(resolvedSelected))
-	for _, app := range resolvedSelected {
-		key := strings.ToLower(strings.TrimSpace(app.Name))
+	for _, entry := range resolvedSelected {
+		key := strings.ToLower(strings.TrimSpace(entry.app.Name))
 		if existingNames[key] {
 			continue
 		}
 		existingNames[key] = true
-		selectedItems = append(selectedItems, planItem{app: app, group: planSelected})
+		selectedItems = append(selectedItems, planItem{app: entry.app, group: planSelected, channelErr: entry.err})
 	}
 
 	return deps, selectedItems

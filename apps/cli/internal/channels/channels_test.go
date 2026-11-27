@@ -119,6 +119,35 @@ var _ = Describe("Channel resolution", func() {
 		Expect(selected.GetOSConfig().OfficialSupport).To(BeTrue())
 	})
 
+	It("skips 'official' in channel_order when no available channel has official_support: true, while keeping explicit --channel official fallback", func() {
+		unofficialApp := types.CrossPlatformApp{
+			Name: "ToolNoOfficial",
+			Linux: types.OSConfig{
+				InstallMethod:   "apt",
+				InstallCommand:  "tool",
+				OfficialSupport: false,
+				Alternatives: []types.OSConfig{
+					{
+						InstallMethod:   "mise",
+						InstallCommand:  "tool@latest",
+						OfficialSupport: false,
+					},
+				},
+			},
+		}
+
+		selected, ch, err := channels.Resolve(unofficialApp, channels.Preferences{Order: []string{"official", "mise"}}, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ch).To(Equal("mise"))
+		Expect(selected.GetOSConfig().InstallMethod).To(Equal("mise"))
+
+		// Explicit --channel official keeps its fallback-to-default behaviour.
+		explicitSelected, explicitCh, err := channels.Resolve(unofficialApp, channels.Preferences{Channel: "official"}, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(explicitCh).To(Equal("apt"))
+		Expect(explicitSelected.GetOSConfig().InstallMethod).To(Equal("apt"))
+	})
+
 	It("falls back to default when no channel_order entry matches", func() {
 		app := newGit()
 		selected, ch, err := channels.Resolve(app, channels.Preferences{Order: []string{"mise", "brew"}}, "")

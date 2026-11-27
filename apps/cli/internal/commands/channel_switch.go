@@ -68,20 +68,26 @@ func detectChannelSwitch(repo types.Repository, app types.CrossPlatformApp) (cha
 
 	var oldCfg types.AppConfig
 	foundOld := false
-	switch {
-	case savedDef.Name != "" && (strings.EqualFold(savedDef.SelectedChannel(), oldChannel) || (hasReceipt && strings.EqualFold(savedDef.GetOSConfig().InstallMethod, receipt.Manager))):
-		oldCfg = savedDef.ToLegacyAppConfig()
-		foundOld = true
-	default:
+	if savedDef.Name != "" {
+		if hasReceipt {
+			if matched, ok := matchCrossPlatformAppToReceipt(savedDef, receipt); ok {
+				oldCfg = matched.ToLegacyAppConfig()
+				foundOld = true
+			}
+		} else if strings.EqualFold(savedDef.SelectedChannel(), oldChannel) {
+			oldCfg = savedDef.ToLegacyAppConfig()
+			foundOld = true
+		}
+	}
+	if !foundOld {
 		if oldCross, err := app.WithChannel(oldChannel); err == nil {
 			oldCfg = oldCross.ToLegacyAppConfig()
 			foundOld = true
-		} else if savedDef.Name != "" {
-			oldCfg = savedDef.ToLegacyAppConfig()
-			foundOld = true
 		} else if tracked != nil && tracked.InstallMethod != "" {
-			oldCfg = *tracked
-			foundOld = true
+			if !hasReceipt || appConfigMatchesReceipt(*tracked, receipt) {
+				oldCfg = *tracked
+				foundOld = true
+			}
 		}
 	}
 
@@ -101,6 +107,47 @@ func detectChannelSwitch(repo types.Repository, app types.CrossPlatformApp) (cha
 	}
 	plan.CanRemove = true
 	return plan, true
+}
+
+// matchCrossPlatformAppToReceipt returns the channel-selected definition when
+// def matches receipt's recorded channel (or legacy manager), and false when
+// def belongs to a different channel/manager.
+func matchCrossPlatformAppToReceipt(def types.CrossPlatformApp, receipt inventory.Receipt) (types.CrossPlatformApp, bool) {
+	if recCh := strings.TrimSpace(receipt.Channel); recCh != "" {
+		if strings.EqualFold(def.SelectedChannel(), recCh) {
+			return def, true
+		}
+		if switched, err := def.WithChannel(recCh); err == nil {
+			return switched, true
+		}
+		return types.CrossPlatformApp{}, false
+	}
+	if recMgr := strings.TrimSpace(receipt.Manager); recMgr != "" && recMgr != "unknown" {
+		if strings.EqualFold(def.GetOSConfig().InstallMethod, recMgr) {
+			return def, true
+		}
+		if inferred := channels.InferRecordedChannel(receipt, def); inferred != "" {
+			if switched, err := def.WithChannel(inferred); err == nil {
+				return switched, true
+			}
+		}
+		return types.CrossPlatformApp{}, false
+	}
+	return def, true
+}
+
+func appConfigMatchesReceipt(cfg types.AppConfig, receipt inventory.Receipt) bool {
+	if recCh := strings.TrimSpace(receipt.Channel); recCh != "" {
+		cfgCh := strings.TrimSpace(cfg.Channel)
+		if cfgCh == "" {
+			cfgCh = strings.TrimSpace(cfg.InstallMethod)
+		}
+		return strings.EqualFold(cfgCh, recCh)
+	}
+	if recMgr := strings.TrimSpace(receipt.Manager); recMgr != "" && recMgr != "unknown" {
+		return strings.EqualFold(strings.TrimSpace(cfg.InstallMethod), recMgr)
+	}
+	return true
 }
 
 // switchUninstallOldChannel removes the previous channel during a channel

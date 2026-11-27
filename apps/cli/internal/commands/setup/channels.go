@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -8,8 +9,40 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
+// resolvePlanApp resolves app's install channel for setup planning and refuses
+// switches away from a different recorded channel. When isDependency is true,
+// the run-level --channel / DEVEX_CHANNEL override is omitted so auto-expanded
+// prerequisites keep their own preferences or recorded channel.
+func (m *SetupModel) resolvePlanApp(app types.CrossPlatformApp, isDependency bool) (types.CrossPlatformApp, error) {
+	var resolved types.CrossPlatformApp
+	var err error
+	if m.selections.selectedChannels != nil {
+		if ch := strings.TrimSpace(m.selections.selectedChannels[app.Name]); ch != "" {
+			resolved, err = app.WithChannel(ch)
+			if err != nil {
+				return app, err
+			}
+		}
+	}
+	if resolved.Name == "" {
+		prefs := channels.PreferencesFromViper()
+		if isDependency {
+			prefs = prefs.WithoutExplicitChannel()
+		}
+		recorded := channels.InstalledChannelForApp(m.repo, app)
+		resolved, _, err = channels.ResolveForInstall(app, prefs, recorded)
+		if err != nil {
+			return app, err
+		}
+	}
+	if switchErr := channels.CheckRefusedChannelSwitch(m.repo, resolved); switchErr != nil {
+		return resolved, switchErr
+	}
+	return resolved, nil
+}
+
 // appWithSelectedChannel applies any interactive TUI channel choice for app,
-// falling back to configured channel preferences (flags/env/config/order).
+// falling back to configured channel preferences or recorded channel for display.
 func (m *SetupModel) appWithSelectedChannel(app types.CrossPlatformApp) types.CrossPlatformApp {
 	if m.selections.selectedChannels != nil {
 		if ch := strings.TrimSpace(m.selections.selectedChannels[app.Name]); ch != "" {
@@ -19,13 +52,39 @@ func (m *SetupModel) appWithSelectedChannel(app types.CrossPlatformApp) types.Cr
 		}
 	}
 	prefs := channels.PreferencesFromViper()
-	if chosen, _, err := channels.Resolve(app, prefs, ""); err == nil {
+	recorded := channels.InstalledChannelForApp(m.repo, app)
+	if chosen, _, err := channels.ResolveForInstall(app, prefs, recorded); err == nil {
 		return chosen
 	}
-	if chosen, _, err := channels.Resolve(app, prefs.WithoutExplicitChannel(), ""); err == nil {
+	if chosen, _, err := channels.ResolveForInstall(app, prefs.WithoutExplicitChannel(), recorded); err == nil {
 		return chosen
 	}
 	return app
+}
+
+func planChannelErrors(plan []planItem) []error {
+	var errs []error
+	for _, item := range plan {
+		if item.channelErr != nil {
+			errs = append(errs, item.channelErr)
+		}
+	}
+	return errs
+}
+
+func joinPlanChannelErrors(plan []planItem) error {
+	errs := planChannelErrors(plan)
+	if len(errs) == 0 {
+		return nil
+	}
+	if len(errs) == 1 {
+		return errs[0]
+	}
+	return errors.Join(errs...)
+}
+
+func (m *SetupModel) validatePlanChannels() error {
+	return joinPlanChannelErrors(m.installPlan())
 }
 
 // cycleAppChannel switches the highlighted application to its next available

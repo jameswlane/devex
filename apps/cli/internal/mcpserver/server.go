@@ -379,7 +379,13 @@ func (s *server) planInstall(ctx context.Context, _ *mcp.CallToolRequest, in Pla
 		return nil, agentapi.Plan{}, err
 	}
 	defer done()
-	plan, err := agentapi.PlanInstall(ctx, s.opts.Settings, agentapi.PlanRequest{Names: in.Apps, Categories: in.Categories, Channel: in.Channel})
+	plan, err := agentapi.PlanInstall(ctx, s.opts.Settings, agentapi.PlanRequest{
+		Names:               in.Apps,
+		Categories:          in.Categories,
+		Channel:             in.Channel,
+		Repo:                s.opts.Repo,
+		RefuseChannelSwitch: true,
+	})
 	if err != nil {
 		return nil, agentapi.Plan{}, toolError(err)
 	}

@@ -80,6 +80,31 @@ func Record(ctx context.Context, repo Writer, app types.CrossPlatformApp, option
 	return nil
 }
 
+// RegisterInstalled writes the tracking row, saved CrossPlatformApp definition,
+// and inventory receipt for an installed application. A receipt failure is
+// passed to onReceiptError (when non-nil) rather than failing registration.
+func RegisterInstalled(ctx context.Context, repo types.Repository, app types.CrossPlatformApp, onReceiptError func(error)) error {
+	if repo == nil {
+		return nil
+	}
+	if existing, lookupErr := repo.GetApp(app.Name); lookupErr != nil || existing == nil {
+		if err := repo.AddApp(app.Name); err != nil {
+			return err
+		}
+	}
+	data, err := json.Marshal(app)
+	if err != nil {
+		return err
+	}
+	if err := repo.Set("installed-app-definition:"+strings.ToLower(strings.TrimSpace(app.Name)), string(data)); err != nil {
+		return err
+	}
+	if err := Record(ctx, repo, app, RecordOptions{}); err != nil && onReceiptError != nil {
+		onReceiptError(err)
+	}
+	return nil
+}
+
 // ReceiptGetter is the minimal datastore interface ReadReceipt needs.
 type ReceiptGetter interface {
 	Get(key string) (string, error)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/mcpserver"
@@ -73,10 +74,17 @@ func (e *mcpExecutor) progress() *mcpserver.RedactingWriter {
 }
 
 func (e *mcpExecutor) ResolveInstall(ctx context.Context, request agentapi.PlanRequest) (agentapi.ExecutionSnapshot, error) {
+	if request.Repo == nil {
+		request.Repo = e.repo
+	}
+	request.RefuseChannelSwitch = true
 	return agentapi.ResolveExecution(ctx, e.settings, request, currentExecutionPolicy(), currentExecutionTrust())
 }
 
 func (e *mcpExecutor) Install(ctx context.Context, snapshot agentapi.ExecutionSnapshot) ([]mcpserver.Outcome, error) {
+	if err := channels.CheckRefusedChannelSwitches(e.repo, snapshot.Roots); err != nil {
+		return nil, err
+	}
 	// Mutations are serialized by the server. Use a private Viper during
 	// execution so pinning cannot hide later config/environment changes from
 	// the next request, or mutate the original flags and override maps.

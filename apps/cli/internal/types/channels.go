@@ -246,7 +246,7 @@ func (app CrossPlatformApp) WithChannel(name string) (CrossPlatformApp, error) {
 	}
 
 	if matchIdx < 0 {
-		avail := formatAvailableChannels(app.Channels())
+		avail := FormatAvailableChannels(app.Channels())
 		if knownButUnavailable {
 			return CrossPlatformApp{}, fmt.Errorf("%s channel %q is not available on %s; available channels: %s", app.Name, wanted, catalogOS, avail)
 		}
@@ -277,7 +277,9 @@ func (app CrossPlatformApp) WithChannel(name string) (CrossPlatformApp, error) {
 	return copied, nil
 }
 
-func formatAvailableChannels(infos []ChannelInfo) string {
+// FormatAvailableChannels formats the available channels in infos as a
+// comma-separated list with official and default markers.
+func FormatAvailableChannels(infos []ChannelInfo) string {
 	parts := make([]string, 0, len(infos))
 	for _, ch := range infos {
 		if !ch.Available {

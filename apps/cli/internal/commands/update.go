@@ -36,19 +36,9 @@ func NewUpdateCmd(settings config.CrossPlatformSettings) *cobra.Command {
 	return newPackageMaintenanceCmdWithRepo("update", nil, settings, nil)
 }
 
-// NewUpdateCmdWithRepo creates an update command that follows recorded install channels.
-func NewUpdateCmdWithRepo(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
-	return newPackageMaintenanceCmdWithRepo("update", repo, settings, nil)
-}
-
 // NewUpgradeCmd upgrades only packages belonging to the selected applications.
 func NewUpgradeCmd(settings config.CrossPlatformSettings) *cobra.Command {
 	return newPackageMaintenanceCmdWithRepo("upgrade", nil, settings, nil)
-}
-
-// NewUpgradeCmdWithRepo creates an upgrade command that follows recorded install channels.
-func NewUpgradeCmdWithRepo(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
-	return newPackageMaintenanceCmdWithRepo("upgrade", repo, settings, nil)
 }
 
 var maintenanceExecutor = func(ctx context.Context, provider pluginBootstrapProvider) (packageMaintenanceExecutor, error) {

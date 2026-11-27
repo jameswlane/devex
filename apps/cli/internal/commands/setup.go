@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -163,7 +164,7 @@ Run 'devex setup' to begin the guided installation process.`,
 			if !setup.IsInteractiveMode() {
 				log.Info("Running in non-interactive automated mode")
 				if viper.IsSet("applications") {
-					installErr := executeInstallWithOutput(ctx, nil, nil, verbose, viper.GetBool("dry-run"), repo, settings, cmd.OutOrStdout(), nil)
+					installErr := executeInstallWithChannelPolicy(ctx, nil, nil, strings.TrimSpace(viper.GetString("channel")), true, verbose, viper.GetBool("dry-run"), repo, settings, cmd.OutOrStdout(), nil)
 					if installErr != nil || viper.GetBool("dry-run") {
 						return installErr
 					}

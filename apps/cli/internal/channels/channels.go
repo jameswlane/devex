@@ -1,6 +1,7 @@
 package channels
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -117,6 +118,9 @@ func Resolve(app types.CrossPlatformApp, prefs Preferences, recordedChannel stri
 		if candidate == "" {
 			continue
 		}
+		if strings.EqualFold(candidate, types.ChannelOfficial) && !hasAvailableOfficialChannel(app) {
+			continue
+		}
 		if selected, err := app.WithChannel(candidate); err == nil {
 			return selected, selected.SelectedChannel(), nil
 		}
@@ -125,11 +129,80 @@ func Resolve(app types.CrossPlatformApp, prefs Preferences, recordedChannel stri
 	return app, app.SelectedChannel(), nil
 }
 
+// ResolveForInstall selects the install channel for app during installation:
+//  1. prefs.Channel (--channel flag or DEVEX_CHANNEL)
+//  2. prefs.AppChannels (per-app `channels:` config entry)
+//  3. prefs.Order (first entry in `channel_order:` that actually matches an available channel)
+//  4. recordedChannel (keeps an already-installed channel when no explicit preference matches)
+//  5. default (unchanged GetOSConfig behaviour)
+func ResolveForInstall(app types.CrossPlatformApp, prefs Preferences, recordedChannel string) (types.CrossPlatformApp, string, error) {
+	if explicit := strings.TrimSpace(prefs.Channel); explicit != "" {
+		selected, err := app.WithChannel(explicit)
+		if err != nil {
+			return types.CrossPlatformApp{}, "", err
+		}
+		return selected, selected.SelectedChannel(), nil
+	}
+
+	if perApp, ok := lookupAppChannel(app, prefs.AppChannels); ok {
+		selected, err := app.WithChannel(perApp)
+		if err != nil {
+			return types.CrossPlatformApp{}, "", err
+		}
+		return selected, selected.SelectedChannel(), nil
+	}
+
+	for _, candidate := range prefs.Order {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if strings.EqualFold(candidate, types.ChannelOfficial) && !hasAvailableOfficialChannel(app) {
+			continue
+		}
+		if selected, err := app.WithChannel(candidate); err == nil {
+			return selected, selected.SelectedChannel(), nil
+		}
+	}
+
+	if rec := strings.TrimSpace(recordedChannel); rec != "" {
+		if selected, err := app.WithChannel(rec); err == nil {
+			return selected, selected.SelectedChannel(), nil
+		}
+	}
+
+	return app, app.SelectedChannel(), nil
+}
+
+func hasAvailableOfficialChannel(app types.CrossPlatformApp) bool {
+	for _, ch := range app.Channels() {
+		if ch.Available && ch.Official {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveAll resolves channels for every app in apps. When multiple apps fail
 // (for example, --channel passed with multiple apps or a category where some
 // apps do not offer that channel), all failures are collected and reported
 // together.
 func ResolveAll(apps []types.CrossPlatformApp, prefs Preferences, recorded func(types.CrossPlatformApp) string) ([]types.CrossPlatformApp, error) {
+	return resolveAllWith(apps, prefs, recorded, Resolve)
+}
+
+// ResolveAllForInstall resolves channels for installation, keeping each app's
+// recorded channel unless an explicit preference matches.
+func ResolveAllForInstall(apps []types.CrossPlatformApp, prefs Preferences, recorded func(types.CrossPlatformApp) string) ([]types.CrossPlatformApp, error) {
+	return resolveAllWith(apps, prefs, recorded, ResolveForInstall)
+}
+
+func resolveAllWith(
+	apps []types.CrossPlatformApp,
+	prefs Preferences,
+	recorded func(types.CrossPlatformApp) string,
+	resolver func(types.CrossPlatformApp, Preferences, string) (types.CrossPlatformApp, string, error),
+) ([]types.CrossPlatformApp, error) {
 	resolved := make([]types.CrossPlatformApp, 0, len(apps))
 	var failures []string
 	for _, app := range apps {
@@ -137,7 +210,7 @@ func ResolveAll(apps []types.CrossPlatformApp, prefs Preferences, recorded func(
 		if recorded != nil {
 			rec = recorded(app)
 		}
-		selected, _, err := Resolve(app, prefs, rec)
+		selected, _, err := resolver(app, prefs, rec)
 		if err != nil {
 			failures = append(failures, err.Error())
 			continue
@@ -191,6 +264,82 @@ func RecordedChannelForApp(repo ReceiptGetter, app types.CrossPlatformApp) strin
 		return ""
 	}
 	return InferRecordedChannel(receipt, app)
+}
+
+// InstalledChannelForApp returns the channel currently recorded for app in repo
+// (checking the inventory receipt first, then saved definition, then tracked
+// app record), or "" when app has no recorded install channel.
+func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) string {
+	if repo == nil {
+		return ""
+	}
+	if receipt, ok := inventory.ReadReceipt(repo, app.Name); ok {
+		if ch := InferRecordedChannel(receipt, app); ch != "" {
+			return ch
+		}
+		if mgr := strings.TrimSpace(receipt.Manager); mgr != "" && mgr != "unknown" {
+			return mgr
+		}
+		return ""
+	}
+	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
+		var saved types.CrossPlatformApp
+		if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
+			return saved.SelectedChannel()
+		}
+	}
+	if tracked, err := repo.GetApp(app.Name); err == nil && tracked != nil {
+		if ch := strings.TrimSpace(tracked.Channel); ch != "" {
+			return ch
+		}
+		return strings.TrimSpace(tracked.InstallMethod)
+	}
+	return ""
+}
+
+// SwitchRefusalError formats the standard error returned when a path other than
+// plain `devex install` would switch an already-installed application's channel.
+func SwitchRefusalError(appName, oldChannel, newChannel string) error {
+	return fmt.Errorf("%s is installed through channel %q; run 'devex uninstall %s' first, then install it with --channel %s",
+		appName, oldChannel, appName, newChannel)
+}
+
+// CheckRefusedChannelSwitch returns SwitchRefusalError if installing app would
+// switch away from a different channel recorded in repo.
+func CheckRefusedChannelSwitch(repo types.Repository, app types.CrossPlatformApp) error {
+	if repo == nil {
+		return nil
+	}
+	newChannel := strings.TrimSpace(app.SelectedChannel())
+	if newChannel == "" {
+		return nil
+	}
+	oldChannel := InstalledChannelForApp(repo, app)
+	if oldChannel == "" || strings.EqualFold(oldChannel, newChannel) {
+		return nil
+	}
+	return SwitchRefusalError(app.Name, oldChannel, newChannel)
+}
+
+// CheckRefusedChannelSwitches checks every app in apps and returns an error if
+// any would switch away from its recorded channel.
+func CheckRefusedChannelSwitches(repo types.Repository, apps []types.CrossPlatformApp) error {
+	if repo == nil {
+		return nil
+	}
+	var errs []string
+	for _, app := range apps {
+		if err := CheckRefusedChannelSwitch(repo, app); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if len(errs) == 1 {
+		return fmt.Errorf("%s", errs[0])
+	}
+	if len(errs) > 1 {
+		return fmt.Errorf("%s", strings.Join(errs, "\n"))
+	}
+	return nil
 }
 
 func lookupAppChannel(app types.CrossPlatformApp, appChannels map[string]string) (string, bool) {

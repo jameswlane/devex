@@ -188,6 +188,8 @@ var (
 )
 
 func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSettings, name string) (types.AppConfig, error) {
+	receipt, hasReceipt := inventory.ReadReceipt(repo, name)
+
 	data, definitionErr := repo.Get("installed-app-definition:" + normalizeInstallLookup(name))
 	if definitionErr != nil && !strings.Contains(definitionErr.Error(), "not found") {
 		return types.AppConfig{}, fmt.Errorf("failed to read installed definition for %s: %w", name, definitionErr)
@@ -200,20 +202,28 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 		if definition.Name == "" {
 			return types.AppConfig{}, fmt.Errorf("invalid installed definition for %s: application name is empty", name)
 		}
-		if rec := channels.RecordedChannelForApp(repo, definition); rec != "" && !strings.EqualFold(definition.SelectedChannel(), rec) {
-			if switched, _, err := channels.Resolve(definition, channels.Preferences{}, rec); err == nil {
-				definition = switched
-			}
+		if !hasReceipt {
+			receipt, hasReceipt = inventory.ReadReceipt(repo, definition.Name)
 		}
-		return definition.ToLegacyAppConfig(), nil
+		if !hasReceipt {
+			return definition.ToLegacyAppConfig(), nil
+		}
+		if matched, ok := matchCrossPlatformAppToReceipt(definition, receipt); ok {
+			return matched.ToLegacyAppConfig(), nil
+		}
 	}
 
 	installedApp, installedErr := repo.GetApp(name)
 	if installedErr != nil && !strings.Contains(installedErr.Error(), "not found") {
 		return types.AppConfig{}, fmt.Errorf("failed to read installation record for %s: %w", name, installedErr)
 	}
+	if installedApp != nil && !hasReceipt {
+		receipt, hasReceipt = inventory.ReadReceipt(repo, installedApp.Name)
+	}
 	if installedApp != nil && installedApp.InstallMethod != "" {
-		return *installedApp, nil
+		if !hasReceipt || appConfigMatchesReceipt(*installedApp, receipt) {
+			return *installedApp, nil
+		}
 	}
 
 	// Look up the full CrossPlatformApp in the catalog so recorded receipts
@@ -221,8 +231,20 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 	normalized := normalizeInstallLookup(name)
 	for _, entry := range settings.GetAllApps() {
 		if normalizeInstallLookup(entry.Name) == normalized || normalizeInstallLookup(entry.GetOSConfig().InstallCommand) == normalized {
-			if rec := channels.RecordedChannelForApp(repo, entry); rec != "" {
-				if switched, _, err := channels.Resolve(entry, channels.Preferences{}, rec); err == nil {
+			entryReceipt, hasEntryReceipt := receipt, hasReceipt
+			if !hasEntryReceipt {
+				entryReceipt, hasEntryReceipt = inventory.ReadReceipt(repo, entry.Name)
+			}
+			if hasEntryReceipt {
+				recLabel := channels.InferRecordedChannel(entryReceipt, entry)
+				if recLabel == "" && entryReceipt.Manager != "" && entryReceipt.Manager != "unknown" {
+					recLabel = strings.TrimSpace(entryReceipt.Manager)
+				}
+				if recLabel != "" {
+					switched, _, err := channels.Resolve(entry, channels.Preferences{}, recLabel)
+					if err != nil {
+						return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %s' to clear the record", entry.Name, recLabel, entry.Name)
+					}
 					return switched.ToLegacyAppConfig(), nil
 				}
 			}
@@ -230,6 +252,16 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 				return chosen.ToLegacyAppConfig(), nil
 			}
 			return entry.ToLegacyAppConfig(), nil
+		}
+	}
+
+	if hasReceipt {
+		recLabel := strings.TrimSpace(receipt.Channel)
+		if recLabel == "" && receipt.Manager != "" && receipt.Manager != "unknown" {
+			recLabel = strings.TrimSpace(receipt.Manager)
+		}
+		if recLabel != "" {
+			return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %s' to clear the record", name, recLabel, name)
 		}
 	}
 
