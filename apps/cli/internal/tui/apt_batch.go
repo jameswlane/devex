@@ -131,9 +131,10 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, appName string,
 		}
 		keyExists, keyAbsent := false, false
 		if source.KeyName != "" {
-			info, err := lstatAptFile(source.KeyName)
+			info, err := os.Stat(source.KeyName)
 			keyExists = err == nil && info.Mode().IsRegular()
-			keyAbsent = errors.Is(err, os.ErrNotExist)
+			_, lstatErr := lstatAptFile(source.KeyName)
+			keyAbsent = errors.Is(lstatErr, os.ErrNotExist)
 		}
 		if sourceMatches && (source.KeySource == "" || keyExists) {
 			continue
