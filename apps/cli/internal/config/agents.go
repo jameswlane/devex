@@ -5,6 +5,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/jameswlane/devex/apps/cli/internal/localmodels"
 )
 
 const (
@@ -36,6 +38,7 @@ type AgentsConfig struct {
 	Overrides       map[string]AgentOverrideConfig `mapstructure:"overrides" yaml:"overrides"`
 	MCPServers      []AgentMCPServerConfig         `mapstructure:"mcp_servers" yaml:"mcp_servers"`
 	DevExMCP        bool                           `mapstructure:"devex_mcp" yaml:"devex_mcp"`
+	LocalModels     []string                       `mapstructure:"local_models" yaml:"local_models"`
 }
 
 // AgentMCPServerConfig declares one MCP server to render into target agents.
@@ -127,7 +130,8 @@ func (c AgentsConfig) IsConfigured() bool {
 		len(c.DeniedCommands) > 0 ||
 		len(c.Overrides) > 0 ||
 		len(c.MCPServers) > 0 ||
-		c.DevExMCP
+		c.DevExMCP ||
+		len(c.LocalModels) > 0
 }
 
 // ValidateAgentsConfig validates values in AgentsConfig and returns structured
@@ -247,6 +251,21 @@ func validateAgentsConfigWithCaps(cfg AgentsConfig, file string, capsMap map[str
 	}
 
 	validateAgentMCPServers(cfg, seenEnabled, capsMap, add)
+
+	seenModels := make(map[string]bool, len(cfg.LocalModels))
+	for i, model := range cfg.LocalModels {
+		field := fmt.Sprintf("agents.local_models[%d]", i)
+		if err := localmodels.ValidateModelName(model); err != nil {
+			add(field, err.Error())
+			continue
+		}
+		canonical := localmodels.CanonicalModelName(model)
+		if seenModels[canonical] {
+			add(field, fmt.Sprintf("duplicate local model %q", model))
+			continue
+		}
+		seenModels[canonical] = true
+	}
 
 	return errs
 }

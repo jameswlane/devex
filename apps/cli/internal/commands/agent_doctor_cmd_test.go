@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentdoctor"
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
+	"github.com/jameswlane/devex/apps/cli/internal/localmodels"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
@@ -375,6 +378,100 @@ var _ = Describe("Agent doctor and login commands", func() {
 			cmd.SetArgs([]string{"login", "codex"})
 
 			Expect(cmd.Execute()).To(MatchError(sentinelErr))
+		})
+	})
+
+	Context("devex agent doctor local-model-runtime section", func() {
+		It("reports installed ollama runtime, service status, bound address, GPU report, and hints to stdout with redaction intact", func() {
+			const sentinel = "sk-localmodel-secret-999"
+			ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/tags" {
+					_, _ = w.Write([]byte(`{"models":[]}`))
+					return
+				}
+				http.NotFound(w, r)
+			}))
+			DeferCleanup(ollamaSrv.Close)
+
+			fsRoot := GinkgoT().TempDir()
+			Expect(os.MkdirAll(filepath.Join(fsRoot, "run/systemd/system"), 0o755)).To(Succeed())
+			Expect(os.MkdirAll(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0"), 0o755)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0/class"), []byte("0x030000\n"), 0o644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0/vendor"), []byte("0x10de\n"), 0o644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0/device"), []byte("0x2684\n"), 0o644)).To(Succeed())
+
+			GinkgoT().Setenv("OPENAI_API_KEY", sentinel)
+			probe := makeFakeBinProbe("", map[string]string{"OPENAI_API_KEY": sentinel})
+			probe.LocalModelsProbe = &localmodels.Probe{
+				GOOS:       "linux",
+				FSRoot:     fsRoot,
+				HTTPClient: ollamaSrv.Client(),
+				Getenv: func(key string) string {
+					if key == "OLLAMA_HOST" {
+						return ollamaSrv.URL
+					}
+					return ""
+				},
+				LookPath: func(name string) (string, error) {
+					switch name {
+					case "ollama":
+						return "/usr/local/bin/ollama", nil
+					case "systemctl":
+						return "/usr/bin/systemctl", nil
+					default:
+						return "", exec.ErrNotFound
+					}
+				},
+				Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+					switch name {
+					case "/usr/local/bin/ollama":
+						return []byte("ollama version is 0.6.2 " + sentinel + "\n"), nil
+					case "/usr/bin/systemctl":
+						return []byte("active\n"), nil
+					default:
+						return nil, errors.New("unexpected")
+					}
+				},
+			}
+
+			cmd := NewAgentCmdFromDeps(AgentCmdDeps{DoctorProbe: probe})
+			var stdout, stderr bytes.Buffer
+			cmd.SetOut(&stdout)
+			cmd.SetErr(&stderr)
+			cmd.SetArgs([]string{"doctor", "--agent", "claude"})
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(stderr.String()).To(BeEmpty())
+			Expect(stdout.String()).NotTo(ContainSubstring(sentinel))
+			Expect(stdout.String()).To(And(
+				ContainSubstring("Local Model Runtime:"),
+				ContainSubstring("ollama"),
+				ContainSubstring("installed (0.6.2)"),
+				ContainSubstring("service:"),
+				ContainSubstring("active"),
+				ContainSubstring("address:"),
+				ContainSubstring("reachable"),
+				ContainSubstring("gpu:"),
+				ContainSubstring("CPU only"),
+				ContainSubstring("sudo ubuntu-drivers install"),
+			))
+
+			cmdJSON := NewAgentCmdFromDeps(AgentCmdDeps{DoctorProbe: probe})
+			stdout.Reset()
+			stderr.Reset()
+			cmdJSON.SetOut(&stdout)
+			cmdJSON.SetErr(&stderr)
+			cmdJSON.SetArgs([]string{"doctor", "--json", "--agent", "claude"})
+			Expect(cmdJSON.Execute()).To(Succeed())
+			Expect(stderr.String()).To(BeEmpty())
+			Expect(stdout.String()).NotTo(ContainSubstring(sentinel))
+
+			var report agentdoctor.Report
+			Expect(json.Unmarshal(stdout.Bytes(), &report)).To(Succeed())
+			Expect(report.LocalModelRuntime).NotTo(BeNil())
+			Expect(report.LocalModelRuntime.Installed).To(BeTrue())
+			Expect(report.LocalModelRuntime.ServiceActive).To(BeTrue())
+			Expect(report.LocalModelRuntime.APIReachable).To(BeTrue())
+			Expect(report.LocalModelRuntime.GPU.Hints).NotTo(BeEmpty())
 		})
 	})
 })

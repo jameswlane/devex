@@ -55,3 +55,8 @@ agents:
         GITHUB_TOKEN: "${env:GITHUB_TOKEN}"
   # Register DevEx's own read-only MCP server (`devex mcp serve`) under "devex".
   devex_mcp: true
+  # Optional Ollama models to preview with `devex agent diff` / `apply --dry-run`
+  # and pull with `devex agent apply` (requires Ollama installed via `devex install ollama`).
+  local_models:
+    - qwen2.5-coder:7b
+    - llama3.2:3b
