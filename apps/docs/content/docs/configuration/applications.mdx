@@ -91,6 +91,21 @@ Uninstalling an APT-backed editor removes the package, the DevEx-managed APT sou
 | Windsurf | `apt devin-desktop` (signed `windsurf-stable.codeiumdata.com` repo, `amd64` only) | Renamed by the vendor to Devin Desktop; unsupported on `linux/arm64` | `devin-desktop` package, `/etc/apt/sources.list.d/windsurf.list`, `/etc/apt/keyrings/windsurf-stable.gpg` (when created by DevEx) |
 | Zed | `curlpipe --user` (`https://zed.dev/install.sh`) | Self-updating (`devex` skips); installs `~/.local/zed.app`, `~/.local/bin/zed`, and `dev.zed.Zed.desktop` | `~/.local/zed.app`, `~/.local/bin/zed`, `~/.local/share/applications/dev.zed.Zed.desktop` |
 
+## AI Agent Connectors
+
+The `AI Agent Connectors` category (`applications/ai-agent-connectors/`) ships opt-in (`default: false`) adapters and bridges that let an Agent Client Protocol (ACP) client such as T3 Code or Zed run an agent. A connector is not an agent you run on its own, so it is kept out of `AI Coding Agents`. Agents with built-in ACP support (Gemini CLI, Goose, OpenCode and others) need no connector. Each connector that wraps an agent declares it as a dependency, which `devex install --dry-run --format json` lists in the plan; until install execution installs catalog dependencies (#721), a connector prints the `devex install` command for its agent when the agent is missing. Install the category with `devex install --categories "AI Agent Connectors"`; interactive `devex setup` lists them under **Agent connectors**. Uninstall removes only the connector, never the wrapped agent or its config.
+
+| Connector | Install | Wraps |
+| --- | --- | --- |
+| Claude Agent ACP | `mise node@24 npm:@agentclientprotocol/claude-agent-acp` | Claude Code |
+| Codex ACP | `mise node@24 npm:@agentclientprotocol/codex-acp` | Codex CLI |
+| pi-acp | `mise node@24 npm:pi-acp` (community) | Pi |
+| MiniMax Code ACP | `mise node@24 npm:@minimax-ai/code-acp` | MiniMax Code |
+| amp-acp | `mise github:tao12345666333/amp-acp` (community) | Amp |
+| DeepAgents ACP | `mise node@24 npm:deepagents-acp` (LangChain's JavaScript Deep Agents) | Standalone |
+| GLM Agent | `mise node@24 npm:glm-acp-agent` (community) | Standalone (Zhipu GLM API) |
+| Agoragentic | `mise node@24 npm:agoragentic-mcp`, launched with `--acp` | Standalone (marketplace) |
+
 ## AI Agent Harnesses
 
 The `AI Agent Harnesses` category (`applications/ai-agents/{amux,claude-squad,cmux,conductor,herdr,openchamber,orca,paseo,superset,t3-code}.yaml`) ships opt-in (`default: false`) definitions for GUIs, terminal multiplexers, and background servers that run and supervise coding agents. They are kept separate from `AI Coding Agents` so `--categories "AI Coding Agents"` does not pull in orchestrators or desktop apps. Install an individual harness with `devex install "T3 Code"` or install the category with `devex install --categories "AI Agent Harnesses"`. Interactive `devex setup` lists them under **Agent harnesses** in the AI coding agents step.

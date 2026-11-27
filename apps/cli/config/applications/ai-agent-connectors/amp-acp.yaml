@@ -1,0 +1,46 @@
+# Upstream: https://github.com/tao12345666333/amp-acp (community ACP wrapper for Amp)
+name: amp-acp
+description: Runs Amp over the Agent Client Protocol (community, tao12345666333)
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # mise's github backend installs the project's release binary. Depends on Amp.
+  install_method: mise
+  install_command: github:tao12345666333/amp-acp@latest
+  uninstall_command: github:tao12345666333/amp-acp
+  installed_binary: amp-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v amp >/dev/null 2>&1 || echo "amp-acp runs Amp, which is not installed: run 'devex install \"Amp\"'."
+  dependencies:
+    - mise
+    - Amp
+linux:
+  # mise's github backend installs the project's release binary into the
+  # user's mise tools (the same v0.13+ releases the ACP registry lists), so
+  # devex upgrade can move it; uninstall removes only amp-acp. It drives the
+  # `amp` CLI, so it depends on Amp.
+  install_method: mise
+  install_command: github:tao12345666333/amp-acp@latest
+  uninstall_command: github:tao12345666333/amp-acp
+  installed_binary: amp-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v amp >/dev/null 2>&1 || echo "amp-acp runs Amp, which is not installed: run 'devex install \"Amp\"'."
+  dependencies:
+    - mise
+    - Amp

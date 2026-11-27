@@ -1,0 +1,49 @@
+# Upstream: https://github.com/agentclientprotocol/codex-acp
+name: Codex ACP
+description: Runs Codex CLI over the Agent Client Protocol
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # npm @agentclientprotocol/codex-acp (the ACP registry's Codex). It drives Codex and uses Codex CLI's sign-in, so it depends on Codex CLI.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:@agentclientprotocol/codex-acp@latest
+  uninstall_command: npm:@agentclientprotocol/codex-acp
+  installed_binary: codex-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v codex >/dev/null 2>&1 || echo "Codex ACP runs Codex CLI, which is not installed: run 'devex install \"Codex CLI\"'."
+  dependencies:
+    - Node.js
+    - Codex CLI
+linux:
+  # npm @agentclientprotocol/codex-acp (the ACP registry's Codex). It drives Codex and uses Codex CLI's sign-in, so it depends on Codex CLI.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:@agentclientprotocol/codex-acp@latest
+  uninstall_command: npm:@agentclientprotocol/codex-acp
+  installed_binary: codex-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v codex >/dev/null 2>&1 || echo "Codex ACP runs Codex CLI, which is not installed: run 'devex install \"Codex CLI\"'."
+  dependencies:
+    - Node.js
+    - Codex CLI

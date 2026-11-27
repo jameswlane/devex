@@ -1,0 +1,33 @@
+# Upstream: https://github.com/stefandevo/glm-acp-agent
+name: GLM Agent
+description: Zhipu GLM models as an Agent Client Protocol agent (community, stefandevo)
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # npm glm-acp-agent, the ACP registry's launch command (`npx glm-acp-agent`). Standalone: it talks to the GLM API itself.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:glm-acp-agent@latest
+  uninstall_command: npm:glm-acp-agent
+  installed_binary: glm-acp-agent
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # npm glm-acp-agent, the ACP registry's launch command (`npx glm-acp-agent`). Standalone: it talks to the GLM API itself.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:glm-acp-agent@latest
+  uninstall_command: npm:glm-acp-agent
+  installed_binary: glm-acp-agent
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js

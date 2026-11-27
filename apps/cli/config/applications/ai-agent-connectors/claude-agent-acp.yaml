@@ -1,0 +1,49 @@
+# Upstream: https://github.com/agentclientprotocol/claude-agent-acp
+name: Claude Agent ACP
+description: Runs Claude Code over the Agent Client Protocol
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # npm @agentclientprotocol/claude-agent-acp (the ACP registry's Claude Agent). It wraps Claude Code through the Claude Agent SDK and uses Claude Code's sign-in, so it depends on Claude Code.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:@agentclientprotocol/claude-agent-acp@latest
+  uninstall_command: npm:@agentclientprotocol/claude-agent-acp
+  installed_binary: claude-agent-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v claude >/dev/null 2>&1 || echo "Claude Agent ACP runs Claude Code, which is not installed: run 'devex install \"Claude Code\"'."
+  dependencies:
+    - Node.js
+    - Claude Code
+linux:
+  # npm @agentclientprotocol/claude-agent-acp (the ACP registry's Claude Agent). It wraps Claude Code through the Claude Agent SDK and uses Claude Code's sign-in, so it depends on Claude Code.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:@agentclientprotocol/claude-agent-acp@latest
+  uninstall_command: npm:@agentclientprotocol/claude-agent-acp
+  installed_binary: claude-agent-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v claude >/dev/null 2>&1 || echo "Claude Agent ACP runs Claude Code, which is not installed: run 'devex install \"Claude Code\"'."
+  dependencies:
+    - Node.js
+    - Claude Code

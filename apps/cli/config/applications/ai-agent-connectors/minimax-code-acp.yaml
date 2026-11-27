@@ -1,0 +1,49 @@
+# Upstream: https://github.com/MiniMax-AI/minimax-code
+name: MiniMax Code ACP
+description: Runs MiniMax Code over the Agent Client Protocol
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # npm @minimax-ai/code-acp, a zero-dependency launcher (`code-acp acp`) that reuses a compatible `mcode` on PATH, so it depends on MiniMax Code. Without one it downloads a private copy into ~/.minimax-code/acp-releases, which uninstall leaves alone.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:@minimax-ai/code-acp@latest
+  uninstall_command: npm:@minimax-ai/code-acp
+  installed_binary: code-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v mcode >/dev/null 2>&1 || echo "MiniMax Code ACP runs MiniMax Code, which is not installed: run 'devex install \"MiniMax Code\"'."
+  dependencies:
+    - Node.js
+    - MiniMax Code
+linux:
+  # npm @minimax-ai/code-acp, a zero-dependency launcher (`code-acp acp`) that reuses a compatible `mcode` on PATH, so it depends on MiniMax Code. Without one it downloads a private copy into ~/.minimax-code/acp-releases, which uninstall leaves alone.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:@minimax-ai/code-acp@latest
+  uninstall_command: npm:@minimax-ai/code-acp
+  installed_binary: code-acp
+  self_updating: false
+  official_support: true
+  # devex install does not install catalog dependencies yet (#721), so point
+  # at the wrapped agent when it is missing.
+  post_install:
+    - scope: user
+      shell: |
+        export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+        command -v mcode >/dev/null 2>&1 || echo "MiniMax Code ACP runs MiniMax Code, which is not installed: run 'devex install \"MiniMax Code\"'."
+  dependencies:
+    - Node.js
+    - MiniMax Code
