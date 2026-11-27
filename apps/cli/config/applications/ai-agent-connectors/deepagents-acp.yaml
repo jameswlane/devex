@@ -1,0 +1,33 @@
+# Upstream: https://github.com/langchain-ai/deepagentsjs
+name: DeepAgents ACP
+description: LangChain Deep Agents (JavaScript) as an Agent Client Protocol agent
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # npm deepagents-acp from LangChain's deepagentsjs, the ACP registry's DeepAgents. It bundles the JavaScript deepagents library and does not use the Python `dcode` CLI, so it does not depend on DeepAgents.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:deepagents-acp@latest
+  uninstall_command: npm:deepagents-acp
+  installed_binary: deepagents-acp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # npm deepagents-acp from LangChain's deepagentsjs, the ACP registry's DeepAgents. It bundles the JavaScript deepagents library and does not use the Python `dcode` CLI, so it does not depend on DeepAgents.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:deepagents-acp@latest
+  uninstall_command: npm:deepagents-acp
+  installed_binary: deepagents-acp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js

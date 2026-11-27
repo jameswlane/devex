@@ -1,0 +1,35 @@
+# Upstream: https://github.com/svkozak/pi-acp
+name: pi-acp
+description: Runs the Pi coding agent over the Agent Client Protocol (community, svkozak)
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # npm pi-acp, which spawns the `pi` CLI, so it depends on Pi.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:pi-acp@latest
+  uninstall_command: npm:pi-acp
+  installed_binary: pi-acp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+    - Pi
+linux:
+  # npm pi-acp, which spawns the `pi` CLI, so it depends on Pi.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:pi-acp@latest
+  uninstall_command: npm:pi-acp
+  installed_binary: pi-acp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+    - Pi

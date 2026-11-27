@@ -1,0 +1,33 @@
+# Upstream: https://github.com/rhein1/agoragentic-integrations
+name: Agoragentic
+description: The Agoragentic agent marketplace over MCP and ACP
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # npm agoragentic-mcp; ACP clients launch it as `agoragentic-mcp --acp` (ACP registry). Standalone service connector.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:agoragentic-mcp@latest
+  uninstall_command: npm:agoragentic-mcp
+  installed_binary: agoragentic-mcp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # npm agoragentic-mcp; ACP clients launch it as `agoragentic-mcp --acp` (ACP registry). Standalone service connector.
+  # Installed through mise's npm backend (node@24, not node@lts: #703), never
+  # sudo npm -g. Uninstall removes only the package, never the wrapped agent
+  # or its config.
+  install_method: mise
+  install_command: node@24 npm:agoragentic-mcp@latest
+  uninstall_command: npm:agoragentic-mcp
+  installed_binary: agoragentic-mcp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js

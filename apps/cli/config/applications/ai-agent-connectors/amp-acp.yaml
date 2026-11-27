@@ -1,0 +1,61 @@
+# Upstream: https://github.com/tao12345666333/amp-acp (community ACP wrapper for Amp)
+name: amp-acp
+description: Runs Amp over the Agent Client Protocol (community, tao12345666333)
+category: AI Agent Connectors
+default: false
+desktop_environments:
+  - all
+macos:
+  # mise's github backend installs the project's macOS release binary; the
+  # pinned release archive installer below is Linux-only. Depends on Amp.
+  install_method: mise
+  install_command: github:tao12345666333/amp-acp@latest
+  uninstall_command: github:tao12345666333/amp-acp
+  installed_binary: amp-acp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+    - Amp
+linux:
+  # The project's v0.13.0 GitHub release archive (the version the ACP
+  # registry lists), pinned and verified against its SHA-256, installed to
+  # /usr/local/bin/amp-acp. It drives the `amp` CLI, so it depends on Amp.
+  # Uninstall removes only /usr/local/bin/amp-acp.
+  install_method: curlpipe
+  installed_binary: amp-acp
+  download_url: https://github.com/tao12345666333/amp-acp/releases/download/v0.13.0/amp-acp-linux-x86_64.tar.gz
+  destination: /usr/local/bin
+  verification:
+    sha256: 205c819383b6fd389b408120ebea9cdde5c2957530b5ce4ebc912998d4118f8b
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Amp
+  platform_requirements:
+    - os: linux
+      arch: amd64
+  uninstall_command: |
+    set -eu
+    SUDO=""
+    if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+    $SUDO rm -f /usr/local/bin/amp-acp
+  alternatives:
+    - install_method: curlpipe
+      installed_binary: amp-acp
+      download_url: https://github.com/tao12345666333/amp-acp/releases/download/v0.13.0/amp-acp-linux-aarch64.tar.gz
+      destination: /usr/local/bin
+      verification:
+        sha256: ad7e1c23ec29bf47f757d656fc4c9a957dd60533da034213a6bc7d33d1813d32
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Amp
+      platform_requirements:
+        - os: linux
+          arch: arm64
+      uninstall_command: |
+        set -eu
+        SUDO=""
+        if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+        $SUDO rm -f /usr/local/bin/amp-acp
