@@ -295,6 +295,7 @@ var _ = Describe("Install Channels CLI", func() {
 			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"flatpak","channel":"flatpak"}`)).To(Succeed())
 			captured, err := os.CreateTemp(GinkgoT().TempDir(), "status")
 			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(captured.Close)
 			realStdout := os.Stdout
 			os.Stdout = captured
 			DeferCleanup(func() { os.Stdout = realStdout })
