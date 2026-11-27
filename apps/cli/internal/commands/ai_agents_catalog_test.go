@@ -210,7 +210,6 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Kimi Code", "Kimi Code", "curlpipe", "https://code.kimi.com/kimi-code/install.sh", "user", false, nil, nil, `rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),
 		Entry("Aider", "Aider", "mise", "uv@latest pipx:aider-chat[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:aider-chat"),
 		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, nil, "aqua:aaif-goose/goose"),
-		Entry("LM Studio", "LM Studio", "deb", "https://lmstudio.ai/download/latest/linux/x64?format=deb", "", false, nil, nil, "lm-studio"),
 	)
 
 	It("resolves Ollama with system hook-driven install, curl/zstd dependencies, and full cleanup uninstall", func() {
@@ -262,7 +261,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Expect(out.String()).To(ContainSubstring("Would install Ollama"))
 	})
 
-	It("resolves LM Studio AppImage alternative on non-Debian Linux", func() {
+	It("resolves LM Studio to its .deb on Ubuntu and the AppImage on other Linux", func() {
 		app, ok := agents["LM Studio"]
 		Expect(ok).To(BeTrue(), "expected LM Studio in ai-agents catalog")
 
@@ -272,6 +271,14 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			Version:      "41",
 			Architecture: "amd64",
 		}
+		// Not in the table above: its .deb is limited to Debian and Ubuntu, so the
+		// host-detecting install plan would pick the AppImage on macOS CI.
+		ubuntu := platform.DetectionResult{OS: "linux", Distribution: "ubuntu", DistributionLike: []string{"debian"}, Version: "24.04", Architecture: "amd64"}
+		deb := app.LinuxConfigForPlatform(ubuntu)
+		Expect(deb.InstallMethod).To(Equal("deb"))
+		Expect(deb.DownloadURL).To(Equal("https://lmstudio.ai/download/latest/linux/x64?format=deb"))
+		Expect(deb.UninstallCommand).To(Equal("lm-studio"))
+
 		resolved := app.LinuxConfigForPlatform(fedora)
 		Expect(resolved.InstallMethod).To(Equal("appimage"))
 		Expect(resolved.DownloadURL).To(Equal("https://lmstudio.ai/download/latest/linux/x64"))
