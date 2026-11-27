@@ -252,7 +252,7 @@ func isDesktopApp(app types.CrossPlatformApp) bool {
 	desktopCategories := []string{
 		"Text Editors", "IDEs", "Browsers", "Communication",
 		"Media", "Graphics", "Productivity", "Utility", "Optional Apps",
-		"Terminal Emulators", "AI Code Editors",
+		"Terminal Emulators",
 	}
 
 	for _, category := range desktopCategories {
