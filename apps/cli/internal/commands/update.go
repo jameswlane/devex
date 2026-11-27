@@ -276,14 +276,17 @@ func maintenancePackages(c types.OSConfig) ([]string, string, error) {
 	}
 }
 
-// reinstallTargets names what a mise or curlpipe upgrade acts on: mise tool
-// names without their version, or the install script URL. A script pinned by
+// reinstallTargets names what a mise or curlpipe upgrade acts on: the mise
+// tools that uninstall removes, or the install script URL. A script pinned by
 // checksum would install the same release again, and a hook-driven entry has
 // no script to run, so both are refused.
 func reinstallTargets(c types.OSConfig) ([]string, string, error) {
 	if c.InstallMethod == "curlpipe" {
 		if c.IsHookDrivenCurlpipe() {
 			return nil, "", fmt.Errorf("install hooks have no upgrade step; reinstall it with devex install")
+		}
+		if viper.GetBool("offline") {
+			return nil, "", fmt.Errorf("rerunning the install script needs the network; retry without --offline")
 		}
 		if len(c.Verification.Arguments()) > 0 {
 			return nil, "", fmt.Errorf("the install script is pinned by checksum; upgrade it by updating the catalog entry")
@@ -301,25 +304,10 @@ func reinstallTargets(c types.OSConfig) ([]string, string, error) {
 		}
 		return []string{target}, scope, nil
 	}
-	source := c.UninstallCommand
-	if strings.TrimSpace(source) == "" {
-		source = c.InstallCommand
+	if strings.TrimSpace(c.UninstallCommand) == "" {
+		return nil, "", fmt.Errorf("no mise tools configured in uninstall_command")
 	}
-	var tools []string
-	for _, field := range strings.Fields(source) {
-		tools = append(tools, miseToolName(field))
-	}
-	return tools, "", nil
-}
-
-// miseToolName drops a trailing @version from a mise tool spec while keeping
-// an npm scope: npm:@google/gemini-cli@latest becomes npm:@google/gemini-cli.
-func miseToolName(spec string) string {
-	i := strings.LastIndex(spec, "@")
-	if i <= 0 || spec[i-1] == ':' {
-		return spec
-	}
-	return spec[:i]
+	return strings.Fields(c.UninstallCommand), "", nil
 }
 
 // maintenanceNativeCommands documents the audited plugin contracts.

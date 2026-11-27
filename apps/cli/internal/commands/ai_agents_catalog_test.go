@@ -203,7 +203,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			Expect(out.String()).To(ContainSubstring("Would install " + name))
 		},
 		Entry("Claude Code", "Claude Code", "curlpipe", "https://claude.ai/install.sh", "user", true, nil, []string{"Bubblewrap", "socat"}, `rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"`),
-		Entry("Codex CLI", "Codex CLI", "curlpipe", "https://chatgpt.com/codex/install.sh", "user", true, nil, []string{"Bubblewrap"}, `rm -f "$HOME/.local/bin/codex" "$HOME/.local/bin/codex-code-mode-host" && rm -rf "$HOME/.codex/packages/standalone"`),
+		Entry("Codex CLI", "Codex CLI", "curlpipe", "https://chatgpt.com/codex/install.sh", "user", true, nil, []string{"Bubblewrap"}, `rm -f "$HOME/.local/bin/codex" && rm -rf "$HOME/.codex/packages/standalone"`),
 		Entry("Gemini CLI", "Gemini CLI", "mise", "node@24 npm:@google/gemini-cli@latest", "", true, []string{"Node.js"}, nil, "npm:@google/gemini-cli"),
 		Entry("GitHub Copilot CLI", "GitHub Copilot CLI", "curlpipe", "https://raw.githubusercontent.com/github/copilot-cli/main/install.sh", "user", true, nil, []string{"Bubblewrap"}, `rm -f "$HOME/.local/bin/copilot"`),
 		Entry("OpenCode", "OpenCode", "curlpipe", "https://opencode.ai/install", "user", true, nil, nil, `rm -f "$HOME/.opencode/bin/opencode"`),
@@ -247,7 +247,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			Expect(out.String()).NotTo(ContainSubstring("Would remove data"))
 		},
 		Entry("Claude Code", "Claude Code", `curlpipe: rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"`),
-		Entry("Codex CLI", "Codex CLI", `curlpipe: rm -f "$HOME/.local/bin/codex" "$HOME/.local/bin/codex-code-mode-host" && rm -rf "$HOME/.codex/packages/standalone"`),
+		Entry("Codex CLI", "Codex CLI", `curlpipe: rm -f "$HOME/.local/bin/codex" && rm -rf "$HOME/.codex/packages/standalone"`),
 		Entry("Gemini CLI", "Gemini CLI", "mise: npm:@google/gemini-cli"),
 		Entry("GitHub Copilot CLI", "GitHub Copilot CLI", `curlpipe: rm -f "$HOME/.local/bin/copilot"`),
 		Entry("OpenCode", "OpenCode", `curlpipe: rm -f "$HOME/.opencode/bin/opencode"`),
@@ -256,10 +256,13 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Goose", "Goose", "mise: aqua:aaif-goose/goose"),
 	)
 
-	It("upgrades a mise tool by name without its version", func() {
-		Expect(commands.MiseToolNameForTesting("npm:@moonshot-ai/kimi-code@latest")).To(Equal("npm:@moonshot-ai/kimi-code"))
-		Expect(commands.MiseToolNameForTesting("npm:@moonshot-ai/kimi-code")).To(Equal("npm:@moonshot-ai/kimi-code"))
-		Expect(commands.MiseToolNameForTesting("node@24")).To(Equal("node"))
+	It("refuses to rerun an install script for an offline upgrade", func() {
+		var out bytes.Buffer
+		cmd := commands.NewRootCmd("test", mocks.NewMockRepository(), settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"upgrade", "--dry-run", "--non-interactive", "--offline", "Kimi Code"})
+		Expect(cmd.Execute()).To(MatchError(ContainSubstring("rerunning the install script needs the network")))
 	})
 
 	It("resolves Ollama with system hook-driven install, curl/zstd dependencies, and full cleanup uninstall", func() {

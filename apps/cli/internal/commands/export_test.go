@@ -17,7 +17,6 @@ var (
 	ResolveUninstallApp           = resolveUninstallApp
 	StatusErrorSummary            = statusErrorSummary
 	AptSourceReferencedByOtherApp = aptSourceReferencedByOtherApp
-	MiseToolNameForTesting        = miseToolName
 )
 
 func SetUninstallInstallerForTest(getter func(context.Context, string) types.BaseInstaller) func() {

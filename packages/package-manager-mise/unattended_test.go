@@ -35,9 +35,10 @@ var _ = Describe("Unattended mise execution", func() {
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin := main.NewMisePlugin()
+		GinkgoT().Setenv("MISE_LOCAL", "0")
 		Expect(plugin.HandleUpdate(context.Background(), []string{"node@24", "java@21"})).To(Succeed())
 		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
-			{Args: []string{"upgrade", "node@24", "java@21"}},
+			{Args: []string{"upgrade", "--global", "node@24", "java@21"}},
 		}))
 	})
 
@@ -95,6 +96,16 @@ var _ = Describe("Unattended mise execution", func() {
 			{Args: []string{"unuse", "--global", "npm:@google/gemini-cli", "pipx:aider-chat"}},
 			{Args: []string{"prune", "--yes", "npm:@google/gemini-cli", "pipx:aider-chat"}},
 		}))
+	})
+
+	It("fails removal when prune fails, so DevEx keeps its record and can retry", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "which")
+		recorder.Script("mise", []string{"prune", "--yes", "pipx:aider-chat"}, sdktest.Response{ExitCode: 1})
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		GinkgoT().Setenv("MISE_LOCAL", "0")
+		plugin := main.NewMisePlugin()
+		Expect(plugin.HandleRemove(context.Background(), []string{"pipx:aider-chat"})).To(MatchError(ContainSubstring("failed to prune removed tools pipx:aider-chat")))
 	})
 
 	It("runs ensure-installed when mise is not on PATH yet", func() {

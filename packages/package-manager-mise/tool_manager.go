@@ -139,7 +139,7 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 		pruneArgs = append(pruneArgs, toolName(tool))
 	}
 	if err := sdk.ExecCommandWithContext(ctx, false, "mise", pruneArgs...); err != nil {
-		m.logger.Warning("Failed to prune removed tools %s: %v", strings.Join(args, ", "), err)
+		return fmt.Errorf("failed to prune removed tools %s: %w", strings.Join(args, ", "), err)
 	}
 
 	m.logger.Success("Removed tools: %s", strings.Join(args, ", "))
@@ -158,7 +158,14 @@ func (m *MisePlugin) HandleUpdate(ctx context.Context, args []string) error {
 		}
 
 		m.logger.Printf("Updating tools with Mise: %s\n", strings.Join(args, ", "))
-		if err := sdk.ExecCommandWithContext(ctx, false, "mise", append([]string{"upgrade"}, args...)...); err != nil {
+		// Installs go to the global config (or the local one with
+		// MISE_LOCAL), so upgrade that config rather than whatever the
+		// current directory's project pins.
+		upgradeArgs := []string{"upgrade"}
+		if m.useGlobalConfig() {
+			upgradeArgs = append(upgradeArgs, "--global")
+		}
+		if err := sdk.ExecCommandWithContext(ctx, false, "mise", append(upgradeArgs, args...)...); err != nil {
 			return fmt.Errorf("failed to update tools %s: %w", strings.Join(args, ", "), err)
 		}
 

@@ -28,14 +28,14 @@ linux:
   # codex-package_SHA256SUMS, unpacks it under ~/.codex/packages/standalone
   # and links ~/.local/bin/codex to it. It records the release it installed
   # so Codex can update itself, so DevEx leaves updates to Codex. Uninstall
-  # removes the binary links and the standalone releases, and keeps
+  # removes the binary link and the standalone releases, and keeps
   # ~/.codex config, sessions and credentials.
   install_method: curlpipe
   download_url: https://chatgpt.com/codex/install.sh
   install_scope: user
   installed_binary: codex
   self_updating: true
-  uninstall_command: rm -f "$HOME/.local/bin/codex" "$HOME/.local/bin/codex-code-mode-host" && rm -rf "$HOME/.codex/packages/standalone"
+  uninstall_command: rm -f "$HOME/.local/bin/codex" && rm -rf "$HOME/.codex/packages/standalone"
   official_support: true
   alternatives:
     # mise resolves codex to aqua:openai/codex, OpenAI's GitHub release
