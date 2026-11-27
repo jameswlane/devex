@@ -30,8 +30,10 @@ linux:
   # install. Known limitation: its updater runs npm install -g, which writes a
   # second copy into the mise Node prefix instead of updating this one, and
   # then warns that the active binary was not updated (#654).
+  # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+  # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
   install_method: mise
-  install_command: node@lts npm:@google/gemini-cli@latest
+  install_command: node@24 npm:@google/gemini-cli@latest
   uninstall_command: npm:@google/gemini-cli
   self_updating: true
   official_support: true

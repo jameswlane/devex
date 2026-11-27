@@ -42,12 +42,33 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	case StepLanguages:
 		m.step = StepDatabases
 	case StepDatabases:
-		// Only show shell selection on compatible systems
+		switch {
+		case len(m.system.aiAgentApps) > 0:
+			m.step = StepAIAgents
+		case m.system.detectedPlatform.OS != "windows":
+			// Only show shell selection on compatible systems
+			m.step = StepShell
+			m.cursor = m.selections.selectedShell
+		default:
+			m.step = StepTheme // Windows gets theme selection without shell
+		}
+	case StepAIAgents:
+		switch {
+		case m.hasSelectedHarnessAgent():
+			m.step = StepAIAgentPreset
+			m.cursor = m.aiAgentPresetCursorIndex()
+		case m.system.detectedPlatform.OS != "windows":
+			m.step = StepShell
+			m.cursor = m.selections.selectedShell
+		default:
+			m.step = StepTheme
+		}
+	case StepAIAgentPreset:
 		if m.system.detectedPlatform.OS != "windows" {
 			m.step = StepShell
 			m.cursor = m.selections.selectedShell
 		} else {
-			m.step = StepTheme // Windows gets theme selection without shell
+			m.step = StepTheme
 		}
 	case StepShell:
 		if m.getSelectedShell() == "zsh" {
@@ -108,20 +129,41 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 		}
 	case StepDatabases:
 		m.step = StepLanguages
-	case StepShell:
+	case StepAIAgents:
 		m.step = StepDatabases
+	case StepAIAgentPreset:
+		m.step = StepAIAgents
+	case StepShell:
+		if len(m.system.aiAgentApps) > 0 {
+			if m.hasSelectedHarnessAgent() {
+				m.step = StepAIAgentPreset
+				m.cursor = m.aiAgentPresetCursorIndex()
+			} else {
+				m.step = StepAIAgents
+			}
+		} else {
+			m.step = StepDatabases
+		}
 	case StepOhMyZsh:
 		m.step = StepShell
 		m.cursor = m.selections.selectedShell
 	case StepTheme:
-		if m.system.detectedPlatform.OS != "windows" {
+		switch {
+		case m.system.detectedPlatform.OS != "windows":
 			if m.getSelectedShell() == "zsh" {
 				m.step = StepOhMyZsh
 			} else {
 				m.step = StepShell
 				m.cursor = m.selections.selectedShell
 			}
-		} else {
+		case len(m.system.aiAgentApps) > 0:
+			if m.hasSelectedHarnessAgent() {
+				m.step = StepAIAgentPreset
+				m.cursor = m.aiAgentPresetCursorIndex()
+			} else {
+				m.step = StepAIAgents
+			}
+		default:
 			m.step = StepDatabases
 		}
 	case StepGitConfig:

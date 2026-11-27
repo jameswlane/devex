@@ -37,6 +37,8 @@ The setup command includes:
 | `--non-interactive` | | `bool` | `false` | Run automated setup without user interaction |
 | `--verbose` | `-v` | `bool` | `false` | Enable verbose output |
 | `--dry-run` | `-n` | `bool` | `false` | Show what would be installed without executing |
+| `--ai-agents` | | `strings` | | Optional AI coding agents to install, matched case-insensitively against catalog names (repeatable or comma-separated; config key `setup.ai_agents.apps`, env `DEVEX_SETUP_AI_AGENTS_APPS`) |
+| `--ai-agents-preset` | | `string` | | Permission preset written to a new `agents.yaml` (`balanced` or `strict`; omitted leaves permission modes unchanged; config key `setup.ai_agents.preset`, env `DEVEX_SETUP_AI_AGENTS_PRESET`) |
 | `--windows-prerequisites` | | `strings` | | On Windows, fix these prerequisites without asking: `developer-mode`, `long-paths`, `powershell`, `windows-terminal` or `all` (config key `setup.windows.prerequisites`) |
 
 ## Interactive Setup Flow
@@ -105,6 +107,12 @@ The setup command includes:
     ◯ SQLite - Lightweight file-based database
     ◯ MongoDB - Document-oriented NoSQL database
     ```
+  </Step>
+  
+  <Step>
+    **AI Coding Agents (Optional)**
+    
+    Optionally select terminal AI coding agents (with Linux sandbox prerequisites expanded automatically). Nothing is pre-selected; press Enter to skip. If you select a harness supported by `agents.yaml` (`Claude Code`, `Codex CLI`, `Gemini CLI`, or `OpenCode`), you can optionally pick a permission preset (`Leave permission modes unchanged`, `balanced`, or `strict`). Setup writes and applies a minimal `agents.yaml` only when no agents configuration exists; an existing one is neither changed nor applied. When setup completes, the summary includes `devex agent doctor` output and login next steps for each selected agent.
   </Step>
   
   <Step>
@@ -193,6 +201,25 @@ devex setup --non-interactive
 
 # Non-interactive with verbose output
 devex setup --non-interactive --verbose
+
+# Non-interactive with selected AI coding agents and a permission preset
+devex setup --non-interactive --ai-agents "Claude Code,Codex CLI" --ai-agents-preset balanced
+
+# Same via environment variables (flags > env > config > defaults)
+DEVEX_SETUP_AI_AGENTS_APPS="Claude Code" \
+DEVEX_SETUP_AI_AGENTS_PRESET=strict \
+devex setup --non-interactive --dry-run
+```
+
+In non-interactive mode, AI coding agents are skipped unless configured via `--ai-agents`, `DEVEX_SETUP_AI_AGENTS_APPS`, or `setup.ai_agents.apps` in `~/.config/devex/config.yaml`:
+
+```yaml
+setup:
+  ai_agents:
+    apps:
+      - Claude Code
+      - Codex CLI
+    preset: balanced
 ```
 
 Oh My Zsh remains disabled unless explicitly enabled. For unattended setup, use

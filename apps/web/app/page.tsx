@@ -1,3 +1,4 @@
+import { AIAgents } from "./components/AIAgents";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
@@ -10,6 +11,7 @@ export default function Home() {
 			<Header />
 			<main className="container mx-auto px-4 py-8">
 				<Hero />
+				<AIAgents />
 				<ToolSearch />
 				<Resources />
 			</main>

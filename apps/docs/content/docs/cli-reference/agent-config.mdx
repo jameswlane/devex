@@ -33,6 +33,7 @@ Configuration follows `flags > environment variables > config file > defaults`:
 | --- | --- | --- |
 | `--agents` | `DEVEX_AGENTS` | Comma-separated subset of enabled agents to target (e.g. `claude,codex`) |
 | `--preset` | `DEVEX_AGENTS_PRESET` | Override configured permission preset (`strict` or `balanced`) |
+| `--init` (`apply` only) | — | Write a minimal `agents.yaml` for `--agents` if absent (leaving an existing file untouched) before applying |
 | `--dry-run` (global) | `DEVEX_DRY_RUN` | On `apply`, run `diff` without writing files, backups, or state |
 
 ## When No Agents Are Configured

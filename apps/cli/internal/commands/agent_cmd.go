@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapply"
 	"github.com/jameswlane/devex/apps/cli/internal/agentdoctor"
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/agentskills"
@@ -65,7 +66,7 @@ func NewAgentCmdWithDeps(settings config.CrossPlatformSettings, getPluginBootstr
 func NewAgentCmdFromDeps(deps AgentCmdDeps) *cobra.Command {
 	executor := deps.Executor
 	if executor == nil {
-		executor = bootstrapAgentPluginExecutor{getBootstrap: deps.PluginBootstrap}
+		executor = agentapply.BootstrapExecutor{GetBootstrap: agentapply.BootstrapProvider(deps.PluginBootstrap)}
 	}
 	if deps.LoginRunner == nil {
 		deps.LoginRunner = agentdoctor.DefaultLoginRunner()

@@ -265,6 +265,9 @@ func interpolateString(value string, ctx EvaluationContext) string {
 			return match
 		}
 		resolved := resolvePath(strings.TrimSpace(parts[1]), ctx)
+		if list, ok := resolved.([]string); ok {
+			return strings.Join(list, ",")
+		}
 		return fmt.Sprint(resolved)
 	})
 }

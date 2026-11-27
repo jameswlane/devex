@@ -44,6 +44,11 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 	if err != nil {
 		return nil, err
 	}
+	aiAgentApps := getAvailableAIAgentApps(settings, detectedPlatform)
+	selectedAIAgents, aiAgentPreset, err := configuredAIAgentSelection(settings, detectedPlatform)
+	if err != nil {
+		return nil, err
+	}
 
 	return &SetupModel{
 		step:          0,
@@ -61,6 +66,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 				"Redis",
 			},
 			desktopApps: []string{},
+			aiAgentApps: aiAgentApps,
 			themes:      []string{},
 			hasDesktop:  false,
 		},
@@ -77,9 +83,11 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 			selectedDBs: map[int]bool{
 				DefaultPostgreSQLIndex: true, // PostgreSQL
 			},
-			selectedApps:  make(map[int]bool), // No desktop apps for automated setup
-			selectedTheme: 0,
-			ohMyZsh:       configuredOhMyZsh(viper.GetBool("setup.oh_my_zsh.enabled")),
+			selectedApps:     make(map[int]bool), // No desktop apps for automated setup
+			selectedAIAgents: selectedAIAgents,
+			aiAgentPreset:    aiAgentPreset,
+			selectedTheme:    0,
+			ohMyZsh:          configuredOhMyZsh(viper.GetBool("setup.oh_my_zsh.enabled")),
 		},
 
 		// Git configuration
@@ -141,6 +149,9 @@ func printAutomatedSetupCompletion(model *SetupModel) {
 		fmt.Printf("\n🎉 Automated setup complete!\n")
 	}
 	fmt.Printf("\n%s", model.renderChangeInventory())
+	if agentSummary := model.renderAIAgentsSummary(); agentSummary != "" {
+		fmt.Printf("\n%s", agentSummary)
+	}
 
 	switch {
 	case model.installation.hasInstallErrors():
@@ -206,6 +217,14 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	if err := tui.AuthorizeInstallation(ctx, apps, false); err != nil {
 		return err
 	}
+
+	// The root command defers plugin initialization to setup, and the automated
+	// flow has no plugin step, so register the plugin installers before
+	// installing. Finalization reuses the same bootstrap.
+	if err := initializeAutomatedPlugins(ctx, model); err != nil {
+		log.Warn("Plugin initialization failed", "error", err)
+		model.installation.addError(fmt.Sprintf("Plugin setup: %v", err))
+	}
 	// Use the regular installer system for non-interactive mode
 	model.beginSystemUndo()
 	errors, err := installAutomatedApps(ctx, apps, model.selections.alreadyInstalled, model.installation.outcomeRecorder(), settings, repo)
@@ -231,6 +250,13 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	model.logCompletion()
 
 	return model.CompletionError()
+}
+
+// initializeAutomatedPlugins bootstraps plugins and registers their installers
+// for automated setup; tests replace it.
+var initializeAutomatedPlugins = func(ctx context.Context, model *SetupModel) error {
+	_, err := model.initializePlugins(ctx)
+	return err
 }
 
 // installAutomatedApp installs one app after the batch; tests replace it.

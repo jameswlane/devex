@@ -19,6 +19,7 @@ import (
 // starterAnswers are the answers that select every component of each
 // lifecycle starter, so a plan covers all of its steps on the planned OS.
 var starterAnswers = map[string][]string{
+	"ai-assisted":      {"agents=claude-code,codex,gemini-cli,copilot-cli,opencode,goose,aider,kimi-code", "preset=balanced"},
 	"databases":        {"databases=postgres,redis,mysql", "mysql_password=example"},
 	"devops":           {"tools=docker,kubectl,helm,kind,terraform,opentofu,awscli"},
 	"mobile":           {"targets=react-native,flutter,android,ios"},
@@ -137,6 +138,8 @@ var _ = Describe("Shipped lifecycle templates", func() {
 				}
 			}
 		},
+		Entry("ai-assisted on Linux", "ai-assisted", "linux"),
+		Entry("ai-assisted on macOS", "ai-assisted", "darwin"),
 		Entry("devops on Linux", "devops", "linux"),
 		Entry("devops on macOS", "devops", "darwin"),
 		Entry("mobile on Linux", "mobile", "linux"),
@@ -347,6 +350,20 @@ applications:
 		It("requires a mobile target instead of installing everything", func() {
 			_, err := planStarter("mobile", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
 			Expect(err).To(MatchError(ContainSubstring("required input 'targets'")))
+		})
+
+		It("defaults ai-assisted to Claude Code installed from the catalog with an unchanged preset", func() {
+			linuxPlan, err := planStarter("ai-assisted", templates.LifecycleInstall, "linux", nil, nil, allPluginsAvailable)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stepIDs(linuxPlan)).To(Equal([]string{"claude-code", "configure-agents"}))
+			// `devex install` resolves the catalog entry, which adds the sandbox prerequisites.
+			Expect(plannedStep(linuxPlan, "claude-code").Request.Args).To(Equal([]string{"install", "Claude Code", "--non-interactive"}))
+			Expect(plannedStep(linuxPlan, "configure-agents").Request.Args).To(Equal([]string{"agent", "apply", "--init", "--agents", "claude-code"}))
+
+			macosPlan, err := planStarter("ai-assisted", templates.LifecycleInstall, "darwin", []string{"agents=claude-code,codex", "preset=strict"}, nil, allPluginsAvailable)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stepIDs(macosPlan)).To(Equal([]string{"claude-code", "codex", "configure-agents-preset"}))
+			Expect(plannedStep(macosPlan, "configure-agents-preset").Request.Args).To(Equal([]string{"agent", "apply", "--init", "--agents", "claude-code,codex", "--preset", "strict"}))
 		})
 	})
 

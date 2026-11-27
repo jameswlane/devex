@@ -1,0 +1,439 @@
+schema_version: devex.template/v1
+id: ai-assisted
+name: AI-Assisted Development
+version: 1.0.0
+description: AI coding agent CLIs, Linux sandbox prerequisites, and declarative harness defaults
+author: DevEx Team
+tags:
+  - ai
+  - agents
+  - claude
+  - codex
+  - gemini
+  - opencode
+  - copilot
+  - aider
+  - goose
+  - kimi
+categories:
+  - ai-agents
+metadata:
+  init_profile: true
+  languages: []
+  platforms:
+    - linux
+    - macos
+  limitations:
+    - Credentials are never stored in DevEx config. Run 'devex agent login <id>' or export keys after install.
+    - On Ubuntu 24.04, bubblewrap may need a manual AppArmor profile; run 'devex agent sandbox' for commands.
+    - OpenCode and Goose catalog entries currently target Linux and macOS only.
+    - Declarative agents.yaml defaults apply to Claude Code, Codex CLI, Gemini CLI, and OpenCode; existing files stay.
+inputs:
+  agents:
+    type: multiselect
+    prompt: AI coding agents to install
+    default:
+      - claude-code
+    options:
+      - label: Claude Code
+        value: claude-code
+      - label: Codex CLI
+        value: codex
+      - label: Gemini CLI
+        value: gemini-cli
+      - label: GitHub Copilot CLI
+        value: copilot-cli
+      - label: OpenCode
+        value: opencode
+      - label: Goose
+        value: goose
+      - label: Aider
+        value: aider
+      - label: Kimi Code
+        value: kimi-code
+  preset:
+    type: select
+    prompt: Permission preset for declarative harness config (agents.yaml)
+    default: unchanged
+    options:
+      - label: Leave permission modes unchanged
+        value: unchanged
+      - label: balanced
+        value: balanced
+      - label: strict
+        value: strict
+lifecycle:
+  install:
+    - id: mise
+      order: 5
+      description: Install mise, which the mise-based agents need before `devex install` runs
+      if: |-
+        (platform("linux") && (contains(inputs.agents, "codex")
+        || contains(inputs.agents, "gemini-cli") || contains(inputs.agents, "goose")
+        || contains(inputs.agents, "aider")))
+        || (platform("darwin") && (contains(inputs.agents, "gemini-cli")
+        || contains(inputs.agents, "aider")))
+        || (platform("windows") && (contains(inputs.agents, "codex")
+        || contains(inputs.agents, "gemini-cli") || contains(inputs.agents, "aider")
+        || contains(inputs.agents, "kimi-code")))
+      plugin:
+        name: package-manager-mise
+        command: ensure-installed
+    # `devex install` resolves each agent from the catalog, so it also installs
+    # the agent's Linux sandbox prerequisites (Bubblewrap, socat), mise when the
+    # agent needs it, and the agent's user-scope installer settings.
+    - id: claude-code
+      order: 10
+      description: Install Claude Code and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "claude-code")
+      shell:
+        command: devex
+        args:
+          - install
+          - Claude Code
+          - --non-interactive
+      resources:
+        - type: tool
+          name: claude-code
+          external_id: Claude Code
+          metadata:
+            agent_id: claude
+    - id: codex
+      depends_on:
+        - mise
+      order: 20
+      description: Install Codex CLI and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "codex")
+      shell:
+        command: devex
+        args:
+          - install
+          - Codex CLI
+          - --non-interactive
+      resources:
+        - type: tool
+          name: codex
+          external_id: Codex CLI
+          metadata:
+            agent_id: codex
+    - id: gemini-cli
+      depends_on:
+        - mise
+      order: 30
+      description: Install Gemini CLI and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "gemini-cli")
+      shell:
+        command: devex
+        args:
+          - install
+          - Gemini CLI
+          - --non-interactive
+      resources:
+        - type: tool
+          name: gemini-cli
+          external_id: Gemini CLI
+          metadata:
+            agent_id: gemini
+    - id: copilot-cli
+      order: 40
+      description: Install GitHub Copilot CLI and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "copilot-cli")
+      shell:
+        command: devex
+        args:
+          - install
+          - GitHub Copilot CLI
+          - --non-interactive
+      resources:
+        - type: tool
+          name: copilot-cli
+          external_id: GitHub Copilot CLI
+          metadata:
+            agent_id: copilot
+    - id: opencode
+      order: 50
+      description: Install OpenCode and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "opencode") && !platform("windows")
+      shell:
+        command: devex
+        args:
+          - install
+          - OpenCode
+          - --non-interactive
+      resources:
+        - type: tool
+          name: opencode
+          external_id: OpenCode
+          metadata:
+            agent_id: opencode
+    - id: goose
+      depends_on:
+        - mise
+      order: 60
+      description: Install Goose and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "goose") && !platform("windows")
+      shell:
+        command: devex
+        args:
+          - install
+          - Goose
+          - --non-interactive
+      resources:
+        - type: tool
+          name: goose
+          external_id: Goose
+          metadata:
+            agent_id: goose
+    - id: aider
+      depends_on:
+        - mise
+      order: 70
+      description: Install Aider and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "aider")
+      shell:
+        command: devex
+        args:
+          - install
+          - Aider
+          - --non-interactive
+      resources:
+        - type: tool
+          name: aider
+          external_id: Aider
+          metadata:
+            agent_id: aider
+    - id: kimi-code
+      depends_on:
+        - mise
+      order: 80
+      description: Install Kimi Code and its sandbox prerequisites from the DevEx catalog
+      if: contains(inputs.agents, "kimi-code")
+      shell:
+        command: devex
+        args:
+          - install
+          - Kimi Code
+          - --non-interactive
+      resources:
+        - type: tool
+          name: kimi-code
+          external_id: Kimi Code
+          metadata:
+            agent_id: kimi
+    - id: configure-agents
+      order: 90
+      description: Write a minimal agents.yaml when absent and apply harness defaults without changing permission modes
+      depends_on:
+        - claude-code
+        - codex
+        - gemini-cli
+        - opencode
+      if: |-
+        equals(inputs.preset, "unchanged")
+        && (contains(inputs.agents, "claude-code") || contains(inputs.agents, "codex")
+        || contains(inputs.agents, "gemini-cli") || contains(inputs.agents, "opencode"))
+      shell:
+        command: devex
+        args:
+          - agent
+          - apply
+          - --init
+          - --agents
+          - "{{ inputs.agents }}"
+    - id: configure-agents-preset
+      order: 90
+      description: Write minimal agents.yaml with selected preset if absent and apply defaults
+      depends_on:
+        - claude-code
+        - codex
+        - gemini-cli
+        - opencode
+      if: |-
+        !equals(inputs.preset, "unchanged")
+        && (contains(inputs.agents, "claude-code") || contains(inputs.agents, "codex")
+        || contains(inputs.agents, "gemini-cli") || contains(inputs.agents, "opencode"))
+      shell:
+        command: devex
+        args:
+          - agent
+          - apply
+          - --init
+          - --agents
+          - "{{ inputs.agents }}"
+          - --preset
+          - "{{ inputs.preset }}"
+  maintain:
+    # Agents update through their own updaters or package managers
+    # (`devex upgrade` cannot upgrade mise, brew or curlpipe agents), so
+    # maintain only re-applies the shared agents.yaml defaults.
+    - id: agents-apply
+      order: 10
+      if: has_resource("claude-code") || has_resource("codex") || has_resource("gemini-cli") || has_resource("opencode")
+      shell:
+        command: devex
+        args:
+          - agent
+          - apply
+  status:
+    - id: claude-code-status
+      order: 10
+      if: has_resource("claude-code")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - claude
+    - id: codex-status
+      order: 20
+      if: has_resource("codex")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - codex
+    - id: gemini-cli-status
+      order: 30
+      if: has_resource("gemini-cli")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - gemini
+    - id: copilot-cli-status
+      order: 40
+      if: has_resource("copilot-cli")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - copilot
+    - id: opencode-status
+      order: 50
+      if: has_resource("opencode")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - opencode
+    - id: goose-status
+      order: 60
+      if: has_resource("goose")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - goose
+    - id: aider-status
+      order: 70
+      if: has_resource("aider")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - aider
+    - id: kimi-code-status
+      order: 80
+      if: has_resource("kimi-code")
+      shell:
+        command: devex
+        args:
+          - agent
+          - doctor
+          - --agent
+          - kimi
+  remove:
+    # Bubblewrap, socat, and agents.yaml are shared or user-owned and are never removed here.
+    - id: claude-code-remove
+      order: 10
+      if: has_resource("claude-code")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.claude-code.external_id }}"
+          - --force
+    - id: codex-remove
+      order: 20
+      if: has_resource("codex")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.codex.external_id }}"
+          - --force
+    - id: gemini-cli-remove
+      order: 30
+      if: has_resource("gemini-cli")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.gemini-cli.external_id }}"
+          - --force
+    - id: copilot-cli-remove
+      order: 40
+      if: has_resource("copilot-cli")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.copilot-cli.external_id }}"
+          - --force
+    - id: opencode-remove
+      order: 50
+      if: has_resource("opencode")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.opencode.external_id }}"
+          - --force
+    - id: goose-remove
+      order: 60
+      if: has_resource("goose")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.goose.external_id }}"
+          - --force
+    - id: aider-remove
+      order: 70
+      if: has_resource("aider")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.aider.external_id }}"
+          - --force
+    - id: kimi-code-remove
+      order: 80
+      if: has_resource("kimi-code")
+      shell:
+        command: devex
+        args:
+          - uninstall
+          - --app
+          - "{{ resource.kimi-code.external_id }}"
+          - --force

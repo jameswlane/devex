@@ -1,0 +1,38 @@
+---
+title: GitHub Copilot CLI
+description: Install, sandbox, and authenticate GitHub Copilot CLI with DevEx.
+---
+
+GitHub's terminal-native Copilot coding agent (catalog name `GitHub Copilot CLI`, binary `copilot`, DevEx agent ID `copilot`).
+
+## Installation by OS
+
+```sh
+devex install "GitHub Copilot CLI"
+```
+
+| OS | Method | Package / Source | Self-updating |
+| --- | --- | --- | --- |
+| **Linux** | `curlpipe` (user scope) | `https://raw.githubusercontent.com/github/copilot-cli/main/install.sh` (verifies `SHA256SUMS.txt`) | Yes |
+| **macOS** | `brew` (cask) | `copilot-cli` | Yes |
+| **Windows** | `winget` | `GitHub.Copilot` | Yes |
+
+## Native Files
+
+GitHub Copilot CLI is not currently rendered by `agents.yaml`.
+
+- **Config directory**: `$COPILOT_HOME` (default `~/.copilot`)
+- **MCP config**: `$COPILOT_HOME/mcp-config.json` (default `~/.copilot/mcp-config.json`), key `mcpServers`
+- **Credentials**: stored in the OS keyring when available
+
+## Authentication
+
+```sh
+devex agent login copilot
+```
+
+This hands off directly to `copilot login`. `devex agent doctor --agent copilot` checks environment variable names `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, and `GITHUB_TOKEN` (and notes OS keyring storage when none are set). See [Agent Credentials](/docs/guides/agent-credentials).
+
+## Linux Sandboxing
+
+On Linux, DevEx automatically installs `Bubblewrap` before `GitHub Copilot CLI` (`linux.sandbox_prerequisites: [Bubblewrap]`). Local sandboxing requires `bwrap` >= 0.5.0; policies permitting outbound network traffic also require `slirp4netns`, `util-linux` >= 2.35, `iptables`/`ip6tables`, and `/dev/net/tun`. Verify sandbox health with `devex agent sandbox`. See [Agent Sandboxes on Linux](/docs/guides/agent-sandboxes).

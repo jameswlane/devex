@@ -140,6 +140,7 @@ var _ = Describe("Init profiles from lifecycle templates", func() {
 			Expect(written.Environment.Languages).To(Equal(languages))
 			Expect(written.Applications.Categories).To(Equal([]string{category}))
 		},
+		Entry("ai-assisted", "ai-assisted", []string{"Claude Code", "Codex CLI", "Gemini CLI", "GitHub Copilot CLI", "OpenCode", "Goose", "Aider", "Kimi Code"}, []string{}, "ai-agents"),
 		Entry("devops", "devops", []string{"kubectl", "Helm", "kind", "Terraform", "OpenTofu", "AWS CLI"}, []string{"go", "python"}, "infrastructure"),
 		Entry("data-science", "data-science", []string{"JupyterLab", "MLflow"}, []string{"python", "r"}, "science"),
 		Entry("mobile", "mobile", []string{"Node.js", "Java JDK", "Flutter", "Android Studio", "CocoaPods"}, []string{"node", "java"}, "mobile"),

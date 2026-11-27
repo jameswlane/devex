@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -362,5 +363,83 @@ var _ = Describe("Agent apply and diff commands", func() {
 			ContainSubstring("does not support mcp_servers"),
 			ContainSubstring("devex plugin update tool-agents"),
 		)))
+	})
+
+	It("supports --init to write minimal agents.yaml when absent while leaving an existing file untouched", func() {
+		emptySettings := config.CrossPlatformSettings{HomeDir: home}
+		agentsPath := filepath.Join(emptySettings.GetUserConfigDir(), "agents.yaml")
+
+		// Dry-run writes nothing and does not invoke tool-agents.
+		viper.Set("dry-run", true)
+		dryCmd := NewAgentCmdWithDeps(emptySettings, nil, agentsandbox.Probe{}, fake)
+		var dryOut bytes.Buffer
+		dryCmd.SetOut(&dryOut)
+		dryCmd.SetArgs([]string{"apply", "--init", "--agents", "claude-code,aider", "--preset", "balanced"})
+		Expect(dryCmd.Execute()).To(Succeed())
+		Expect(fake.called).To(BeFalse())
+		Expect(dryOut.String()).To(ContainSubstring("Would write"))
+		Expect(dryOut.String()).To(ContainSubstring("preset: balanced"))
+		_, statErr := os.Stat(agentsPath)
+		Expect(os.IsNotExist(statErr)).To(BeTrue())
+
+		// Real --init writes minimal agents.yaml and applies it.
+		viper.Set("dry-run", false)
+		initCmd := NewAgentCmdWithDeps(emptySettings, nil, agentsandbox.Probe{}, fake)
+		var initOut bytes.Buffer
+		initCmd.SetOut(&initOut)
+		initCmd.SetArgs([]string{"apply", "--init", "--agents", "claude-code,codex,aider", "--preset", "balanced"})
+		Expect(initCmd.Execute()).To(Succeed())
+		Expect(fake.called).To(BeTrue())
+		written, readErr := os.ReadFile(agentsPath)
+		Expect(readErr).NotTo(HaveOccurred())
+		Expect(string(written)).To(ContainSubstring("- claude"))
+		Expect(string(written)).To(ContainSubstring("- codex"))
+		Expect(string(written)).NotTo(ContainSubstring("aider"))
+		Expect(string(written)).To(ContainSubstring("preset: balanced"))
+
+		// Second --init keeps the existing file untouched and applies the loaded
+		// settings, which merge every configuration tier.
+		fake2 := &fakeAgentPluginExecutor{}
+		loadedSettings := emptySettings
+		loadedSettings.Agents = config.AgentsConfig{Enabled: []string{"claude", "codex"}, Preset: "balanced"}
+		keepCmd := NewAgentCmdWithDeps(loadedSettings, nil, agentsandbox.Probe{}, fake2)
+		var keepOut bytes.Buffer
+		keepCmd.SetOut(&keepOut)
+		keepCmd.SetArgs([]string{"apply", "--init", "--agents", "gemini-cli", "--preset", "strict"})
+		Expect(keepCmd.Execute()).To(Succeed())
+		Expect(keepOut.String()).To(ContainSubstring("Kept your existing agents configuration"))
+		Expect(fake2.called).To(BeTrue())
+		after, readErr := os.ReadFile(agentsPath)
+		Expect(readErr).NotTo(HaveOccurred())
+		Expect(string(after)).To(Equal(string(written)))
+	})
+
+	It("does not write a user agents.yaml with --init when another tier already configures agents", func() {
+		tierSettings := config.CrossPlatformSettings{HomeDir: home, Agents: config.AgentsConfig{Enabled: []string{"codex"}}}
+		agentsPath := filepath.Join(tierSettings.GetUserConfigDir(), "agents.yaml")
+		viper.Set("dry-run", false)
+		tierFake := &fakeAgentPluginExecutor{}
+		cmd := NewAgentCmdWithDeps(tierSettings, nil, agentsandbox.Probe{}, tierFake)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"apply", "--init", "--agents", "claude-code"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Kept your existing agents configuration"))
+		Expect(tierFake.called).To(BeTrue())
+		_, statErr := os.Stat(agentsPath)
+		Expect(os.IsNotExist(statErr)).To(BeTrue())
+	})
+
+	It("applies the harness IDs --init resolved from catalog slugs in DEVEX_AGENTS", func() {
+		initSettings := config.CrossPlatformSettings{HomeDir: home}
+		viper.Set("dry-run", false)
+		GinkgoT().Setenv("DEVEX_AGENTS", "claude-code")
+		envFake := &fakeAgentPluginExecutor{}
+		cmd := NewAgentCmdWithDeps(initSettings, nil, agentsandbox.Probe{}, envFake)
+		cmd.SetOut(io.Discard)
+		cmd.SetArgs([]string{"apply", "--init"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(envFake.called).To(BeTrue())
+		Expect(string(envFake.specBytes)).To(ContainSubstring(`"name": "claude"`))
 	})
 })

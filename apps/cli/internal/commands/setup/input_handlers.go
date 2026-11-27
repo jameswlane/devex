@@ -20,7 +20,7 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 			return m.nextStep()
 		}
 		return m, nil
-	case StepDesktopApps, StepLanguages, StepDatabases, StepShell, StepOhMyZsh:
+	case StepDesktopApps, StepLanguages, StepDatabases, StepAIAgents, StepAIAgentPreset, StepShell, StepOhMyZsh:
 		return m.nextStep()
 	case StepTheme:
 		// Theme step: Enter should not continue, only 'n' continues
@@ -114,6 +114,10 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 		maxItems = len(m.system.languages)
 	case StepDatabases:
 		maxItems = len(m.system.databases)
+	case StepAIAgents:
+		maxItems = len(m.aiAgentEntries())
+	case StepAIAgentPreset:
+		maxItems = len(aiAgentPresetOptions)
 	case StepShell:
 		maxItems = len(m.system.shells)
 	case StepOhMyZsh:
@@ -153,6 +157,20 @@ func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 		m.selections.selectedLangs[m.cursor] = !m.selections.selectedLangs[m.cursor]
 	case StepDatabases:
 		m.selections.selectedDBs[m.cursor] = !m.selections.selectedDBs[m.cursor]
+	case StepAIAgents:
+		apps := m.aiAgentEntries()
+		if m.cursor < 0 || m.cursor >= len(apps) {
+			return m, nil
+		}
+		if m.selections.selectedAIAgents == nil {
+			m.selections.selectedAIAgents = make(map[string]bool)
+		}
+		name := apps[m.cursor].Name
+		m.selections.selectedAIAgents[name] = !m.selections.selectedAIAgents[name]
+	case StepAIAgentPreset:
+		if m.cursor >= 0 && m.cursor < len(aiAgentPresetOptions) {
+			m.selections.aiAgentPreset = aiAgentPresetOptions[m.cursor].Value
+		}
 	case StepShell:
 		m.selections.selectedShell = m.cursor
 	case StepOhMyZsh:

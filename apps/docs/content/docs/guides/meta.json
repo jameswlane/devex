@@ -2,6 +2,7 @@
 	"title": "Guides",
 	"pages": [
 		"getting-started",
+		"ai-coding-agents",
 		"security",
 		"agent-sandboxes",
 		"agent-credentials",

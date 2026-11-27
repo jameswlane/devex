@@ -153,6 +153,20 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
 
+	case StepAIAgents:
+		if len(m.system.aiAgentApps) == 0 {
+			newModel, _ := m.nextStep()
+			return newModel.View()
+		}
+		return m.renderAIAgents()
+
+	case StepAIAgentPreset:
+		if !m.hasSelectedHarnessAgent() {
+			newModel, _ := m.nextStep()
+			return newModel.View()
+		}
+		return m.renderAIAgentPreset()
+
 	case StepShell:
 		// Only show shell selection on compatible systems (Linux/macOS)
 		if m.system.detectedPlatform.OS == "windows" {
@@ -350,6 +364,10 @@ func (m *SetupModel) View() string {
 
 		s += m.renderChangeInventory()
 		s += "\n"
+		if agentSummary := m.renderAIAgentsSummary(); agentSummary != "" {
+			s += agentSummary
+			s += "\n"
+		}
 
 		if !m.installation.hasErrors {
 			if m.shellSwitched {

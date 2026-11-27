@@ -186,7 +186,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		},
 		Entry("Claude Code", "Claude Code", "curlpipe", "https://claude.ai/install.sh", "user", true, nil, []string{"Bubblewrap", "socat"}, `rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"`),
 		Entry("Codex CLI", "Codex CLI", "mise", "codex@latest", "", false, []string{"mise"}, []string{"Bubblewrap"}, "codex"),
-		Entry("Gemini CLI", "Gemini CLI", "mise", "node@lts npm:@google/gemini-cli@latest", "", true, []string{"Node.js"}, nil, "npm:@google/gemini-cli"),
+		Entry("Gemini CLI", "Gemini CLI", "mise", "node@24 npm:@google/gemini-cli@latest", "", true, []string{"Node.js"}, nil, "npm:@google/gemini-cli"),
 		Entry("GitHub Copilot CLI", "GitHub Copilot CLI", "curlpipe", "https://raw.githubusercontent.com/github/copilot-cli/main/install.sh", "user", true, nil, []string{"Bubblewrap"}, `rm -f "$HOME/.local/bin/copilot"`),
 		Entry("OpenCode", "OpenCode", "curlpipe", "https://opencode.ai/install", "user", true, nil, nil, `rm -f "$HOME/.opencode/bin/opencode"`),
 		Entry("Kimi Code", "Kimi Code", "curlpipe", "https://code.kimi.com/kimi-code/install.sh", "user", false, nil, nil, `rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),

@@ -23,10 +23,12 @@ const (
 	StepDesktopApps    // Only if desktop detected & non-default apps available
 	StepLanguages
 	StepDatabases
-	StepShell     // Only for compatible systems (Linux/macOS)
-	StepOhMyZsh   // Optional framework setup, only for Zsh
-	StepTheme     // Theme selection after shell
-	StepGitConfig // Full name & email for git configuration
+	StepAIAgents      // Optional AI coding agents, editors, and local models
+	StepAIAgentPreset // Permission preset when a configurable harness agent is selected
+	StepShell         // Only for compatible systems (Linux/macOS)
+	StepOhMyZsh       // Optional framework setup, only for Zsh
+	StepTheme         // Theme selection after shell
+	StepGitConfig     // Full name & email for git configuration
 	StepConfirmation
 	StepInstalling
 	StepComplete
@@ -55,6 +57,8 @@ type UISelections struct {
 	selectedDBs         map[int]bool
 	selectedApps        map[int]bool
 	selectedDesktopApps map[string]bool
+	selectedAIAgents    map[string]bool
+	aiAgentPreset       string
 	selectedTheme       int
 	ohMyZsh             ohMyZshSelection
 
@@ -92,8 +96,10 @@ type InstallationState struct {
 	installErrors []string
 	hasErrors     bool
 	// outcomes and changes feed the completion screen's change inventory.
-	outcomes *tui.OutcomeRecorder
-	changes  []string
+	outcomes        *tui.OutcomeRecorder
+	changes         []string
+	aiAgentWarnings []string
+	aiAgentSummary  string
 }
 
 // Thread-safe methods for InstallationState
@@ -186,6 +192,7 @@ type SystemInfo struct {
 	databases         []string
 	desktopApps       []string
 	desktopAppDetails []types.CrossPlatformApp
+	aiAgentApps       []types.CrossPlatformApp
 	themes            []string
 	hasDesktop        bool
 	detectedPlatform  platform.DetectionResult
@@ -202,6 +209,7 @@ type SetupModel struct {
 	width             int
 	height            int
 	desktopAppsOffset int
+	aiAgentsOffset    int
 
 	// Grouped states for better organization
 	system       SystemInfo
@@ -270,6 +278,11 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 	shells := SupportedShells
 	defaultShellIdx := GetDefaultShellIndex(shells)
 	excludedDefaults, _ := configuredDefaultExclusions(settings, detectedPlatform)
+	aiAgentApps := getAvailableAIAgentApps(settings, detectedPlatform)
+	selectedAIAgents, aiAgentPreset, _ := configuredAIAgentSelection(settings, detectedPlatform)
+	if selectedAIAgents == nil {
+		selectedAIAgents = make(map[string]bool)
+	}
 
 	return &SetupModel{
 		step:          StepSystemOverview,
@@ -283,6 +296,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 			databases:         []string{"PostgreSQL", "MySQL", "Redis", "MongoDB"},
 			desktopApps:       desktopApps,
 			desktopAppDetails: desktopAppDetails,
+			aiAgentApps:       aiAgentApps,
 			themes:            getAvailableThemeNames(settings),
 			hasDesktop:        hasDesktop,
 			detectedPlatform:  detectedPlatform,
@@ -297,6 +311,8 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 			selectedDBs:         make(map[int]bool),
 			selectedApps:        make(map[int]bool),
 			selectedDesktopApps: make(map[string]bool),
+			selectedAIAgents:    selectedAIAgents,
+			aiAgentPreset:       aiAgentPreset,
 			selectedTheme:       0,
 			ohMyZsh:             configuredOhMyZsh(false),
 		},
