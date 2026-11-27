@@ -477,6 +477,145 @@ var _ = Describe("DEB command contracts", func() {
 			Expect(recorder.Calls(exe)).To(BeEmpty(), fmt.Sprint(exe))
 		}
 	})
+
+	It("keeps accepting .deb URLs that redirect to opaque octet-stream storage URLs (GitHub releases)", func() {
+		previous := http.DefaultTransport
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if strings.HasSuffix(req.URL.Path, ".deb") {
+				return &http.Response{
+					StatusCode: http.StatusFound,
+					Status:     "302 Found",
+					Header:     http.Header{"Location": {"https://release-assets.githubusercontent.com/github-production-release-asset/1/abc?sp=r"}},
+					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": {"application/octet-stream"}},
+				Body:       io.NopCloser(strings.NewReader("deb fixture")),
+				Request:    req,
+			}, nil
+		})
+
+		Expect(plugin.Execute("install", []string{"https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb"})).To(Succeed())
+		Expect(recorder.Calls("dpkg")).To(HaveLen(1))
+	})
+
+	It("accepts redirecting ?format=deb download URLs that resolve to a .deb file", func() {
+		previous := http.DefaultTransport
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		var requested []string
+		http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requested = append(requested, req.URL.String())
+			if req.URL.Path == "/download/latest/linux/x64" {
+				return &http.Response{
+					StatusCode: http.StatusFound,
+					Status:     "302 Found",
+					Header:     http.Header{"Location": {"https://installers.lmstudio.ai/linux/x64/0.4.29-2/LM-Studio-0.4.29-2-x64.deb"}},
+					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": {"application/vnd.debian.binary-package"}},
+				Body:       io.NopCloser(strings.NewReader("deb fixture")),
+				Request:    req,
+			}, nil
+		})
+
+		Expect(plugin.Execute("install", []string{"https://lmstudio.ai/download/latest/linux/x64?format=deb"})).To(Succeed())
+		Expect(requested).To(Equal([]string{
+			"https://lmstudio.ai/download/latest/linux/x64?format=deb",
+			"https://installers.lmstudio.ai/linux/x64/0.4.29-2/LM-Studio-0.4.29-2-x64.deb",
+		}))
+		Expect(recorder.Calls("dpkg")).To(HaveLen(1))
+	})
+
+	It("rejects redirecting ?format=deb URLs that redirect to localhost", func() {
+		previous := http.DefaultTransport
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Status:     "302 Found",
+				Header:     http.Header{"Location": {"https://127.0.0.1/evil.deb"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		})
+
+		err := plugin.Execute("install", []string{"https://lmstudio.ai/download/latest/linux/x64?format=deb"})
+		Expect(err).To(MatchError(ContainSubstring("localhost")))
+		Expect(recorder.Calls("dpkg")).To(BeEmpty())
+	})
+
+	It("rejects redirecting ?format=deb URLs that downgrade from https to http", func() {
+		previous := http.DefaultTransport
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Status:     "302 Found",
+				Header:     http.Header{"Location": {"http://installers.lmstudio.ai/linux/x64/lm-studio.deb"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		})
+
+		err := plugin.Execute("install", []string{"https://lmstudio.ai/download/latest/linux/x64?format=deb"})
+		Expect(err).To(MatchError(ContainSubstring("downgrade")))
+		Expect(recorder.Calls("dpkg")).To(BeEmpty())
+	})
+
+	It("rejects redirecting ?format=deb URLs that redirect to link-local metadata IPs", func() {
+		previous := http.DefaultTransport
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Status:     "302 Found",
+				Header:     http.Header{"Location": {"https://169.254.169.254/latest/meta-data/evil.deb"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		})
+
+		err := plugin.Execute("install", []string{"https://lmstudio.ai/download/latest/linux/x64?format=deb"})
+		Expect(err).To(MatchError(ContainSubstring("private IP")))
+		Expect(recorder.Calls("dpkg")).To(BeEmpty())
+	})
+
+	It("rejects redirecting ?format=deb URLs that resolve to a non-.deb artifact", func() {
+		previous := http.DefaultTransport
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Path == "/download/latest/linux/x64" {
+				return &http.Response{
+					StatusCode: http.StatusFound,
+					Status:     "302 Found",
+					Header:     http.Header{"Location": {"https://installers.lmstudio.ai/linux/x64/not-a-package.bin"}},
+					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": {"application/octet-stream"}},
+				Body:       io.NopCloser(strings.NewReader("not a deb")),
+				Request:    req,
+			}, nil
+		})
+
+		err := plugin.Execute("install", []string{"https://lmstudio.ai/download/latest/linux/x64?format=deb"})
+		Expect(err).To(MatchError(ContainSubstring("does not point to a .deb package")))
+		Expect(recorder.Calls("dpkg")).To(BeEmpty())
+	})
 })
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

@@ -529,4 +529,46 @@ var _ = Describe("Agents configuration schema and validation", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loaded.Agents.Enabled).To(Equal([]string{"codex"}))
 	})
+
+	It("loads and strictly validates agents.local_models and rejects unsafe or duplicate model names", func() {
+		writeAgentsYAML(`agents:
+  local_models:
+    - qwen2.5-coder:7b
+    - llama3.2
+    - alice/custom:v1
+`)
+		loaded, err := LoadCrossPlatformSettings(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.Agents.IsConfigured()).To(BeTrue())
+		Expect(loaded.Agents.LocalModels).To(Equal([]string{"qwen2.5-coder:7b", "llama3.2", "alice/custom:v1"}))
+
+		result, err := ValidateConfig(context.Background(), loaded, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
+		Expect(result.Warnings).To(BeZero())
+
+		errs := ValidateAgentsConfig(AgentsConfig{
+			LocalModels: []string{
+				"qwen2.5-coder:7b",
+				"qwen2.5-coder:7b",
+				"llama3.2",
+				"llama3.2:latest",
+				"bad;rm -rf /",
+				"../escape",
+				"",
+			},
+		}, "agents.yaml")
+		Expect(errs).To(HaveLen(5))
+		Expect(errs).To(ContainElement(And(
+			HaveField("Field", "agents.local_models[1]"),
+			HaveField("Message", ContainSubstring("duplicate local model")),
+		)))
+		Expect(errs).To(ContainElement(And(
+			HaveField("Field", "agents.local_models[3]"),
+			HaveField("Message", ContainSubstring("duplicate local model")),
+		)))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.local_models[4]")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.local_models[5]")))
+		Expect(errs).To(ContainElement(HaveField("Field", "agents.local_models[6]")))
+	})
 })

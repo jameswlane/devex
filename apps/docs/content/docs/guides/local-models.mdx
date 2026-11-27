@@ -1,0 +1,160 @@
+---
+title: Local Models
+description: Run local LLMs with Ollama and LM Studio, configure GPU acceleration safely, declare models in agents.yaml, and connect coding agents to http://127.0.0.1:11434.
+---
+
+Running language models locally lets you use coding agents offline or under strict data-residency policies without sending source code to hosted inference APIs. DevEx provides an opt-in system-level Ollama installation, declarative model pulls in `agents.yaml`, GPU diagnostics, and LM Studio as a desktop alternative.
+
+## Installing Ollama: System Service vs. `mise`
+
+DevEx exposes Ollama in two places—choose the one that fits your workflow:
+
+| Option | Command | What You Get | When to Pick It |
+| --- | --- | --- | --- |
+| **System application** (`apps/cli/config/applications/ai-agents/ollama.yaml`) | `devex install ollama` | Official Linux release tarball extracted to `/usr/local`, dedicated `ollama` user/group, AMD ROCm add-on when an AMD display GPU is present, localhost-only systemd service (`127.0.0.1:11434`), and full uninstall cleanup. On macOS uses Homebrew cask `ollama-app`; on Windows uses winget `Ollama.Ollama`. | Recommended for Linux workstations and offline coding-agent workflows where Ollama should run as a background service on boot. |
+| **`mise` tool** (`apps/cli/config/mise.yaml`) | `mise use -g ollama` | Standalone user-level `ollama` CLI binary with no systemd service, no `ollama` system user, and no ROCm add-on automation. | Useful for quick experiments, CI/containers without systemd, or pinning a specific Ollama CLI version alongside other `mise` tools. |
+
+On Linux, `devex install ollama` installs directly from Ollama's official `.tar.zst` release archives (`curl` + `zstd`) rather than piping `https://ollama.com/install.sh` to a shell. This guarantees that DevEx **never installs GPU drivers silently** and binds the systemd service strictly to `OLLAMA_HOST=127.0.0.1:11434`.
+
+To remove the system installation completely—stopping and disabling the service, removing `/etc/systemd/system/ollama.service`, `/usr/local/bin/ollama`, `/usr/local/lib/ollama`, `/usr/share/ollama`, and the `ollama` user/group:
+
+```sh
+devex uninstall --app Ollama
+```
+
+Add `--keep-data` to keep the downloaded models in `/usr/share/ollama`, along with the `ollama` user that owns them, so a later reinstall can use them again:
+
+```sh
+devex uninstall --app Ollama --keep-data
+```
+
+## GPU Detection and Driver Policy
+
+DevEx inspects PCI display devices (`/sys/bus/pci/devices/*`), `nvidia-smi`, and AMD ROCm kernel interfaces (`/sys/module/amdgpu` and `/dev/kfd`) in read-only mode to report which GPU drivers and interfaces are ready for Ollama. Ollama makes the final choice at runtime. **DevEx never installs GPU drivers automatically.**
+
+- **NVIDIA (CUDA)**: When an NVIDIA GPU (`0x10de`) is detected and `nvidia-smi` succeeds, Ollama uses NVIDIA CUDA. If `nvidia-smi` is missing or fails, Ollama falls back to CPU until you install drivers manually:
+  - **Ubuntu**: `sudo ubuntu-drivers install` (then reboot)
+  - **Debian**: Follow the [Debian NVIDIA Graphics Drivers guide](https://wiki.debian.org/NvidiaGraphicsDrivers) (then reboot)
+- **AMD (ROCm)**: On Linux `amd64`, `devex install ollama` automatically extracts Ollama's official ROCm add-on archive (`ollama-linux-amd64-rocm.tar.zst`) when an AMD display GPU (`0x1002`) is present, and adds the `ollama` user to the `render` and `video` groups when they exist. DevEx reports AMD ROCm as available when both the `amdgpu` kernel module and `/dev/kfd` are present; Ollama still decides at runtime whether your card is supported (see [Ollama GPU support](https://github.com/ollama/ollama/blob/main/docs/gpu.mdx)). Without them, DevEx prints a manual setup hint and Ollama runs on CPU.
+- **No discrete GPU**: Ollama runs on CPU only.
+
+To confirm what Ollama actually uses, load a model and check the `PROCESSOR` column of `ollama ps` (for example `100% GPU` or `100% CPU`):
+
+```sh
+ollama run qwen2.5-coder:7b "hello" >/dev/null
+ollama ps
+```
+
+Inspect your current runtime and GPU status at any time with:
+
+```sh
+devex agent doctor
+```
+
+## Declaring Local Models in `agents.yaml`
+
+Add an optional `agents.local_models` list to `~/.config/devex/config/agents.yaml` (or `$DEVEX_CONFIG_DIR/config/agents.yaml`):
+
+```yaml
+agents:
+  local_models:
+    - qwen2.5-coder:7b
+    - llama3.2:3b
+```
+
+Validate the file (model names are strictly validated as `[namespace/]model[:tag]`):
+
+```sh
+devex config validate --strict
+```
+
+Preview the GPU runtime and download sizes from `registry.ollama.ai` with **zero writes and zero pulls**:
+
+```sh
+devex agent diff
+# or
+devex agent apply --dry-run
+```
+
+Pull any missing models (already-present models are skipped):
+
+```sh
+devex agent apply
+```
+
+If Ollama is not installed, `devex agent apply` returns `Ollama is not installed: run 'devex install ollama'`. If the service is stopped or unreachable, it prompts you to run `sudo systemctl start ollama`.
+
+## Desktop Alternative: LM Studio
+
+If you prefer a graphical interface for discovering, downloading, and serving local GGUF/MLX models, install LM Studio (opt-in, `default: false`):
+
+```sh
+devex install "LM Studio"
+```
+
+- **Debian / Ubuntu (`amd64`)**: Downloads and installs the official `.deb` package (`https://lmstudio.ai/download/latest/linux/x64?format=deb`).
+- **Other Linux (`amd64`)**: Uses the official AppImage (`https://lmstudio.ai/download/latest/linux/x64`).
+- **macOS**: Installs Homebrew cask `lm-studio`.
+- **Windows**: Installs winget package `ElementLabs.LMStudio`.
+
+## Pointing Coding Agents at `http://127.0.0.1:11434`
+
+Because DevEx binds the Ollama systemd service to `127.0.0.1:11434`, only local processes on your workstation can reach it. Point your coding agents at that endpoint using each tool's native configuration:
+
+### OpenCode
+
+In `~/.config/opencode/opencode.json`, configure an `ollama` provider using `@ai-sdk/openai-compatible` and Ollama's OpenAI-compatible `/v1` endpoint:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1"
+      },
+      "models": {
+        "qwen2.5-coder:7b": {
+          "name": "Qwen2.5 Coder 7B"
+        }
+      }
+    }
+  }
+}
+```
+
+### Aider
+
+Export `OLLAMA_API_BASE` and invoke Aider with the `ollama_chat/` model prefix:
+
+```sh
+export OLLAMA_API_BASE=http://127.0.0.1:11434
+aider --model ollama_chat/qwen2.5-coder:7b
+```
+
+### Goose
+
+Export `OLLAMA_HOST` or select the Ollama provider in `goose configure`:
+
+```sh
+export OLLAMA_HOST=http://127.0.0.1:11434
+goose configure
+```
+
+### Continue
+
+In `~/.continue/config.yaml`, add a model entry with `provider: ollama` and `apiBase`:
+
+```yaml
+models:
+  - name: Qwen2.5 Coder 7B
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://127.0.0.1:11434
+    roles:
+      - chat
+      - edit
+      - apply
+```

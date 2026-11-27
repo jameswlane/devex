@@ -13,19 +13,22 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/agentskills"
 	skillinstall "github.com/jameswlane/devex/apps/cli/internal/agentskills/install"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/localmodels"
 	"github.com/jameswlane/devex/apps/cli/internal/skillpacks"
 	"github.com/spf13/cobra"
 )
 
 // AgentCmdDeps bundles injectable dependencies for the `agent` command tree.
 type AgentCmdDeps struct {
-	Settings         config.CrossPlatformSettings
-	PluginBootstrap  pluginBootstrapProvider
-	SandboxProbe     agentsandbox.Probe
-	Executor         agentPluginExecutor
-	DoctorProbe      agentdoctor.Probe
-	LoginRunner      agentdoctor.LoginRunner
-	SkillPackManager *skillpacks.Manager
+	Settings               config.CrossPlatformSettings
+	PluginBootstrap        pluginBootstrapProvider
+	SandboxProbe           agentsandbox.Probe
+	Executor               agentPluginExecutor
+	DoctorProbe            agentdoctor.Probe
+	LoginRunner            agentdoctor.LoginRunner
+	SkillPackManager       *skillpacks.Manager
+	LocalModelsProbe       *localmodels.Probe
+	LocalModelsPlanOptions localmodels.PlanOptions
 }
 
 type agentSkillOptions struct {
@@ -108,8 +111,8 @@ to remove so Kimi does not load DevEx twice. Differing content requires --overwr
 	cmd.AddCommand(newAgentInitCmd(deps.Settings))
 	cmd.AddCommand(newAgentSkillsCmd(deps.SkillPackManager))
 	cmd.AddCommand(newAgentSandboxCmd(deps.SandboxProbe))
-	cmd.AddCommand(newAgentApplyCmd(deps.Settings, executor))
-	cmd.AddCommand(newAgentDiffCmd(deps.Settings, executor))
+	cmd.AddCommand(newAgentApplyCmd(deps.Settings, executor, deps.LocalModelsProbe, deps.LocalModelsPlanOptions))
+	cmd.AddCommand(newAgentDiffCmd(deps.Settings, executor, deps.LocalModelsProbe, deps.LocalModelsPlanOptions))
 	cmd.AddCommand(newAgentDoctorCmd(deps.DoctorProbe))
 	cmd.AddCommand(newAgentLoginCmd(deps.DoctorProbe, deps.LoginRunner))
 	return cmd

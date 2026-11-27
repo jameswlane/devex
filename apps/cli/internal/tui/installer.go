@@ -932,9 +932,11 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 
 	// Optional hooks retain their failed audit result even when registration continues.
 	// The lifecycle stays incomplete so the next run retries the hook.
+	// For hook-driven curlpipe apps, post_install IS the installation step, so failure fails the install.
 	hooksComplete := true
 	if err := state.AuditStep(ctx, "post-install", len(osConfig.PostInstall) > 0, func() error { return si.executeCommands(ctx, osConfig.PostInstall, policy) }); err != nil {
-		if utils.IsHookRejection(err) {
+		if utils.IsHookRejection(err) || osConfig.IsHookDrivenCurlpipe() {
+			si.recordFailedInstallation(app.Name, startTime, err)
 			return fmt.Errorf("post-install failed: %w", err)
 		}
 		if ctx.Err() != nil {
@@ -1179,6 +1181,10 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 // executeCurlPipeInstall handles curl pipe installations with security validation
 // SECURITY: Now validates URLs against trusted domains before execution
 func (si *StreamingInstaller) executeCurlPipeInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	if osConfig.IsHookDrivenCurlpipe() {
+		si.sendLog("INFO", fmt.Sprintf("Installing %s via install hooks", app.Name))
+		return nil
+	}
 	// Release archives use the archive installer's own source policy.
 	if installers.IsReleaseArchive(osConfig.DownloadURL) {
 		si.sendLog("INFO", fmt.Sprintf("Installing release archive %s", osConfig.DownloadURL))

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapply"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/localmodels"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -37,7 +38,7 @@ var (
 	agentExecutable = os.Executable
 )
 
-func newAgentApplyCmd(settings config.CrossPlatformSettings, executor agentPluginExecutor) *cobra.Command {
+func newAgentApplyCmd(settings config.CrossPlatformSettings, executor agentPluginExecutor, lmProbe *localmodels.Probe, lmOpts localmodels.PlanOptions) *cobra.Command {
 	var agentsFlag string
 	var presetFlag string
 	var initFlag bool
@@ -49,14 +50,16 @@ func newAgentApplyCmd(settings config.CrossPlatformSettings, executor agentPlugi
 		Args:         cobra.NoArgs,
 		Long: `Render shared global instructions, model defaults, permission presets,
 allowed/denied shell command rules, and MCP servers from agents.yaml into each
-enabled, installed coding agent's native configuration files.
+enabled, installed coding agent's native configuration files, then pull any
+missing agents.local_models into the local Ollama runtime.
 
-Honors the global --dry-run flag (zero writes) and flags > env > config > defaults
-precedence (DEVEX_AGENTS, DEVEX_AGENTS_PRESET, DEVEX_DRY_RUN).`,
+Honors the global --dry-run flag (zero writes and zero pulls) and
+flags > env > config > defaults precedence (DEVEX_AGENTS, DEVEX_AGENTS_PRESET,
+DEVEX_DRY_RUN).`,
 		Example: `  # Apply agents.yaml to all enabled, installed coding agents
   devex agent apply
 
-  # Preview changes without writing files, backups, or state
+  # Preview changes without writing files, backups, state, or pulling models
   devex agent apply --dry-run
 
   # Limit to specific enabled agents with a stricter preset
@@ -64,9 +67,9 @@ precedence (DEVEX_AGENTS, DEVEX_AGENTS_PRESET, DEVEX_DRY_RUN).`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dryRun := viper.GetBool("dry-run")
 			if initFlag {
-				return runAgentApplyInit(cmd, settings, executor, agentsFlag, presetFlag, dryRun)
+				return runAgentApplyInit(cmd, settings, executor, lmProbe, lmOpts, agentsFlag, presetFlag, dryRun)
 			}
-			return runAgentPluginCommand(cmd, settings, executor, agentsFlag, presetFlag, dryRun)
+			return runAgentPluginCommand(cmd, settings, executor, lmProbe, lmOpts, agentsFlag, presetFlag, dryRun)
 		},
 	}
 
@@ -76,7 +79,7 @@ precedence (DEVEX_AGENTS, DEVEX_AGENTS_PRESET, DEVEX_DRY_RUN).`,
 	return cmd
 }
 
-func newAgentDiffCmd(settings config.CrossPlatformSettings, executor agentPluginExecutor) *cobra.Command {
+func newAgentDiffCmd(settings config.CrossPlatformSettings, executor agentPluginExecutor, lmProbe *localmodels.Probe, lmOpts localmodels.PlanOptions) *cobra.Command {
 	var agentsFlag string
 	var presetFlag string
 
@@ -86,15 +89,15 @@ func newAgentDiffCmd(settings config.CrossPlatformSettings, executor agentPlugin
 		SilenceUsage: true,
 		Args:         cobra.NoArgs,
 		Long: `Preview what 'devex agent apply' would create or change in each enabled,
-installed coding agent's native configuration files without writing any files,
-backups, or state.`,
+installed coding agent's native configuration files, and which local Ollama
+models it would pull, without writing any files, backups, or state.`,
 		Example: `  # Preview changes for all enabled agents
   devex agent diff
 
   # Preview changes for Claude Code only with the strict preset
   devex agent diff --agents claude --preset strict`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runAgentPluginCommand(cmd, settings, executor, agentsFlag, presetFlag, true)
+			return runAgentPluginCommand(cmd, settings, executor, lmProbe, lmOpts, agentsFlag, presetFlag, true)
 		},
 	}
 
@@ -103,7 +106,7 @@ backups, or state.`,
 	return cmd
 }
 
-func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, agentsFlag, presetFlag string, dryRun bool) error {
+func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, lmProbe *localmodels.Probe, lmOpts localmodels.PlanOptions, agentsFlag, presetFlag string, dryRun bool) error {
 	preset := ""
 	if cmd.Flags().Changed("preset") {
 		preset = strings.TrimSpace(presetFlag)
@@ -144,17 +147,26 @@ func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings
 		// The loaded settings already merge every configuration tier, so apply
 		// them as they are instead of re-reading one file.
 		cmd.Printf("Kept your existing agents configuration (%s); run 'devex agent diff' to review.\n", agentsPath)
-		if dryRun {
-			return nil
-		}
-		if len(settings.Agents.Enabled) == 0 {
-			cmd.Printf("No coding agents enabled in %s; add them under agents.enabled.\n", agentsPath)
+		models := settings.Agents.LocalModels
+		if dryRun && len(models) == 0 {
 			return nil
 		}
 		if errs := config.ValidateAgentsConfig(settings.Agents, "agents.yaml"); len(errs) > 0 {
 			return fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
 		}
-		return applyResolvedAgents(cmd, settings.Agents, settings.Agents.Enabled, executor)
+		if dryRun {
+			return runLocalModels(cmd, models, lmProbe, lmOpts, true)
+		}
+		var agentsErr error
+		if len(settings.Agents.Enabled) == 0 {
+			cmd.Printf("No coding agents enabled in %s; add them under agents.enabled.\n", agentsPath)
+		} else {
+			agentsErr = applyResolvedAgents(cmd, settings.Agents, settings.Agents.Enabled, executor)
+		}
+		if len(models) == 0 {
+			return agentsErr
+		}
+		return errors.Join(agentsErr, runLocalModels(cmd, models, lmProbe, lmOpts, false))
 	}
 
 	if len(harnessIDs) == 0 {
@@ -189,7 +201,7 @@ func applyResolvedAgents(cmd *cobra.Command, cfg config.AgentsConfig, targets []
 	return agentapply.Execute(cmd.Context(), executor, spec, streams, false)
 }
 
-func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, agentsFlag, presetFlag string, diffOnly bool) error {
+func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSettings, executor agentPluginExecutor, lmProbe *localmodels.Probe, lmOpts localmodels.PlanOptions, agentsFlag, presetFlag string, diffOnly bool) error {
 	cfg := settings.Agents
 	if len(cfg.Enabled) == 0 && !cfg.IsConfigured() {
 		agentsPath := filepath.Join(settings.GetUserConfigDir(), "agents.yaml")
@@ -201,7 +213,7 @@ func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSett
 		return fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
 	}
 
-	if len(cfg.Enabled) == 0 {
+	if len(cfg.Enabled) == 0 && len(cfg.LocalModels) == 0 {
 		agentsPath := filepath.Join(settings.GetUserConfigDir(), "agents.yaml")
 		cmd.Printf("No coding agents enabled in %s.\nAdd one or more agents under agents.enabled (%s).\nDocumentation: %s\n",
 			agentsPath, strings.Join(config.SupportedAgents(), ", "), agentsDocsURL)
@@ -226,18 +238,57 @@ func runAgentPluginCommand(cmd *cobra.Command, settings config.CrossPlatformSett
 		selectedRaw = envAgents
 	}
 
-	targetAgents, err := resolveTargetAgents(cfg.Enabled, selectedRaw)
-	if err != nil {
-		return err
-	}
+	var agentsErr error
+	if len(cfg.Enabled) > 0 || selectedRaw != "" {
+		targetAgents, err := resolveTargetAgents(cfg.Enabled, selectedRaw)
+		if err != nil {
+			return err
+		}
 
-	spec := agentapply.BuildResolvedSpec(cfg, targetAgents, presetOverride, agentLookPath, agentExecutable)
-	streams := sdk.OperationIO{
-		Stdin:  cmd.InOrStdin(),
-		Stdout: cmd.OutOrStdout(),
-		Stderr: cmd.ErrOrStderr(),
+		spec := agentapply.BuildResolvedSpec(cfg, targetAgents, presetOverride, agentLookPath, agentExecutable)
+		streams := sdk.OperationIO{
+			Stdin:  cmd.InOrStdin(),
+			Stdout: cmd.OutOrStdout(),
+			Stderr: cmd.ErrOrStderr(),
+		}
+		agentsErr = agentapply.Execute(cmd.Context(), executor, spec, streams, diffOnly)
 	}
-	return agentapply.Execute(cmd.Context(), executor, spec, streams, diffOnly)
+	if len(cfg.LocalModels) == 0 {
+		return agentsErr
+	}
+	// Local models do not depend on the tool-agents plugin, so report them
+	// even when agent configuration failed.
+	if len(cfg.Enabled) > 0 {
+		cmd.Println()
+	}
+	return errors.Join(agentsErr, runLocalModels(cmd, cfg.LocalModels, lmProbe, lmOpts, diffOnly))
+}
+
+// runLocalModels previews (diffOnly) or pulls the configured local models.
+func runLocalModels(cmd *cobra.Command, models []string, lmProbe *localmodels.Probe, lmOpts localmodels.PlanOptions, diffOnly bool) error {
+	probe := localmodels.DefaultProbe()
+	if lmProbe != nil {
+		probe = *lmProbe
+	}
+	offline := lmOpts.Offline || viper.GetBool("offline")
+	if diffOnly {
+		opts := lmOpts
+		opts.Offline = offline
+		plan, err := localmodels.BuildPlan(cmd.Context(), probe, models, opts)
+		if err != nil {
+			return err
+		}
+		cmd.Print(localmodels.FormatPlan(plan))
+		return nil
+	}
+	if offline {
+		cmd.Println("Local models: skipped pulling in offline mode.")
+		return nil
+	}
+	return localmodels.PullModels(cmd.Context(), probe, models, localmodels.PullOptions{
+		OllamaBaseURL: lmOpts.OllamaBaseURL,
+		Stderr:        cmd.ErrOrStderr(),
+	}, cmd.OutOrStdout())
 }
 
 func resolveTargetAgents(enabled []string, filterCSV string) ([]string, error) {

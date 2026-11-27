@@ -560,7 +560,7 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			if !installed {
 				return nil
 			}
-			return uninstallConfiguredApplication(ctx, app, installer, repo)
+			return uninstallConfiguredApplication(ctx, app, installer, repo, keepData)
 		}(); err != nil {
 			var manual *sdk.ManualRemovalRequiredError
 			if errors.As(err, &manual) {

@@ -28,6 +28,7 @@ devex agent doctor --agent claude --agent codex
 - **Linux sandbox prerequisites**: For agents declaring `sandbox_prerequisites` in the DevEx catalog (`claude`, `codex`, `copilot`), runs the [`devex agent sandbox`](/docs/cli-reference/agent-sandbox) check at most once per doctor run and points to `devex agent sandbox` when remediation is needed.
 - **MCP configuration syntax**: Parses existing user-level MCP configuration files (JSON, JSON with comments, TOML, or YAML) and reports `ok` or `invalid` with only the error line/column—never echoing file contents.
 - **Installed skill packs**: Inspects the user and current-directory project [skill pack lock files](/docs/cli-reference/agent-skill-packs) offline and reports installed packs per agent and scope, pinned commit SHAs, whether a newer pinned SHA is available in the embedded catalog, and which skills have local edits.
+- **Local model runtime**: Checks whether Ollama is installed, its version and binary path, systemd service status (`active`, `inactive`, or `unavailable`), configured listen address (default `127.0.0.1:11434`) and local API reachability, detected NVIDIA/AMD GPUs, what hardware acceleration Ollama will use, and actionable manual driver hints when hardware is present without a ready driver. See [Local Models](/docs/guides/local-models).
 
 ## Secret Safety and Exit Status
 

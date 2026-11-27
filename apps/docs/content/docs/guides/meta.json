@@ -6,6 +6,7 @@
 		"security",
 		"agent-sandboxes",
 		"agent-credentials",
+		"local-models",
 		"team-setup",
 		"customization",
 		"automation",

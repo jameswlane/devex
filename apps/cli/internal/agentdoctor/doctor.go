@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
+	"github.com/jameswlane/devex/apps/cli/internal/localmodels"
 	"github.com/jameswlane/devex/apps/cli/internal/skillpacks"
 )
 
@@ -47,6 +48,7 @@ type Probe struct {
 	GOOS                     string
 	Now                      func() time.Time
 	SandboxProbe             agentsandbox.Probe
+	LocalModelsProbe         *localmodels.Probe
 	SkillPackUserLockPath    string
 	SkillPackProjectLockPath string
 	SkillPackCatalog         *skillpacks.Catalog
@@ -54,6 +56,7 @@ type Probe struct {
 
 // DefaultProbe returns a Probe wired to the local operating system.
 func DefaultProbe() Probe {
+	lmProbe := localmodels.DefaultProbe()
 	return Probe{
 		Getenv: os.Getenv,
 		Stat:   os.Stat,
@@ -68,12 +71,13 @@ func DefaultProbe() Probe {
 			// Stdout only: stderr is discarded so diagnostics never echo it.
 			return cmd.Output()
 		},
-		EvalSymlinks: filepath.EvalSymlinks,
-		UserHomeDir:  os.UserHomeDir,
-		Getwd:        os.Getwd,
-		GOOS:         runtime.GOOS,
-		Now:          time.Now,
-		SandboxProbe: agentsandbox.DefaultProbe(),
+		EvalSymlinks:     filepath.EvalSymlinks,
+		UserHomeDir:      os.UserHomeDir,
+		Getwd:            os.Getwd,
+		GOOS:             runtime.GOOS,
+		Now:              time.Now,
+		SandboxProbe:     agentsandbox.DefaultProbe(),
+		LocalModelsProbe: &lmProbe,
 	}
 }
 
@@ -177,11 +181,12 @@ type AgentReport struct {
 
 // Report is the complete diagnostic output of devex agent doctor.
 type Report struct {
-	CheckedAt  time.Time         `json:"checked_at"`
-	GOOS       string            `json:"goos"`
-	Agents     []AgentReport     `json:"agents"`
-	SkillPacks []SkillPackReport `json:"skill_packs,omitempty"`
-	Problems   []Problem         `json:"problems"`
+	CheckedAt         time.Time                  `json:"checked_at"`
+	GOOS              string                     `json:"goos"`
+	Agents            []AgentReport              `json:"agents"`
+	LocalModelRuntime *localmodels.RuntimeStatus `json:"local_model_runtime,omitempty"`
+	SkillPacks        []SkillPackReport          `json:"skill_packs,omitempty"`
+	Problems          []Problem                  `json:"problems"`
 }
 
 // Check runs diagnostics for agents (or all KnownAgents when agents is empty)
@@ -225,6 +230,16 @@ func Check(ctx context.Context, probe Probe, agents []AgentSpec) Report {
 		report.Agents = append(report.Agents, ar)
 		report.Problems = append(report.Problems, ar.Problems...)
 	}
+
+	var lmProbe localmodels.Probe
+	if probe.LocalModelsProbe != nil {
+		lmProbe = *probe.LocalModelsProbe
+	}
+	if lmProbe.GOOS == "" {
+		lmProbe.GOOS = probe.GOOS
+	}
+	rt := localmodels.InspectRuntime(ctx, lmProbe)
+	report.LocalModelRuntime = &rt
 
 	report.SkillPacks = checkSkillPacks(probe, agents)
 
@@ -614,6 +629,34 @@ func redactReport(r Report, secrets []string) Report {
 		agents[i] = a
 	}
 	r.Agents = agents
+	if r.LocalModelRuntime != nil {
+		rt := *r.LocalModelRuntime
+		rt.BinaryPath = red(rt.BinaryPath)
+		rt.Version = red(rt.Version)
+		rt.ServiceState = red(rt.ServiceState)
+		rt.BoundAddress = red(rt.BoundAddress)
+		rt.GPU.Runtime = red(rt.GPU.Runtime)
+		if len(rt.GPU.Hints) > 0 {
+			hints := make([]string, len(rt.GPU.Hints))
+			for i, h := range rt.GPU.Hints {
+				hints[i] = red(h)
+			}
+			rt.GPU.Hints = hints
+		}
+		if len(rt.GPU.GPUs) > 0 {
+			gpus := make([]localmodels.GPUDevice, len(rt.GPU.GPUs))
+			for i, g := range rt.GPU.GPUs {
+				g.Name = red(g.Name)
+				g.DriverVersion = red(g.DriverVersion)
+				g.Memory = red(g.Memory)
+				g.PCIAddress = red(g.PCIAddress)
+				g.DeviceID = red(g.DeviceID)
+				gpus[i] = g
+			}
+			rt.GPU.GPUs = gpus
+		}
+		r.LocalModelRuntime = &rt
+	}
 	if len(r.SkillPacks) > 0 {
 		packs := make([]SkillPackReport, len(r.SkillPacks))
 		for i, sp := range r.SkillPacks {
@@ -682,6 +725,45 @@ func FormatTable(r Report, secrets []string) string {
 			} else {
 				fmt.Fprintf(&b, "    %-14s %s (%s)\n", "mcp config:", mcp.Path, mcp.Error)
 			}
+		}
+	}
+
+	if r.LocalModelRuntime != nil {
+		rt := r.LocalModelRuntime
+		b.WriteString("\nLocal Model Runtime:\n")
+		if rt.Installed {
+			ver := rt.Version
+			if ver == "" {
+				ver = "unknown version"
+			}
+			fmt.Fprintf(&b, "  %-10s installed (%s)\n", "ollama", ver)
+			if rt.BinaryPath != "" {
+				fmt.Fprintf(&b, "    %-14s %s\n", "path:", rt.BinaryPath)
+			}
+		} else {
+			fmt.Fprintf(&b, "  %-10s not installed\n", "ollama")
+		}
+		if rt.ServiceState != "" {
+			fmt.Fprintf(&b, "    %-14s %s\n", "service:", rt.ServiceState)
+		}
+		if rt.BoundAddress != "" {
+			if rt.Installed || rt.ServiceActive || rt.APIReachable {
+				reach := "unreachable"
+				if rt.APIReachable {
+					reach = "reachable"
+				}
+				fmt.Fprintf(&b, "    %-14s %s (%s)\n", "address:", rt.BoundAddress, reach)
+			} else {
+				fmt.Fprintf(&b, "    %-14s %s\n", "address:", rt.BoundAddress)
+			}
+		}
+		gpuRuntime := rt.GPU.Runtime
+		if gpuRuntime == "" {
+			gpuRuntime = "CPU only"
+		}
+		fmt.Fprintf(&b, "    %-14s %s\n", "gpu:", gpuRuntime)
+		for _, hint := range rt.GPU.Hints {
+			fmt.Fprintf(&b, "    %-14s %s\n", "hint:", hint)
 		}
 	}
 

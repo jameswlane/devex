@@ -19,11 +19,21 @@ func validateCurlpipeRemoval(app types.AppConfig) error {
 	return nil
 }
 
-func uninstallConfiguredApplication(ctx context.Context, app types.AppConfig, installer types.BaseInstaller, repo types.Repository) error {
+// uninstallConfiguredApplication removes app. keepData is exported to curlpipe
+// uninstall shells as DEVEX_UNINSTALL_KEEP_DATA=1 so they can keep user data
+// (for example Ollama's model store) when --keep-data is set.
+func uninstallConfiguredApplication(ctx context.Context, app types.AppConfig, installer types.BaseInstaller, repo types.Repository, keepData bool) error {
 	if err := validateCurlpipeRemoval(app); err != nil {
 		return err
 	}
 	if app.InstallMethod == "curlpipe" {
+		// Set or clear it explicitly so a value inherited from the caller's
+		// environment never changes what a full uninstall removes.
+		if keepData {
+			app.UninstallCommand = "export DEVEX_UNINSTALL_KEEP_DATA=1\n" + app.UninstallCommand
+		} else {
+			app.UninstallCommand = "unset DEVEX_UNINSTALL_KEEP_DATA\n" + app.UninstallCommand
+		}
 		// Catalog uninstall commands are shell programs, not package names. Keep
 		// quoting, flags and environment expansion intact, without adding sudo.
 		if app.InstallScope == "user" {

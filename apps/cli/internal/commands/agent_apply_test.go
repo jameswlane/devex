@@ -6,17 +6,22 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/localmodels"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -441,5 +446,263 @@ var _ = Describe("Agent apply and diff commands", func() {
 		Expect(cmd.Execute()).To(Succeed())
 		Expect(envFake.called).To(BeTrue())
 		Expect(string(envFake.specBytes)).To(ContainSubstring(`"name": "claude"`))
+	})
+
+	It("renders local_models plan and GPU line in diff and apply --dry-run through root command with zero writes and zero pulls", func() {
+		homeSettings := config.CrossPlatformSettings{HomeDir: home}
+		agentsYAML := filepath.Join(homeSettings.GetUserConfigDir(), "agents.yaml")
+		Expect(os.MkdirAll(filepath.Dir(agentsYAML), 0o750)).To(Succeed())
+		Expect(os.WriteFile(agentsYAML, []byte("agents:\n  local_models:\n    - qwen2.5-coder:7b\n    - llama3.2\n"), 0o600)).To(Succeed())
+
+		loaded, loadErr := config.LoadCrossPlatformSettings(home)
+		Expect(loadErr).NotTo(HaveOccurred())
+		loaded.HomeDir = home
+		Expect(loaded.Agents.LocalModels).To(Equal([]string{"qwen2.5-coder:7b", "llama3.2"}))
+
+		ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/tags" {
+				_, _ = w.Write([]byte(`{"models":[{"name":"llama3.2:latest"}]}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		DeferCleanup(ollamaSrv.Close)
+
+		registrySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v2/library/qwen2.5-coder/manifests/7b" {
+				_, _ = w.Write([]byte(`{"config":{"size":487},"layers":[{"size":4683074048}]}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		DeferCleanup(registrySrv.Close)
+
+		var runCalls [][]string
+		lmProbe := &localmodels.Probe{
+			GOOS:       "linux",
+			HTTPClient: ollamaSrv.Client(),
+			LookPath: func(name string) (string, error) {
+				if name == "ollama" {
+					return "/usr/local/bin/ollama", nil
+				}
+				return "", exec.ErrNotFound
+			},
+			Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				runCalls = append(runCalls, append([]string{name}, args...))
+				return nil, nil
+			},
+		}
+		lmOpts := localmodels.PlanOptions{
+			OllamaBaseURL:   ollamaSrv.URL,
+			RegistryBaseURL: registrySrv.URL,
+		}
+
+		// Clear DEVEX_OFFLINE so registry manifest sizes are fetched from httptest.
+		GinkgoT().Setenv("DEVEX_OFFLINE", "")
+
+		for _, args := range [][]string{
+			{"agent", "diff"},
+			{"agent", "apply", "--dry-run"},
+		} {
+			viper.Reset()
+			root := NewRootCmd("test", mocks.NewMockRepository(), loaded)
+			for _, sub := range root.Commands() {
+				if sub.Name() == "agent" {
+					root.RemoveCommand(sub)
+					break
+				}
+			}
+			root.AddCommand(NewAgentCmdFromDeps(AgentCmdDeps{
+				Settings:               loaded,
+				Executor:               fake,
+				LocalModelsProbe:       lmProbe,
+				LocalModelsPlanOptions: lmOpts,
+			}))
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs(args)
+
+			Expect(root.Execute()).To(Succeed())
+			Expect(fake.called).To(BeFalse())
+			Expect(runCalls).To(BeEmpty())
+			Expect(out.String()).To(And(
+				ContainSubstring("Local Models:"),
+				ContainSubstring("GPU: CPU only"),
+				ContainSubstring("qwen2.5-coder:7b: pull (4.7 GB)"),
+				ContainSubstring("llama3.2: already present"),
+			))
+		}
+	})
+
+	It("pulls only missing local_models on agent apply and surfaces actionable ollama errors", func() {
+		ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/tags" {
+				_, _ = w.Write([]byte(`{"models":[{"name":"llama3.2:latest"}]}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		DeferCleanup(ollamaSrv.Close)
+
+		modelSettings := config.CrossPlatformSettings{
+			HomeDir: home,
+			Agents: config.AgentsConfig{
+				LocalModels: []string{"llama3.2", "qwen2.5-coder:7b"},
+			},
+		}
+
+		var pulled [][]string
+		probe := &localmodels.Probe{
+			GOOS:       "linux",
+			HTTPClient: ollamaSrv.Client(),
+			LookPath:   func(string) (string, error) { return "/usr/local/bin/ollama", nil },
+			Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				pulled = append(pulled, append([]string{name}, args...))
+				return []byte("success\n"), nil
+			},
+		}
+		cmd := NewAgentCmdFromDeps(AgentCmdDeps{
+			Settings:               modelSettings,
+			Executor:               fake,
+			LocalModelsProbe:       probe,
+			LocalModelsPlanOptions: localmodels.PlanOptions{OllamaBaseURL: ollamaSrv.URL},
+		})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"apply"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(pulled).To(Equal([][]string{{"/usr/local/bin/ollama", "pull", "qwen2.5-coder:7b"}}))
+
+		missingProbe := &localmodels.Probe{
+			GOOS:     "linux",
+			LookPath: func(string) (string, error) { return "", exec.ErrNotFound },
+		}
+		cmdMissing := NewAgentCmdFromDeps(AgentCmdDeps{
+			Settings:         modelSettings,
+			Executor:         fake,
+			LocalModelsProbe: missingProbe,
+		})
+		cmdMissing.SetOut(&out)
+		cmdMissing.SetErr(&out)
+		cmdMissing.SetArgs([]string{"apply"})
+		Expect(cmdMissing.Execute()).To(MatchError(ContainSubstring("Ollama is not installed: run `devex install ollama`")))
+	})
+	It("still previews local_models when the tool-agents step fails, and skips pulls offline", func() {
+		ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"models":[]}`))
+		}))
+		DeferCleanup(ollamaSrv.Close)
+
+		combined := config.CrossPlatformSettings{
+			HomeDir: home,
+			Agents: config.AgentsConfig{
+				Enabled:     []string{"claude"},
+				LocalModels: []string{"qwen2.5-coder:7b"},
+			},
+		}
+		var pulled [][]string
+		probe := &localmodels.Probe{
+			GOOS:       "linux",
+			HTTPClient: ollamaSrv.Client(),
+			LookPath: func(name string) (string, error) {
+				if name == "ollama" {
+					return "/usr/local/bin/ollama", nil
+				}
+				return "", exec.ErrNotFound
+			},
+			Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				pulled = append(pulled, append([]string{name}, args...))
+				return nil, nil
+			},
+		}
+		failing := &fakeAgentPluginExecutor{err: errors.New("tool-agents plugin is not installed")}
+		newCmd := func(planOffline bool, args ...string) (*cobra.Command, *bytes.Buffer) {
+			cmd := NewAgentCmdFromDeps(AgentCmdDeps{
+				Settings:               combined,
+				Executor:               failing,
+				LocalModelsProbe:       probe,
+				LocalModelsPlanOptions: localmodels.PlanOptions{OllamaBaseURL: ollamaSrv.URL, Offline: planOffline},
+			})
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(args)
+			return cmd, &out
+		}
+
+		cmd, out := newCmd(true, "diff")
+		Expect(cmd.Execute()).To(MatchError(ContainSubstring("tool-agents plugin is not installed")))
+		Expect(out.String()).To(ContainSubstring("qwen2.5-coder:7b: pull (size unknown)"))
+
+		viper.Set("offline", true)
+		DeferCleanup(viper.Reset)
+		failing.err = nil
+		// Only the CLI offline setting is on here, so it alone must stop the pull.
+		cmd, out = newCmd(false, "apply")
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(pulled).To(BeEmpty())
+		Expect(out.String()).To(ContainSubstring("skipped pulling in offline mode"))
+	})
+	It("handles local_models from an existing agents.yaml under apply --init", func() {
+		ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"models":[]}`))
+		}))
+		DeferCleanup(ollamaSrv.Close)
+
+		existing := config.CrossPlatformSettings{
+			HomeDir: home,
+			Agents:  config.AgentsConfig{LocalModels: []string{"qwen2.5-coder:7b"}},
+		}
+		var pulled [][]string
+		probe := &localmodels.Probe{
+			GOOS:       "linux",
+			HTTPClient: ollamaSrv.Client(),
+			LookPath: func(name string) (string, error) {
+				if name == "ollama" {
+					return "/usr/local/bin/ollama", nil
+				}
+				return "", exec.ErrNotFound
+			},
+			Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				pulled = append(pulled, append([]string{name}, args...))
+				return nil, nil
+			},
+		}
+		run := func(offline bool, args ...string) string {
+			cmd := NewAgentCmdFromDeps(AgentCmdDeps{
+				Settings:               existing,
+				Executor:               fake,
+				LocalModelsProbe:       probe,
+				LocalModelsPlanOptions: localmodels.PlanOptions{OllamaBaseURL: ollamaSrv.URL, Offline: offline},
+			})
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(args)
+			Expect(cmd.Execute()).To(Succeed())
+			return out.String()
+		}
+
+		viper.Set("dry-run", true)
+		Expect(run(true, "apply", "--init")).To(ContainSubstring("qwen2.5-coder:7b: pull (size unknown)"))
+		Expect(pulled).To(BeEmpty())
+
+		// The preview validates like the real apply: duplicates are rejected.
+		dup := NewAgentCmdFromDeps(AgentCmdDeps{
+			Settings: config.CrossPlatformSettings{HomeDir: home, Agents: config.AgentsConfig{LocalModels: []string{"llama3.2", "llama3.2:latest"}}},
+			Executor: fake, LocalModelsProbe: probe,
+		})
+		dup.SetOut(io.Discard)
+		dup.SetErr(io.Discard)
+		dup.SetArgs([]string{"apply", "--init"})
+		Expect(dup.Execute()).To(MatchError(ContainSubstring("duplicate local model")))
+
+		viper.Set("dry-run", false)
+		DeferCleanup(viper.Reset)
+		run(false, "apply", "--init")
+		Expect(pulled).To(Equal([][]string{{"/usr/local/bin/ollama", "pull", "qwen2.5-coder:7b"}}))
+		Expect(fake.called).To(BeFalse())
 	})
 })

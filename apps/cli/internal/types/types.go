@@ -50,6 +50,17 @@ type AppConfig struct {
 	ShellUpdates       []string           `mapstructure:"shell_updates" yaml:"shell_updates"`
 }
 
+// IsHookDrivenCurlpipe reports whether this app uses curlpipe purely as a
+// hook-driven installation (pre_install/post_install hooks with no download_url
+// or package command).
+func (a AppConfig) IsHookDrivenCurlpipe() bool {
+	return a.InstallMethod == "curlpipe" &&
+		a.DownloadURL == "" &&
+		a.InstallCommand == "" &&
+		len(a.Packages) == 0 &&
+		(len(a.PreInstall) > 0 || len(a.PostInstall) > 0)
+}
+
 // Validate checks the validity of the AppConfig structure.
 func (a *AppConfig) Validate() error {
 	if err := (OSConfig{InstallMethod: a.InstallMethod, InstallCommand: a.InstallCommand, Packages: a.Packages, Options: a.Options, PreInstall: a.PreInstall, PostInstall: a.PostInstall}).ValidateShellActions(); err != nil {
@@ -71,7 +82,7 @@ func (a *AppConfig) Validate() error {
 			}
 		}
 	}
-	if a.InstallMethod == "curlpipe" && a.DownloadURL == "" {
+	if a.InstallMethod == "curlpipe" && a.DownloadURL == "" && !a.IsHookDrivenCurlpipe() {
 		return fmt.Errorf("download URL is required for app %s with install method curlpipe", a.Name)
 	}
 	if a.InstallCommand == "" && len(a.Packages) == 0 && a.InstallMethod != "curlpipe" {
@@ -379,6 +390,17 @@ type OSConfig struct {
 	Themes               []Theme            `mapstructure:"themes" yaml:"themes,omitempty"`
 	CleanupFiles         []string           `mapstructure:"cleanup_files" yaml:"cleanup_files,omitempty"`
 	Conflicts            []string           `mapstructure:"conflicts" yaml:"conflicts,omitempty"`
+}
+
+// IsHookDrivenCurlpipe reports whether this OS config uses curlpipe purely as
+// a hook-driven installation (pre_install/post_install hooks with no
+// download_url or package command).
+func (config OSConfig) IsHookDrivenCurlpipe() bool {
+	return config.InstallMethod == "curlpipe" &&
+		config.DownloadURL == "" &&
+		config.InstallCommand == "" &&
+		len(config.Packages) == 0 &&
+		(len(config.PreInstall) > 0 || len(config.PostInstall) > 0)
 }
 
 // CrossPlatformApp defines an application with OS-specific installation methods

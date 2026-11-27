@@ -58,4 +58,18 @@ var _ = Describe("Noninteractive hook policy", func() {
 		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{"-c", "echo configured"}}}))
 		Expect(PackagesInstalled(WithPackagesInstalled(context.Background(), "other"), "example")).To(BeFalse())
 	})
+
+	It("executes post-install hooks for hook-driven curlpipe apps without requiring a download URL", func() {
+		app := types.CrossPlatformApp{
+			Name: "hook-curlpipe",
+			AllPlatforms: types.OSConfig{
+				InstallMethod:    "curlpipe",
+				InstalledBinary:  "hook-tool",
+				UninstallCommand: "true",
+				PostInstall:      []types.InstallCommand{{Shell: "echo installed-via-hook"}},
+			},
+		}
+		Expect(InstallCrossPlatformApp(context.Background(), app, config.CrossPlatformSettings{}, nil)).To(Succeed())
+		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{"-c", "echo installed-via-hook"}}}))
+	})
 })

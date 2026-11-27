@@ -49,6 +49,9 @@ agents:
       env:
         GITHUB_TOKEN: "${env:GITHUB_TOKEN}"
   devex_mcp: true # optional; adds a stdio server named "devex" running `devex mcp serve` (read-only)
+  local_models: # optional; Ollama models previewed by diff/dry-run and pulled by apply
+    - qwen2.5-coder:7b
+    - llama3.2:3b
 ```
 
 Validate your file at any time with:
