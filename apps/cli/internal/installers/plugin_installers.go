@@ -248,6 +248,10 @@ func (p *PluginBasedInstaller) InstallPackages(ctx context.Context, command stri
 }
 
 func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {
+	if app.IsHookDrivenCurlpipe() {
+		log.Info("Executing hook-driven curlpipe installation", "app", app.Name)
+		return nil
+	}
 	if app.InstallMethod == "curlpipe" && IsReleaseArchive(app.DownloadURL) {
 		log.Info("Installing release archive", "app", app.Name, "url", app.DownloadURL)
 		return InstallReleaseArchive(ctx, app)

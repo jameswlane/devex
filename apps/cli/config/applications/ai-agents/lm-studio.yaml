@@ -1,0 +1,39 @@
+name: LM Studio
+description: Desktop application for discovering, downloading, and running local LLMs
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: lm-studio
+  uninstall_command: lm-studio
+  brew_cask: true
+  official_support: true
+windows:
+  install_method: winget
+  install_command: ElementLabs.LMStudio
+  uninstall_command: ElementLabs.LMStudio
+  official_support: true
+linux:
+  install_method: deb
+  install_command: lm-studio
+  uninstall_command: lm-studio
+  download_url: https://lmstudio.ai/download/latest/linux/x64?format=deb
+  official_support: true
+  platform_requirements:
+    - os: debian
+      arch: amd64
+    - os: ubuntu
+      arch: amd64
+  alternatives:
+    - install_method: appimage
+      install_command: https://lmstudio.ai/download/latest/linux/x64 LM-Studio.AppImage --gui
+      installed_binary: LM-Studio.AppImage
+      uninstall_command: LM-Studio.AppImage
+      download_url: https://lmstudio.ai/download/latest/linux/x64
+      destination: ~/Applications/
+      official_support: true
+      platform_requirements:
+        - os: linux
+          arch: amd64

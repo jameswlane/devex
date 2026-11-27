@@ -82,6 +82,8 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			"gemini-cli.yaml",
 			"goose.yaml",
 			"kimi-code.yaml",
+			"lm-studio.yaml",
+			"ollama.yaml",
 			"opencode.yaml",
 		}))
 
@@ -102,8 +104,12 @@ var _ = Describe("AI Coding Agents catalog", func() {
 				if cfg.InstallMethod != "curlpipe" {
 					return
 				}
-				Expect(cfg.InstallScope).To(Equal("user"), "%s (%s) curlpipe must use install_scope: user", name, label)
-				Expect(cfg.DownloadURL).To(HavePrefix("https://"), "%s (%s) curlpipe must use HTTPS download_url", name, label)
+				if cfg.DownloadURL == "" && (len(cfg.PreInstall) > 0 || len(cfg.PostInstall) > 0) {
+					Expect(cfg.InstallScope).To(BeEmpty(), "%s (%s) hook-driven system curlpipe must not set install_scope", name, label)
+				} else {
+					Expect(cfg.InstallScope).To(Equal("user"), "%s (%s) curlpipe must use install_scope: user", name, label)
+					Expect(cfg.DownloadURL).To(HavePrefix("https://"), "%s (%s) curlpipe must use HTTPS download_url", name, label)
+				}
 				Expect(cfg.InstalledBinary).NotTo(BeEmpty(), "%s (%s) curlpipe must declare installed_binary", name, label)
 				Expect(cfg.UninstallCommand).NotTo(BeEmpty(), "%s (%s) curlpipe must declare uninstall_command", name, label)
 			}
@@ -139,7 +145,11 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			switch wantMethod {
 			case "curlpipe":
 				Expect(resolved.DownloadURL).To(Equal(wantTarget))
-				Expect(resolved.InstallScope).To(Equal("user"))
+				if wantTarget != "" {
+					Expect(resolved.InstallScope).To(Equal("user"))
+				}
+			case "deb":
+				Expect(resolved.DownloadURL).To(Equal(wantTarget))
 			case "mise":
 				Expect(resolved.InstallCommand).To(Equal(wantTarget))
 				packages, err := installers.CatalogPackageArguments("mise", resolved.InstallCommand)
@@ -195,5 +205,76 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Kimi Code", "Kimi Code", "curlpipe", "https://code.kimi.com/kimi-code/install.sh", "user", false, nil, nil, `rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),
 		Entry("Aider", "Aider", "mise", "uv@latest pipx:aider-chat[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:aider-chat"),
 		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, nil, "aqua:aaif-goose/goose"),
+		Entry("LM Studio", "LM Studio", "deb", "https://lmstudio.ai/download/latest/linux/x64?format=deb", "", false, nil, nil, "lm-studio"),
 	)
+
+	It("resolves Ollama with system hook-driven install, curl/zstd dependencies, and full cleanup uninstall", func() {
+		app, ok := agents["Ollama"]
+		Expect(ok).To(BeTrue(), "expected Ollama in ai-agents catalog")
+
+		ubuntu := platform.DetectionResult{
+			OS:               "linux",
+			Distribution:     "ubuntu",
+			DistributionLike: []string{"debian"},
+			Version:          "24.04",
+			Architecture:     "amd64",
+		}
+		resolved := app.LinuxConfigForPlatform(ubuntu)
+		Expect(resolved.InstallMethod).To(Equal("curlpipe"))
+		Expect(resolved.InstallScope).To(BeEmpty())
+		Expect(resolved.InstalledBinary).To(Equal("ollama"))
+		Expect(resolved.DownloadURL).To(BeEmpty())
+		Expect(resolved.Dependencies).To(Equal([]string{"curl", "zstd"}))
+		Expect(resolved.PostInstall).To(HaveLen(1))
+		Expect(resolved.PostInstall[0].Scope).To(Equal("system"))
+		Expect(resolved.PostInstall[0].Shell).NotTo(ContainSubstring("install.sh"))
+		Expect(resolved.UninstallCommand).To(And(
+			ContainSubstring("systemctl stop ollama"),
+			ContainSubstring("systemctl disable ollama"),
+			ContainSubstring("/etc/systemd/system/ollama.service"),
+			ContainSubstring("/usr/local/bin/ollama"),
+			ContainSubstring("/usr/local/lib/ollama"),
+			ContainSubstring("userdel ollama"),
+			ContainSubstring("groupdel ollama"),
+			ContainSubstring("/usr/share/ollama"),
+		))
+		Expect(app.MacOS.InstallMethod).To(Equal("brew"))
+		Expect(app.MacOS.InstallCommand).To(Equal("ollama-app"))
+		Expect(app.MacOS.BrewCask).To(BeTrue())
+		Expect(app.Windows.InstallMethod).To(Equal("winget"))
+		Expect(app.Windows.InstallCommand).To(Equal("Ollama.Ollama"))
+
+		plan, err := agentapi.PlanInstall(context.Background(), settings, agentapi.PlanRequest{Names: []string{"Ollama"}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(plan.DependencyOrder).To(ContainElements("curl", "zstd", "Ollama"))
+
+		var out bytes.Buffer
+		cmd := commands.NewRootCmd("test", mocks.NewMockRepository(), settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"install", "--dry-run", "Ollama"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Would install Ollama"))
+	})
+
+	It("resolves LM Studio AppImage alternative on non-Debian Linux", func() {
+		app, ok := agents["LM Studio"]
+		Expect(ok).To(BeTrue(), "expected LM Studio in ai-agents catalog")
+
+		fedora := platform.DetectionResult{
+			OS:           "linux",
+			Distribution: "fedora",
+			Version:      "41",
+			Architecture: "amd64",
+		}
+		resolved := app.LinuxConfigForPlatform(fedora)
+		Expect(resolved.InstallMethod).To(Equal("appimage"))
+		Expect(resolved.DownloadURL).To(Equal("https://lmstudio.ai/download/latest/linux/x64"))
+		Expect(resolved.InstalledBinary).To(Equal("LM-Studio.AppImage"))
+		Expect(app.MacOS.InstallMethod).To(Equal("brew"))
+		Expect(app.MacOS.InstallCommand).To(Equal("lm-studio"))
+		Expect(app.MacOS.BrewCask).To(BeTrue())
+		Expect(app.Windows.InstallMethod).To(Equal("winget"))
+		Expect(app.Windows.InstallCommand).To(Equal("ElementLabs.LMStudio"))
+	})
 })

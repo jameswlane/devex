@@ -254,6 +254,10 @@ func (rsi *RefactoredStreamingInstaller) executeInstallCommand(ctx context.Conte
 
 // executeCurlPipeInstall handles curl pipe installations using script manager
 func (rsi *RefactoredStreamingInstaller) executeCurlPipeInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	if osConfig.IsHookDrivenCurlpipe() {
+		rsi.sendLog("INFO", fmt.Sprintf("Installing %s via install hooks", app.Name))
+		return nil
+	}
 	if installers.IsReleaseArchive(osConfig.DownloadURL) {
 		rsi.sendLog("INFO", fmt.Sprintf("Installing release archive %s", osConfig.DownloadURL))
 		return installers.InstallReleaseArchive(ctx, releaseArchiveConfig(app, osConfig))

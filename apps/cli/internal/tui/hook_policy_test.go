@@ -87,4 +87,32 @@ var _ = Describe("Interactive hook policy", func() {
 		Expect(installer.InstallApp(context.Background(), app, settings)).To(Succeed())
 		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{"-c", script}}}))
 	})
+
+	It("runs post-install hooks for hook-driven curlpipe apps in both TUI installers and fails on hook error", func() {
+		app := types.CrossPlatformApp{
+			Name: "hook-curlpipe",
+			AllPlatforms: types.OSConfig{
+				InstallMethod:    "curlpipe",
+				InstalledBinary:  "hook-tool",
+				UninstallCommand: "true",
+				PostInstall:      []types.InstallCommand{{Shell: "echo installed-via-hook"}},
+			},
+		}
+		streaming := &StreamingInstaller{repo: &MockRepository{}, ctx: context.Background(), config: DefaultInstallerConfig(), executor: NewDefaultCommandExecutor()}
+		Expect(streaming.InstallApp(context.Background(), app, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{"-c", "echo installed-via-hook"}}}))
+
+		failingApp := app
+		failingApp.AllPlatforms.PostInstall = []types.InstallCommand{{Shell: "echo fail-hook"}}
+		recorder.Script("bash", []string{"-c", "echo fail-hook"}, sdktest.Response{ExitCode: 1, Stderr: "hook boom\n"})
+		err := streaming.InstallApp(context.Background(), failingApp, config.CrossPlatformSettings{})
+		Expect(err).To(MatchError(ContainSubstring("post-install failed")))
+
+		refactored, refErr := NewRefactoredStreamingInstaller(nil, &MockRepository{}, context.Background(), config.CrossPlatformSettings{})
+		Expect(refErr).NotTo(HaveOccurred())
+		systemApp := app
+		systemApp.AllPlatforms.PostInstall = []types.InstallCommand{{Scope: "system", Shell: "echo installed-system-hook"}}
+		Expect(refactored.InstallApp(context.Background(), systemApp, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(recorder.Calls("bash")).To(ContainElement(HaveField("Args", Equal([]string{"-c", "echo installed-system-hook"}))))
+	})
 })
