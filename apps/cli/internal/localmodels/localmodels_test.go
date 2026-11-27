@@ -459,6 +459,7 @@ var _ = Describe("Local model runtimes", func() {
 			unreachable.Close()
 
 			probe := localmodels.Probe{
+				GOOS:       "linux", // the hint is Linux-specific; macOS and Windows get "start the Ollama app"
 				HTTPClient: &http.Client{},
 				LookPath:   func(string) (string, error) { return "/usr/local/bin/ollama", nil },
 			}
