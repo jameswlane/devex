@@ -222,7 +222,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		resolved := app.LinuxConfigForPlatform(ubuntu)
 		Expect(resolved.InstallMethod).To(Equal("curlpipe"))
 		Expect(resolved.InstallScope).To(BeEmpty())
-		Expect(resolved.InstalledBinary).To(Equal("ollama"))
+		Expect(resolved.InstalledBinary).To(Equal("/usr/local/bin/ollama"), "absolute so a mise ollama on PATH is not mistaken for the system install")
 		Expect(resolved.DownloadURL).To(BeEmpty())
 		Expect(resolved.Dependencies).To(Equal([]string{"curl", "zstd"}))
 		Expect(resolved.PostInstall).To(HaveLen(1))

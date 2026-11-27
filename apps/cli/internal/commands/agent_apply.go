@@ -278,6 +278,7 @@ func runLocalModels(cmd *cobra.Command, models []string, lmProbe *localmodels.Pr
 	}
 	return localmodels.PullModels(cmd.Context(), probe, models, localmodels.PullOptions{
 		OllamaBaseURL: lmOpts.OllamaBaseURL,
+		Stderr:        cmd.ErrOrStderr(),
 	}, cmd.OutOrStdout())
 }
 

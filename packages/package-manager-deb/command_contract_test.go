@@ -478,6 +478,32 @@ var _ = Describe("DEB command contracts", func() {
 		}
 	})
 
+	It("keeps accepting .deb URLs that redirect to opaque octet-stream storage URLs (GitHub releases)", func() {
+		previous := http.DefaultTransport
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if strings.HasSuffix(req.URL.Path, ".deb") {
+				return &http.Response{
+					StatusCode: http.StatusFound,
+					Status:     "302 Found",
+					Header:     http.Header{"Location": {"https://release-assets.githubusercontent.com/github-production-release-asset/1/abc?sp=r"}},
+					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     http.Header{"Content-Type": {"application/octet-stream"}},
+				Body:       io.NopCloser(strings.NewReader("deb fixture")),
+				Request:    req,
+			}, nil
+		})
+
+		Expect(plugin.Execute("install", []string{"https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb"})).To(Succeed())
+		Expect(recorder.Calls("dpkg")).To(HaveLen(1))
+	})
+
 	It("accepts redirecting ?format=deb download URLs that resolve to a .deb file", func() {
 		previous := http.DefaultTransport
 		DeferCleanup(func() { http.DefaultTransport = previous })

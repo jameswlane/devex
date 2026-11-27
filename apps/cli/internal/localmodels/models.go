@@ -344,6 +344,8 @@ func FormatPlan(plan Plan) string {
 type PullOptions struct {
 	OllamaBaseURL string
 	DryRun        bool
+	// Stderr receives the pull command's progress output.
+	Stderr io.Writer
 }
 
 // PullModels pulls every configured model that is not already present in the
@@ -375,7 +377,11 @@ func PullModels(ctx context.Context, probe Probe, models []string, opts PullOpti
 	}
 	present, reachable := fetchInstalledModelsFromAPI(ctx, probe.HTTPClient, baseURL)
 	if !reachable {
-		return fmt.Errorf("Ollama service is not reachable at %s: start it with `sudo systemctl start ollama`", baseURL) //nolint:staticcheck // Ollama is a proper noun
+		start := "start it with `sudo systemctl start ollama`"
+		if probe.GOOS != "linux" {
+			start = "start the Ollama app"
+		}
+		return fmt.Errorf("Ollama service is not reachable at %s: %s", baseURL, start) //nolint:staticcheck // Ollama is a proper noun
 	}
 
 	for _, m := range models {
@@ -389,13 +395,9 @@ func PullModels(ctx context.Context, probe Probe, models []string, opts PullOpti
 			_, _ = fmt.Fprintf(out, "Pulling local model %s...\n", m)
 		}
 		// Model names are strictly validated to begin with [a-z0-9] and are
-		// passed directly as a single argv element with no shell.
-		output, runErr := probe.Run(ctx, ollamaBin, "pull", m)
-		if runErr != nil {
-			detail := strings.TrimSpace(string(output))
-			if detail != "" {
-				return fmt.Errorf("failed to pull local model %s: %w (%s)", m, runErr, detail)
-			}
+		// passed directly as a single argv element with no shell. Output is
+		// streamed so multi-gigabyte pulls show progress.
+		if runErr := probe.Stream(ctx, out, opts.Stderr, ollamaBin, "pull", m); runErr != nil {
 			return fmt.Errorf("failed to pull local model %s: %w", m, runErr)
 		}
 		if out != nil {

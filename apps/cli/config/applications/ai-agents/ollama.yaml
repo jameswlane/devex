@@ -22,7 +22,8 @@ linux:
   # configures a localhost-bound systemd service, avoiding Ollama's upstream
   # bootstrap script which installs CUDA drivers silently via apt/dnf.
   install_method: curlpipe
-  installed_binary: ollama
+  # Absolute so a per-user mise ollama on PATH does not count as the system install.
+  installed_binary: /usr/local/bin/ollama
   official_support: true
   dependencies:
     - curl
@@ -39,9 +40,13 @@ linux:
             exit 1
             ;;
         esac
-        rm -rf /usr/local/lib/ollama
-        install -o0 -g0 -m755 -d /usr/local/lib/ollama
-        curl -fsSL "https://ollama.com/download/ollama-linux-${arch}.tar.zst" | zstd -d | tar -xf - -C /usr/local
+        # /var/tmp, not /tmp: the archives are ~1.6 GB and /tmp is often a small tmpfs.
+        tmp="$(mktemp -d /var/tmp/devex-ollama.XXXXXX)"
+        trap 'rm -rf "$tmp"' EXIT
+        # Download fully before touching the existing install, so a failed or
+        # truncated download never leaves a half-removed Ollama behind.
+        curl -fsSL -o "$tmp/ollama.tar.zst" "https://ollama.com/download/ollama-linux-${arch}.tar.zst"
+        zstd -t -q "$tmp/ollama.tar.zst"
         has_amd_gpu=0
         has_nvidia_gpu=0
         for dev in /sys/bus/pci/devices/*; do
@@ -58,8 +63,16 @@ linux:
           esac
         done
         if [ "$has_amd_gpu" -eq 1 ] && [ "$arch" = "amd64" ]; then
-          curl -fsSL "https://ollama.com/download/ollama-linux-amd64-rocm.tar.zst" | zstd -d | tar -xf - -C /usr/local
+          curl -fsSL -o "$tmp/ollama-rocm.tar.zst" "https://ollama.com/download/ollama-linux-amd64-rocm.tar.zst"
+          zstd -t -q "$tmp/ollama-rocm.tar.zst"
         fi
+        rm -rf /usr/local/lib/ollama
+        install -o0 -g0 -m755 -d /usr/local/lib/ollama
+        zstd -d -q -c "$tmp/ollama.tar.zst" | tar -xf - -C /usr/local
+        if [ -f "$tmp/ollama-rocm.tar.zst" ]; then
+          zstd -d -q -c "$tmp/ollama-rocm.tar.zst" | tar -xf - -C /usr/local
+        fi
+        [ -x /usr/local/bin/ollama ] || { echo "Ollama archive did not provide /usr/local/bin/ollama" >&2; exit 1; }
         if ! id ollama >/dev/null 2>&1; then
           useradd -r -s /bin/false -U -m -d /usr/share/ollama ollama
         fi

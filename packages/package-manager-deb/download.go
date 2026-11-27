@@ -64,14 +64,19 @@ func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (downloa
 		return "", fmt.Errorf("download failed with status: %s", resp.Status)
 	}
 
-	// Verify that a redirecting URL resolved to a .deb path or an explicit Debian package content type.
 	contentType := strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])
-	finalPath := ""
-	if resp.Request != nil && resp.Request.URL != nil {
-		finalPath = strings.ToLower(resp.Request.URL.Path)
-	}
-	if !strings.HasSuffix(finalPath, ".deb") && !d.isExplicitDebContentType(contentType) {
-		return "", fmt.Errorf("resolved download URL does not point to a .deb package")
+	// A URL that names a .deb file keeps its old behaviour: hosts such as
+	// GitHub redirect it to an opaque storage URL served as octet-stream. Only
+	// a ?format=deb redirector must resolve to a .deb path or a Debian package
+	// content type.
+	if !strings.HasSuffix(strings.ToLower(req.URL.Path), ".deb") {
+		finalPath := ""
+		if resp.Request != nil && resp.Request.URL != nil {
+			finalPath = strings.ToLower(resp.Request.URL.Path)
+		}
+		if !strings.HasSuffix(finalPath, ".deb") && !d.isExplicitDebContentType(contentType) {
+			return "", fmt.Errorf("resolved download URL does not point to a .deb package")
+		}
 	}
 	if contentType != "" && !d.isValidDebContentType(contentType) {
 		d.logger.Warning("Unexpected content type: %s", contentType)

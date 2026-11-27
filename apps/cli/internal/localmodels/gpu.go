@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -52,14 +53,18 @@ type GPUReport struct {
 // Probe injects filesystem, command, and HTTP dependencies so detection,
 // planning, pulling, and doctor checks remain pure and fixture-testable.
 type Probe struct {
-	FSRoot     string
-	GOOS       string
-	Getenv     func(key string) string
-	Stat       func(path string) (os.FileInfo, error)
-	ReadFile   func(path string) ([]byte, error)
-	ReadDir    func(path string) ([]os.DirEntry, error)
-	LookPath   func(name string) (string, error)
-	Run        func(ctx context.Context, name string, args ...string) ([]byte, error)
+	FSRoot   string
+	GOOS     string
+	Getenv   func(key string) string
+	Stat     func(path string) (os.FileInfo, error)
+	ReadFile func(path string) ([]byte, error)
+	ReadDir  func(path string) ([]os.DirEntry, error)
+	LookPath func(name string) (string, error)
+	Run      func(ctx context.Context, name string, args ...string) ([]byte, error)
+	// Stream runs a long command (model pulls) with its output connected to
+	// stdout and stderr so progress is visible. When nil, Run is used and its
+	// captured stdout is copied to stdout afterwards.
+	Stream     func(ctx context.Context, stdout, stderr io.Writer, name string, args ...string) error
 	HTTPClient *http.Client
 }
 
@@ -78,6 +83,12 @@ func DefaultProbe() Probe {
 			cmd.WaitDelay = time.Second
 			// Stdout only so diagnostics never capture stderr.
 			return cmd.Output()
+		},
+		Stream: func(ctx context.Context, stdout, stderr io.Writer, name string, args ...string) error {
+			cmd := exec.CommandContext(ctx, name, args...)
+			cmd.Stdout, cmd.Stderr = stdout, stderr
+			cmd.WaitDelay = time.Second
+			return cmd.Run()
 		},
 		HTTPClient: &http.Client{Timeout: defaultHTTPTimeout},
 	}
@@ -123,6 +134,16 @@ func (p Probe) withDefaults() Probe {
 			return nil, errors.New("probe runner not configured")
 		}
 	}
+	if p.Stream == nil {
+		run := p.Run
+		p.Stream = func(ctx context.Context, stdout, _ io.Writer, name string, args ...string) error {
+			out, err := run(ctx, name, args...)
+			if stdout != nil && len(out) > 0 {
+				_, _ = stdout.Write(out)
+			}
+			return err
+		}
+	}
 	if p.HTTPClient == nil {
 		p.HTTPClient = &http.Client{Timeout: defaultHTTPTimeout}
 	}
@@ -144,6 +165,12 @@ func DetectGPUs(ctx context.Context, probe Probe) GPUReport {
 	probe = probe.withDefaults()
 	report := GPUReport{
 		Runtime: "CPU only",
+	}
+	if probe.GOOS != "linux" {
+		// GPU detection reads Linux sysfs; on macOS and Windows the Ollama app
+		// picks Metal, CUDA or ROCm itself.
+		report.Runtime = "chosen by the Ollama app on " + probe.GOOS
+		return report
 	}
 
 	nvidiaPCI, amdPCI := scanPCIDisplayDevices(probe)
@@ -291,11 +318,11 @@ func nvidiaDriverHint(probe Probe) string {
 	distro := detectDistroID(probe)
 	switch distro {
 	case "ubuntu":
-		return "NVIDIA GPU detected without nvidia-smi; install drivers manually with `sudo ubuntu-drivers install` and reboot (DevEx never installs GPU drivers automatically)."
+		return "NVIDIA GPU detected without a working driver (nvidia-smi missing or failing); install drivers manually with `sudo ubuntu-drivers install` and reboot (DevEx never installs GPU drivers automatically)."
 	case "debian":
-		return "NVIDIA GPU detected without nvidia-smi; install drivers manually following https://wiki.debian.org/NvidiaGraphicsDrivers and reboot (DevEx never installs GPU drivers automatically)."
+		return "NVIDIA GPU detected without a working driver (nvidia-smi missing or failing); install drivers manually following https://wiki.debian.org/NvidiaGraphicsDrivers and reboot (DevEx never installs GPU drivers automatically)."
 	default:
-		return "NVIDIA GPU detected without nvidia-smi; install NVIDIA drivers manually (Ubuntu: `sudo ubuntu-drivers install`; Debian: https://wiki.debian.org/NvidiaGraphicsDrivers) and reboot."
+		return "NVIDIA GPU detected without a working driver (nvidia-smi missing or failing); install NVIDIA drivers manually (Ubuntu: `sudo ubuntu-drivers install`; Debian: https://wiki.debian.org/NvidiaGraphicsDrivers) and reboot."
 	}
 }
 

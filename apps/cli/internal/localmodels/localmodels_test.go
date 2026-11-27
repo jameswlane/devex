@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -49,7 +50,7 @@ var _ = Describe("Local model runtimes", func() {
 
 			Expect(app.Name).To(Equal("Ollama"))
 			Expect(app.Default).To(BeFalse())
-			Expect(app.Linux.InstalledBinary).To(Equal("ollama"))
+			Expect(app.Linux.InstalledBinary).To(Equal("/usr/local/bin/ollama"))
 			Expect(app.Linux.DownloadURL).NotTo(ContainSubstring("install.sh"))
 			Expect(app.Linux.InstallCommand).NotTo(ContainSubstring("install.sh"))
 			Expect(app.Linux.PostInstall).NotTo(BeEmpty())
@@ -251,6 +252,12 @@ var _ = Describe("Local model runtimes", func() {
 			Expect(report.GPUs).To(HaveLen(2))
 			Expect(report.DriverOK).To(BeTrue())
 			Expect(report.Runtime).To(Equal("NVIDIA CUDA (driver 550.90.07), AMD ROCm"))
+			Expect(report.Hints).To(BeEmpty())
+		})
+		It("leaves GPU selection to the Ollama app outside Linux, without Linux driver hints", func() {
+			report := localmodels.DetectGPUs(context.Background(), localmodels.Probe{GOOS: "darwin", FSRoot: fixtureRoot("nvidia-gpu")})
+			Expect(report.Runtime).To(Equal("chosen by the Ollama app on darwin"))
+			Expect(report.GPUs).To(BeEmpty())
 			Expect(report.Hints).To(BeEmpty())
 		})
 	})
@@ -484,6 +491,43 @@ var _ = Describe("Local model runtimes", func() {
 			Expect(pulled).To(Equal([][]string{
 				{"/usr/local/bin/ollama", "pull", "qwen2.5-coder:7b"},
 			}))
+		})
+
+		It("streams pull progress to the given writers instead of buffering it", func() {
+			ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"models":[]}`))
+			}))
+			DeferCleanup(ollamaSrv.Close)
+
+			var out, progress bytes.Buffer
+			probe := localmodels.Probe{
+				HTTPClient: ollamaSrv.Client(),
+				LookPath:   func(string) (string, error) { return "/usr/local/bin/ollama", nil },
+				Run: func(context.Context, string, ...string) ([]byte, error) {
+					Fail("pulls must use Stream, not the buffered Run")
+					return nil, nil
+				},
+				Stream: func(_ context.Context, stdout, stderr io.Writer, name string, args ...string) error {
+					Expect(stdout).To(BeIdenticalTo(&out))
+					Expect(stderr).To(BeIdenticalTo(&progress))
+					Expect(append([]string{name}, args...)).To(Equal([]string{"/usr/local/bin/ollama", "pull", "qwen2.5-coder:7b"}))
+					_, _ = io.WriteString(stderr, "pulling manifest\n")
+					return nil
+				},
+			}
+			Expect(localmodels.PullModels(context.Background(), probe, []string{"qwen2.5-coder:7b"}, localmodels.PullOptions{OllamaBaseURL: ollamaSrv.URL, Stderr: &progress}, &out)).To(Succeed())
+			Expect(progress.String()).To(Equal("pulling manifest\n"))
+			Expect(out.String()).To(ContainSubstring("Pulled local model qwen2.5-coder:7b"))
+		})
+
+		It("tells macOS and Windows users to start the Ollama app when the API is unreachable", func() {
+			probe := localmodels.Probe{
+				GOOS:     "darwin",
+				LookPath: func(string) (string, error) { return "/opt/homebrew/bin/ollama", nil },
+			}
+			err := localmodels.PullModels(context.Background(), probe, []string{"qwen2.5-coder:7b"}, localmodels.PullOptions{OllamaBaseURL: "http://127.0.0.1:1"}, io.Discard)
+			Expect(err).To(MatchError(ContainSubstring("start the Ollama app")))
+			Expect(err.Error()).NotTo(ContainSubstring("systemctl"))
 		})
 
 		It("surfaces pull errors clearly", func() {
