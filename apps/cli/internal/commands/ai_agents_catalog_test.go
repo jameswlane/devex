@@ -76,18 +76,33 @@ var _ = Describe("AI Coding Agents catalog", func() {
 	It("ships and strictly validates every AI coding agent definition", func() {
 		Expect(files).To(Equal([]string{
 			"aider.yaml",
+			"auggie-cli.yaml",
+			"bob.yaml",
 			"claude-code.yaml",
+			"cline.yaml",
+			"codebuddy-code.yaml",
 			"codex.yaml",
 			"copilot-cli.yaml",
+			"deepagents.yaml",
+			"dimcode.yaml",
+			"dirac.yaml",
+			"factory-droid.yaml",
 			"fast-agent.yaml",
 			"gemini-cli.yaml",
 			"goose.yaml",
+			"grok-build.yaml",
 			"kimi-code.yaml",
 			"lm-studio.yaml",
+			"minimax-code.yaml",
 			"minion-code.yaml",
 			"mistral-vibe.yaml",
+			"nova.yaml",
 			"ollama.yaml",
 			"opencode.yaml",
+			"pi.yaml",
+			"qoder-cli.yaml",
+			"qwen-code.yaml",
+			"sigit-code.yaml",
 		}))
 
 		result, err := config.ValidateConfig(context.Background(), settings, true)
@@ -121,9 +136,22 @@ var _ = Describe("AI Coding Agents catalog", func() {
 				Expect(cfg.InstalledBinary).NotTo(BeEmpty(), "%s (%s) curlpipe must declare installed_binary", name, label)
 				Expect(cfg.UninstallCommand).NotTo(BeEmpty(), "%s (%s) curlpipe must declare uninstall_command", name, label)
 			}
+			checkUniqueMethods := func(label string, cfg types.OSConfig) {
+				if cfg.InstallMethod == "" {
+					return
+				}
+				seen := map[string]bool{cfg.InstallMethod: true}
+				for _, alt := range cfg.Alternatives {
+					Expect(seen[alt.InstallMethod]).To(BeFalse(), "%s (%s) has duplicate install_method %q across primary and alternatives", name, label, alt.InstallMethod)
+					seen[alt.InstallMethod] = true
+				}
+			}
 			checkCurlpipe("linux", app.Linux)
 			checkCurlpipe("macos", app.MacOS)
 			checkCurlpipe("windows", app.Windows)
+			checkUniqueMethods("linux", app.Linux)
+			checkUniqueMethods("macos", app.MacOS)
+			checkUniqueMethods("windows", app.Windows)
 
 			legacy := app.ToLegacyAppConfig()
 			Expect(legacy.SelfUpdating).To(Equal(app.Linux.SelfUpdating), name)
@@ -216,6 +244,21 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Minion Code", "Minion Code", "mise", "uv@latest pipx:minion-code[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:minion-code"),
 		Entry("Mistral Vibe", "Mistral Vibe", "mise", "uv@latest pipx:mistral-vibe[python=3.14]@latest", "", false, []string{"mise"}, nil, "pipx:mistral-vibe"),
 		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, nil, "aqua:aaif-goose/goose"),
+		Entry("Auggie CLI", "Auggie CLI", "mise", "node@24 npm:@augmentcode/auggie@latest", "", true, []string{"Node.js"}, nil, "npm:@augmentcode/auggie"),
+		Entry("Bob", "Bob", "mise", "node@24 npm:@ibm/bob@latest", "", true, []string{"Node.js"}, nil, "npm:@ibm/bob"),
+		Entry("Cline", "Cline", "mise", "node@24 npm:cline@latest", "", true, []string{"Node.js"}, nil, "npm:cline"),
+		Entry("Codebuddy Code", "Codebuddy Code", "curlpipe", "https://www.codebuddy.cn/cli/install.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/codebuddy" && rm -rf "$HOME/.local/share/codebuddy"`),
+		Entry("DeepAgents", "DeepAgents", "mise", "uv@latest pipx:deepagents-code[python=3.14]@latest", "", false, []string{"mise"}, nil, "pipx:deepagents-code"),
+		Entry("DimCode", "DimCode", "mise", "node@24 npm:dimcode@latest", "", false, []string{"Node.js"}, nil, "npm:dimcode"),
+		Entry("Dirac", "Dirac", "mise", "node@24 npm:dirac-cli@latest", "", true, []string{"Node.js"}, nil, "npm:dirac-cli"),
+		Entry("Factory Droid", "Factory Droid", "curlpipe", "https://app.factory.ai/cli", "user", true, nil, nil, `rm -f "$HOME/.local/bin/droid"`),
+		Entry("Grok Build", "Grok Build", "curlpipe", "https://x.ai/cli/install.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
+		Entry("MiniMax Code", "MiniMax Code", "mise", "node@24 npm:@minimax-ai/code@latest", "", false, []string{"Node.js"}, nil, "npm:@minimax-ai/code"),
+		Entry("Nova", "Nova", "mise", "node@24 npm:@compass-ai/nova@latest", "", false, []string{"Node.js"}, nil, "npm:@compass-ai/nova"),
+		Entry("Pi", "Pi", "mise", "node@24 npm:@earendil-works/pi-coding-agent@latest", "", false, []string{"Node.js"}, nil, "npm:@earendil-works/pi-coding-agent"),
+		Entry("Qoder CLI", "Qoder CLI", "curlpipe", "https://qoder.com/install", "user", true, nil, nil, `rm -f "$HOME/.local/bin/qodercli" && rm -rf "$HOME/.qoder/bin" "$HOME/.qoder/entry"`),
+		Entry("Qwen Code", "Qwen Code", "curlpipe", "https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/qwen" && rm -rf "$HOME/.local/lib/qwen-code"`),
+		Entry("siGit Code", "siGit Code", "mise", "node@24 npm:@getsigit/sigit[allow_low_downloads=true]@latest", "", false, []string{"Node.js"}, nil, "npm:@getsigit/sigit"),
 	)
 
 	DescribeTable("plans each AI coding agent upgrade on Ubuntu 24.04",
@@ -236,6 +279,21 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Kimi Code reruns its installer", "Kimi Code", `Plugin invocation: devex-plugin-package-manager-curlpipe "install" "--user" "https://code.kimi.com/kimi-code/install.sh"`),
 		Entry("Aider upgrades through mise", "Aider", `Plugin invocation: devex-plugin-package-manager-mise "update" "pipx:aider-chat"`),
 		Entry("Goose upgrades through mise", "Goose", `Plugin invocation: devex-plugin-package-manager-mise "update" "aqua:aaif-goose/goose"`),
+		Entry("Auggie CLI updates itself", "Auggie CLI", "Auggie CLI manages its own updates; skipped"),
+		Entry("Bob updates itself", "Bob", "Bob manages its own updates; skipped"),
+		Entry("Cline updates itself", "Cline", "Cline manages its own updates; skipped"),
+		Entry("Codebuddy Code updates itself", "Codebuddy Code", "Codebuddy Code manages its own updates; skipped"),
+		Entry("DeepAgents upgrades through mise", "DeepAgents", `Plugin invocation: devex-plugin-package-manager-mise "update" "pipx:deepagents-code"`),
+		Entry("DimCode upgrades through mise", "DimCode", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:dimcode"`),
+		Entry("Dirac updates itself", "Dirac", "Dirac manages its own updates; skipped"),
+		Entry("Factory Droid updates itself", "Factory Droid", "Factory Droid manages its own updates; skipped"),
+		Entry("Grok Build updates itself", "Grok Build", "Grok Build manages its own updates; skipped"),
+		Entry("MiniMax Code upgrades through mise", "MiniMax Code", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@minimax-ai/code"`),
+		Entry("Nova upgrades through mise", "Nova", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@compass-ai/nova"`),
+		Entry("Pi upgrades through mise", "Pi", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@earendil-works/pi-coding-agent"`),
+		Entry("Qoder CLI updates itself", "Qoder CLI", "Qoder CLI manages its own updates; skipped"),
+		Entry("Qwen Code updates itself", "Qwen Code", "Qwen Code manages its own updates; skipped"),
+		Entry("siGit Code upgrades through mise", "siGit Code", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@getsigit/sigit"`),
 	)
 
 	DescribeTable("plans each AI coding agent uninstall on Ubuntu 24.04, keeping config",
@@ -260,6 +318,21 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Kimi Code", "Kimi Code", `curlpipe: rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),
 		Entry("Aider", "Aider", "mise: pipx:aider-chat"),
 		Entry("Goose", "Goose", "mise: aqua:aaif-goose/goose"),
+		Entry("Auggie CLI", "Auggie CLI", "mise: npm:@augmentcode/auggie"),
+		Entry("Bob", "Bob", "mise: npm:@ibm/bob"),
+		Entry("Cline", "Cline", "mise: npm:cline"),
+		Entry("Codebuddy Code", "Codebuddy Code", `curlpipe: rm -f "$HOME/.local/bin/codebuddy" && rm -rf "$HOME/.local/share/codebuddy"`),
+		Entry("DeepAgents", "DeepAgents", "mise: pipx:deepagents-code"),
+		Entry("DimCode", "DimCode", "mise: npm:dimcode"),
+		Entry("Dirac", "Dirac", "mise: npm:dirac-cli"),
+		Entry("Factory Droid", "Factory Droid", `curlpipe: rm -f "$HOME/.local/bin/droid"`),
+		Entry("Grok Build", "Grok Build", `curlpipe: rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
+		Entry("MiniMax Code", "MiniMax Code", "mise: npm:@minimax-ai/code"),
+		Entry("Nova", "Nova", "mise: npm:@compass-ai/nova"),
+		Entry("Pi", "Pi", "mise: npm:@earendil-works/pi-coding-agent"),
+		Entry("Qoder CLI", "Qoder CLI", `curlpipe: rm -f "$HOME/.local/bin/qodercli" && rm -rf "$HOME/.qoder/bin" "$HOME/.qoder/entry"`),
+		Entry("Qwen Code", "Qwen Code", `curlpipe: rm -f "$HOME/.local/bin/qwen" && rm -rf "$HOME/.local/lib/qwen-code"`),
+		Entry("siGit Code", "siGit Code", "mise: npm:@getsigit/sigit"),
 	)
 
 	It("refuses to rerun an install script for an offline upgrade", func() {

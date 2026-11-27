@@ -1,0 +1,63 @@
+name: Grok Build
+description: xAI's terminal coding agent and CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://x.ai/cli
+# npm package: https://www.npmjs.com/package/@xai-official/grok
+macos:
+  # Unpinned bootstrap script: xAI updates install.sh on release and publishes
+  # no checksum for the script itself. The script downloads the native grok
+  # binary over HTTPS from x.ai/cli (with GCS fallback) and verifies it executes
+  # --version before installing into $HOME/.grok/downloads and symlinking
+  # $HOME/.grok/bin/{grok,agent} and $HOME/.local/bin/{grok,agent}.
+  # Grok auto-updates by default unless GROK_DISABLE_AUTOUPDATER=1 or auto_update=false.
+  install_method: curlpipe
+  download_url: https://x.ai/cli/install.sh
+  install_scope: user
+  installed_binary: grok
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@lts npm:@xai-official/grok@latest
+      uninstall_command: npm:@xai-official/grok
+      self_updating: true
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  install_method: mise
+  install_command: node@lts npm:@xai-official/grok@latest
+  uninstall_command: npm:@xai-official/grok
+  self_updating: true
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Unpinned bootstrap script: xAI updates install.sh on release and publishes
+  # no checksum for the script itself. The script downloads the native grok
+  # binary over HTTPS from x.ai/cli (with GCS fallback) and verifies it executes
+  # --version before installing into $HOME/.grok/downloads and symlinking
+  # $HOME/.grok/bin/{grok,agent} and $HOME/.local/bin/{grok,agent}.
+  # Uninstall removes only the binary, symlinks, completions, and bundled docs,
+  # leaving ~/.grok/config.toml and ~/.grok/auth.json intact.
+  install_method: curlpipe
+  download_url: https://x.ai/cli/install.sh
+  install_scope: user
+  installed_binary: grok
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+      # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+      install_command: node@24 npm:@xai-official/grok@latest
+      uninstall_command: npm:@xai-official/grok
+      self_updating: true
+      official_support: true
+      dependencies:
+        - Node.js

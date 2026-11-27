@@ -615,6 +615,82 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			Expect(err).To(MatchError(ContainSubstring("unsupported preset")))
 		})
 	})
+
+	Describe("Shipped catalog AI coding agents", func() {
+		var shippedSettings config.CrossPlatformSettings
+
+		BeforeEach(func() {
+			GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
+			GinkgoT().Setenv("DEVEX_ENV", "dev")
+			base := config.CrossPlatformSettings{HomeDir: homeDir}
+			Expect(config.WriteDefaultConfig(base.GetConfigDir())).To(Succeed())
+			loaded, err := config.LoadCrossPlatformSettings(homeDir)
+			Expect(err).NotTo(HaveOccurred())
+			shippedSettings = loaded
+		})
+
+		It("exposes all newly added AI coding agents in StepAIAgents and automated setup", func() {
+			if runtime.GOOS != "linux" {
+				Skip("shipped Linux catalog setup test")
+			}
+			newAgents := []string{
+				"Auggie CLI",
+				"Bob",
+				"Cline",
+				"Codebuddy Code",
+				"DeepAgents",
+				"DimCode",
+				"Dirac",
+				"Factory Droid",
+				"Grok Build",
+				"MiniMax Code",
+				"Nova",
+				"Pi",
+				"Qoder CLI",
+				"Qwen Code",
+				"siGit Code",
+			}
+
+			detected := platform.DetectionResult{OS: "linux", Distribution: "ubuntu"}
+			available := getAvailableAIAgentApps(shippedSettings, detected)
+			availableNames := make([]string, 0, len(available))
+			for _, app := range available {
+				availableNames = append(availableNames, app.Name)
+			}
+			for _, name := range newAgents {
+				Expect(availableNames).To(ContainElement(name))
+			}
+
+			model := NewSetupModel(repo, shippedSettings, detected)
+			model.step = StepAIAgents
+			view := model.View()
+			Expect(view).To(ContainSubstring("Agent CLIs"))
+			Expect(view).To(ContainSubstring("Auggie CLI"))
+
+			// Selecting non-harness agents skips StepAIAgentPreset and advances directly to StepShell.
+			for _, name := range newAgents {
+				model.selections.selectedAIAgents[name] = true
+			}
+			model, _ = model.handleEnter()
+			Expect(model.step).To(Equal(StepShell))
+
+			viper.Set("setup.ai_agents.apps", newAgents)
+			autoModel, err := createAutomatedSetupModel(repo, shippedSettings)
+			Expect(err).NotTo(HaveOccurred())
+			for _, name := range newAgents {
+				Expect(autoModel.selections.selectedAIAgents).To(HaveKeyWithValue(name, true))
+			}
+
+			apps := autoModel.buildAppList()
+			names := make([]string, 0, len(apps))
+			for _, app := range apps {
+				names = append(names, app.Name)
+			}
+			for _, name := range newAgents {
+				Expect(names).To(ContainElement(name))
+			}
+		})
+	})
 })
 
 func indexOf(items []string, needle string) int {

@@ -1,0 +1,39 @@
+name: MiniMax Code
+description: MiniMax's terminal AI coding agent
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://code.minimax.io/docs/cli/quick-start
+# Source repo: https://github.com/MiniMax-AI/minimax-code
+# Uses the real CLI package @minimax-ai/code (binary: mcode), not @minimax-ai/code-acp
+# (which is the ACP launcher). MiniMax's install.sh downloads Node 24 and runs npm
+# rather than installing a native binary, so mise npm is primary.
+# engines.node is ">=22.19 <23 || >=24 <27", so node@24 is pinned on all platforms.
+macos:
+  install_method: mise
+  install_command: node@24 npm:@minimax-ai/code@latest
+  uninstall_command: npm:@minimax-ai/code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+windows:
+  install_method: mise
+  install_command: node@24 npm:@minimax-ai/code@latest
+  uninstall_command: npm:@minimax-ai/code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # mise installs npm:@minimax-ai/code without sudo npm -g. Node 24 satisfies
+  # engines.node and avoids Node 26's libatomic.so.1 requirement on fresh
+  # Debian/Ubuntu images (#703).
+  install_method: mise
+  install_command: node@24 npm:@minimax-ai/code@latest
+  uninstall_command: npm:@minimax-ai/code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js

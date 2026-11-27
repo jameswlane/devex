@@ -1,0 +1,40 @@
+name: Dirac
+description: Open-source AST-native terminal AI coding agent by Dirac Delta Labs
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://github.com/dirac-run/dirac
+# Website: https://dirac.run
+# dirac-cli requires Node.js >=22.13.0 <25.0.0 (Node 25+ is unsupported), so
+# node@24 is pinned across all platforms.
+macos:
+  install_method: mise
+  install_command: node@24 npm:dirac-cli@latest
+  uninstall_command: npm:dirac-cli
+  self_updating: true
+  official_support: true
+  dependencies:
+    - Node.js
+windows:
+  install_method: mise
+  install_command: node@24 npm:dirac-cli@latest
+  uninstall_command: npm:dirac-cli
+  self_updating: true
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # mise installs npm:dirac-cli without sudo npm -g. Node 24 satisfies both
+  # dirac-cli's engines.node (>=22.13.0 <25.0.0) and avoids Node 26's
+  # libatomic.so.1 requirement on fresh Debian/Ubuntu images (#703).
+  # Marked self_updating: dirac-cli runs autoUpdateOnStartup by default (unless
+  # DIRAC_NO_AUTO_UPDATE=1) and spawns npm install -g dirac-cli@latest whenever
+  # its resolved script path contains /node_modules/dirac-cli/.
+  install_method: mise
+  install_command: node@24 npm:dirac-cli@latest
+  uninstall_command: npm:dirac-cli
+  self_updating: true
+  official_support: true
+  dependencies:
+    - Node.js
