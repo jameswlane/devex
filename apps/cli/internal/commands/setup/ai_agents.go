@@ -286,10 +286,12 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 
 	if len(miseRequesters) > 0 && !existingNames["mise"] {
 		if miseApp := m.getMiseApp(); miseApp != nil {
+			resolvedMise, miseErr := m.resolvePlanApp(*miseApp, true)
 			deps = append(deps, planItem{
-				app:    *miseApp,
-				group:  planDependency,
-				reason: "AI agents: " + strings.Join(miseRequesters, ", "),
+				app:        resolvedMise,
+				group:      planDependency,
+				reason:     "AI agents: " + strings.Join(miseRequesters, ", "),
+				channelErr: miseErr,
 			})
 			existingNames["mise"] = true
 		}

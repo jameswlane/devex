@@ -80,28 +80,35 @@ func newPackageMaintenanceCmdWithRepo(action string, repo types.Repository, sett
 		if err := viper.BindPFlags(cmd.Flags()); err != nil {
 			return err
 		}
-		// Selection keeps preferences for apps DevEx has not installed; each
-		// installed app is then replaced by its installed definition.
+		// Select first, then resolve each app once: an installed app follows
+		// its installed definition, any other app the channel preferences.
+		// A per-app failure does not stop maintenance for the others.
 		apps, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{
-			Names:      args,
-			Categories: viper.GetStringSlice("categories"),
+			Names:        args,
+			Categories:   viper.GetStringSlice("categories"),
+			SkipChannels: true,
 		})
 		if err != nil {
 			return err
 		}
+		prefs := channels.PreferencesFromViper()
 		var unresolved []error
-		if repo != nil {
-			installed := make([]types.CrossPlatformApp, 0, len(apps))
-			for _, app := range apps {
-				definition, defErr := channels.InstalledDefinition(repo, app)
-				if defErr != nil {
-					unresolved = append(unresolved, defErr)
-					continue
-				}
-				installed = append(installed, definition)
+		resolvedApps := make([]types.CrossPlatformApp, 0, len(apps))
+		for _, app := range apps {
+			var resolved types.CrossPlatformApp
+			var resolveErr error
+			if repo != nil && channels.InstalledChannelForApp(repo, app) != "" {
+				resolved, resolveErr = channels.InstalledDefinition(repo, app)
+			} else {
+				resolved, _, resolveErr = channels.Resolve(app, prefs, "")
 			}
-			apps = installed
+			if resolveErr != nil {
+				unresolved = append(unresolved, resolveErr)
+				continue
+			}
+			resolvedApps = append(resolvedApps, resolved)
 		}
+		apps = resolvedApps
 		plan, skipped, failures := planPackageMaintenance(action, apps)
 		failures = append(unresolved, failures...)
 		for _, name := range skipped {

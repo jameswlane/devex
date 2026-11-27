@@ -248,6 +248,36 @@ var _ = Describe("Channel resolution", func() {
 				Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "dnf"}, app)).To(Equal("dnf-rhel"))
 			})
 
+			It("maps a pre-channel saved definition to its RHEL variant, as switch checks do (M1)", func() {
+				app := newToolchain()
+				legacy := types.CrossPlatformApp{Name: "Build Essential", Linux: types.OSConfig{InstallMethod: "dnf", InstallCommand: "@development gcc"}}
+				data, err := json.Marshal(legacy)
+				Expect(err).NotTo(HaveOccurred())
+				repo := mocks.NewMockRepository()
+				Expect(repo.Set("installed-app-definition:build essential", string(data))).To(Succeed())
+				Expect(repo.Set(inventory.ReceiptKey("Build Essential"), `{"manager":"dnf","packages":["@development","gcc"]}`)).To(Succeed())
+
+				Expect(channels.InstalledChannelForApp(repo, app)).To(Equal("dnf-rhel"))
+				_, ch, err := channels.ResolveForInstall(app, channels.Preferences{}, channels.InstalledChannelForApp(repo, app))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ch).To(Equal("dnf-rhel"))
+				Expect(channels.CheckRefusedChannelSwitch(repo, app)).To(Succeed())
+			})
+
+			It("infers the same installed channel whichever channel is selected (M2)", func() {
+				fedora, err := newToolchain().WithChannel("dnf")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "dnf"}, fedora)).To(Equal("dnf-rhel"))
+			})
+
+			It("breaks a package-match tie with the platform default (M2)", func() {
+				app := newToolchain()
+				app.Linux.Alternatives[0].InstallCommand = "@development gcc"
+				fedora, err := app.WithChannel("dnf")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "dnf", Packages: []string{"@development", "gcc"}}, fedora)).To(Equal("dnf-rhel"))
+			})
+
 			It("prefers the entry whose packages match the receipt", func() {
 				app := newToolchain()
 				Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "dnf", Packages: []string{"@development-tools", "gcc"}}, app)).To(Equal("dnf"))

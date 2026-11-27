@@ -130,6 +130,12 @@ func isChannelAvailable(cfg OSConfig) bool {
 	return false
 }
 
+// DefaultChannel returns the channel the catalog selects for this platform
+// when no preference applies, even after WithChannel chose another one.
+func (app CrossPlatformApp) DefaultChannel() string {
+	return app.defaultChannelName()
+}
+
 func (app *CrossPlatformApp) defaultChannelName() string {
 	if app.defaultChannel != "" {
 		return app.defaultChannel

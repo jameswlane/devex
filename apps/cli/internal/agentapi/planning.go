@@ -48,6 +48,10 @@ type PlanRequest struct {
 	RecordedChannel     func(types.CrossPlatformApp) string
 	Repo                types.Repository
 	RefuseChannelSwitch bool
+	// SkipChannels returns the selected applications with their default
+	// channels, for callers such as maintenance that resolve each app's
+	// channel themselves.
+	SkipChannels bool
 }
 
 // PlanChannel describes one available install channel for an application on the
@@ -220,6 +224,9 @@ func selectRequestedApplications(ctx context.Context, s config.CrossPlatformSett
 	}
 	if len(apps) == 0 && len(warnings) == 0 && !present {
 		return nil, s, nil, &Error{Category: "not_found", Message: "no applications matched the install request"}
+	}
+	if r.SkipChannels {
+		return apps, s, warnings, nil
 	}
 	var resolved []types.CrossPlatformApp
 	if r.RecordedChannel != nil {

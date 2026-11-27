@@ -317,6 +317,24 @@ var _ = Describe("Install Channels CLI", func() {
 			Expect(recorder.calls).To(BeEmpty())
 		})
 
+		It("upgrades an installed app through its receipt even when DEVEX_CHANNEL names a channel it lacks (M3)", func() {
+			recorder := &maintenanceRecorder{}
+			oldExec := maintenanceExecutor
+			DeferCleanup(func() { maintenanceExecutor = oldExec })
+			maintenanceExecutor = func(context.Context, pluginBootstrapProvider) (packageMaintenanceExecutor, error) {
+				return recorder, nil
+			}
+			viper.Set("channel", "flatpak")
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"apt","channel":"apt","packages":["ghostty"]}`)).To(Succeed())
+
+			cmd := newPackageMaintenanceCmdWithRepo("upgrade", repo, settings, nil)
+			cmd.SetOut(&out)
+			cmd.SetErr(&errOut)
+			cmd.SetArgs([]string{"Ghostty"})
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(recorder.calls).To(Equal([]string{"package-manager-apt upgrade-packages ghostty"}))
+		})
+
 		It("maintains a retired recorded channel through its saved definition (N3)", func() {
 			recorder := &maintenanceRecorder{}
 			oldExec := maintenanceExecutor

@@ -232,11 +232,9 @@ func resolveAllWith(
 }
 
 // InferRecordedChannel determines the channel recorded in receipt for app.
-// Receipts with an explicit Channel return it directly. Legacy receipts without
-// a Channel match receipt.Manager to a channel's install_method. When several
-// channels share that manager, the one whose package identifiers equal the
-// receipt's wins, then the platform's default selection, then the first
-// available one. It returns "" when no channel uses the manager.
+// Receipts with an explicit Channel return it directly. Legacy receipts name
+// only the manager; see pickManagerChannel for how one of that manager's
+// channels is chosen. It returns "" when no channel uses the manager.
 func InferRecordedChannel(receipt inventory.Receipt, app types.CrossPlatformApp) string {
 	if ch := strings.TrimSpace(receipt.Channel); ch != "" {
 		return ch
@@ -245,6 +243,14 @@ func InferRecordedChannel(receipt inventory.Receipt, app types.CrossPlatformApp)
 	if mgr == "" || mgr == "unknown" {
 		return ""
 	}
+	return pickManagerChannel(app, mgr, receipt.Packages)
+}
+
+// pickManagerChannel chooses among app's channels that use manager mgr: the
+// only one; else those whose package identifiers equal packages; ties and
+// misses go to the platform's default channel, then the first available one.
+// The result does not depend on which channel app currently selects.
+func pickManagerChannel(app types.CrossPlatformApp, mgr string, packages []string) string {
 	var available, unavailable []string
 	for _, ch := range app.Channels() {
 		if !strings.EqualFold(ch.InstallMethod, mgr) {
@@ -260,27 +266,48 @@ func InferRecordedChannel(receipt inventory.Receipt, app types.CrossPlatformApp)
 	if len(candidates) == 0 {
 		candidates = unavailable
 	}
-	if len(candidates) <= 1 {
-		if len(candidates) == 1 {
-			return candidates[0]
-		}
+	switch len(candidates) {
+	case 0:
 		return ""
+	case 1:
+		return candidates[0]
 	}
-	if len(receipt.Packages) > 0 {
+	if len(packages) > 0 {
+		var matches []string
 		for _, name := range candidates {
-			if selected, err := app.WithChannel(name); err == nil && samePackages(selected.GetOSConfig(), receipt.Packages) {
-				return name
+			if selected, err := app.WithChannel(name); err == nil && samePackages(selected.GetOSConfig(), packages) {
+				matches = append(matches, name)
 			}
 		}
+		if len(matches) > 0 {
+			candidates = matches
+		}
 	}
-	if def := app.GetOSConfig(); strings.EqualFold(def.InstallMethod, mgr) {
-		for _, name := range candidates {
-			if strings.EqualFold(name, def.ChannelName()) {
-				return name
-			}
+	defaultName := app.DefaultChannel()
+	for _, name := range candidates {
+		if strings.EqualFold(name, defaultName) {
+			return name
 		}
 	}
 	return candidates[0]
+}
+
+// savedChannel maps a saved installed definition to one of app's current
+// channels. Definitions saved before channels existed carry only an
+// install_method, so their package identifiers pick the matching variant.
+func savedChannel(app types.CrossPlatformApp, saved types.CrossPlatformApp) string {
+	cfg := saved.GetOSConfig()
+	if name := strings.TrimSpace(cfg.Channel); name != "" {
+		return name
+	}
+	var packages []string
+	if request, err := types.ResolvePackageInstall(cfg.InstallMethod, cfg.InstallCommand, cfg.Packages, cfg.Options); err == nil {
+		packages = request.Packages
+	}
+	if name := pickManagerChannel(app, cfg.InstallMethod, packages); name != "" {
+		return name
+	}
+	return cfg.ChannelName()
 }
 
 // samePackages reports whether cfg installs exactly the packages a receipt lists.
@@ -321,17 +348,18 @@ func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) s
 	if repo == nil {
 		return ""
 	}
+	var saved types.CrossPlatformApp
+	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
+		_ = json.Unmarshal([]byte(data), &saved)
+	}
 	if receipt, ok := inventory.ReadReceipt(repo, app.Name); ok {
-		// A legacy receipt names only the manager; the saved definition says
-		// which of that manager's channels was installed.
-		if strings.TrimSpace(receipt.Channel) == "" {
-			if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
-				var saved types.CrossPlatformApp
-				if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" &&
-					strings.EqualFold(saved.GetOSConfig().InstallMethod, receipt.Manager) {
-					return saved.SelectedChannel()
-				}
-			}
+		if ch := strings.TrimSpace(receipt.Channel); ch != "" {
+			return ch
+		}
+		// A legacy receipt names only the manager; a saved definition with
+		// that manager says which of its channels was installed.
+		if saved.Name != "" && strings.EqualFold(saved.GetOSConfig().InstallMethod, receipt.Manager) {
+			return savedChannel(app, saved)
 		}
 		if ch := InferRecordedChannel(receipt, app); ch != "" {
 			return ch
@@ -341,11 +369,8 @@ func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) s
 		}
 		return ""
 	}
-	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
-		var saved types.CrossPlatformApp
-		if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
-			return saved.SelectedChannel()
-		}
+	if saved.Name != "" {
+		return savedChannel(app, saved)
 	}
 	if tracked, err := repo.GetApp(app.Name); err == nil && tracked != nil {
 		if ch := strings.TrimSpace(tracked.Channel); ch != "" {

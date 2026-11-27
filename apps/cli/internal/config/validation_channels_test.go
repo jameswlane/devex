@@ -122,6 +122,7 @@ linux:
 			Expect(result.Diagnostics).To(ContainElement(HaveField("Message", ContainSubstring(`Duplicate channel name "apt"`))))
 		},
 		Entry("same architecture", "apt", "x86_64"),
+		Entry("an amd64 primary followed by two arm64 entries", "apt", "arm64\n    - channel: apt\n      install_method: apt\n      install_command: shadow-tool\n      official_support: true\n      platform_requirements:\n        - os: linux\n          arch: arm64"),
 		Entry("different install methods", "snap", "arm64"),
 	)
 

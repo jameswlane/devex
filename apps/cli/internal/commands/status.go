@@ -291,40 +291,41 @@ func listTrackedApps(repo types.Repository, settings config.CrossPlatformSetting
 // the database. A saved definition or install receipt wins over configured
 // channel preferences so status inspects the channel that is actually installed.
 func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSettings, app types.AppConfig) types.AppConfig {
+	normalized := normalizeInstallLookup(app.Name)
+	for _, entry := range settings.GetAllApps() {
+		if normalizeInstallLookup(entry.Name) != normalized {
+			continue
+		}
+		if repo != nil {
+			installed, err := channels.InstalledDefinition(repo, entry)
+			if err != nil {
+				// Neither the catalog nor the saved definition describes the
+				// recorded channel: report it as unknown, never probe another.
+				return app
+			}
+			entry = installed
+		}
+		resolved := entry.ToLegacyAppConfig()
+		resolved.Name = app.Name
+		return resolved
+	}
+	// Not in the catalog: the saved definition is all DevEx knows, as long as
+	// it agrees with the receipt.
 	if repo != nil {
-		if data, err := repo.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); err == nil && data != "" {
+		if data, err := repo.Get("installed-app-definition:" + normalized); err == nil && data != "" {
 			var saved types.CrossPlatformApp
 			if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
-				if rec := channels.RecordedChannelForApp(repo, saved); rec != "" {
-					if switched, _, err := channels.Resolve(saved, channels.Preferences{}, rec); err == nil {
-						saved = switched
-					}
+				if label := channels.InstalledChannelForApp(repo, saved); label == "" || strings.EqualFold(label, saved.SelectedChannel()) {
+					resolved := saved.ToLegacyAppConfig()
+					resolved.Name = app.Name
+					return resolved
 				}
-				resolved := saved.ToLegacyAppConfig()
-				resolved.Name = app.Name
-				return resolved
+				return app
 			}
 		}
 	}
 	if app.InstallMethod != "" && app.InstallCommand != "" {
 		return app
-	}
-	normalized := normalizeInstallLookup(app.Name)
-	for _, entry := range settings.GetAllApps() {
-		if normalizeInstallLookup(entry.Name) == normalized {
-			if repo != nil {
-				installed, err := channels.InstalledDefinition(repo, entry)
-				if err != nil {
-					// The recorded channel is not in the catalog any more:
-					// report it as unknown rather than probe the default.
-					return app
-				}
-				entry = installed
-			}
-			resolved := entry.ToLegacyAppConfig()
-			resolved.Name = app.Name
-			return resolved
-		}
 	}
 	configured, err := settings.GetApplicationByName(app.Name)
 	if err != nil || configured == nil {

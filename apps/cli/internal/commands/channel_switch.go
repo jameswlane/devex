@@ -39,22 +39,8 @@ func detectChannelSwitch(repo types.Repository, app types.CrossPlatformApp) (cha
 	}
 	tracked, _ := repo.GetApp(app.Name)
 
-	oldChannel := ""
-	switch {
-	case hasReceipt:
-		oldChannel = channels.InferRecordedChannel(receipt, app)
-		if oldChannel == "" && receipt.Manager != "" && receipt.Manager != "unknown" {
-			oldChannel = receipt.Manager
-		}
-	case savedDef.Name != "":
-		oldChannel = savedDef.SelectedChannel()
-	case tracked != nil:
-		if strings.TrimSpace(tracked.Channel) != "" {
-			oldChannel = strings.TrimSpace(tracked.Channel)
-		} else {
-			oldChannel = strings.TrimSpace(tracked.InstallMethod)
-		}
-	}
+	// The same decision install selection and refusal checks use.
+	oldChannel := channels.InstalledChannelForApp(repo, app)
 
 	if oldChannel == "" || strings.EqualFold(oldChannel, newChannel) {
 		return channelSwitchPlan{}, false
