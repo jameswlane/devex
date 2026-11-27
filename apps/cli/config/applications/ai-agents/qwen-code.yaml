@@ -1,0 +1,77 @@
+name: Qwen Code
+description: Alibaba Qwen's open-source terminal AI coding agent
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://github.com/QwenLM/qwen-code
+# Docs site: https://qwenlm.github.io/qwen-code-docs/en/users/overview/
+macos:
+  # Unpinned bootstrap script: QwenLM updates install-qwen-standalone.sh on release
+  # and publishes no checksum for the script itself. The script downloads a
+  # standalone release archive and verifies it against SHA256SUMS before installing
+  # into $HOME/.local/lib/qwen-code and $HOME/.local/bin/qwen.
+  # Marked self_updating: Qwen Code enables general.enableAutoUpdate by default.
+  install_method: curlpipe
+  download_url: https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh
+  install_scope: user
+  installed_binary: qwen
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/qwen" && rm -rf "$HOME/.local/lib/qwen-code"
+  official_support: true
+  alternatives:
+    # Homebrew core formula, maintained outside QwenLM; Qwen tells brew users
+    # to run `brew upgrade`, so it does not update itself.
+    - install_method: brew
+      install_command: qwen-code
+      uninstall_command: qwen-code
+      self_updating: false
+      official_support: false
+    - install_method: mise
+      install_command: node@24 npm:@qwen-code/qwen-code@latest
+      uninstall_command: npm:@qwen-code/qwen-code
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  # QwenLM documents a native PowerShell installer for Windows; DevEx's curlpipe runs scripts with bash, so Windows uses the
+  # vendor's npm package through mise.
+  install_method: mise
+  install_command: node@24 npm:@qwen-code/qwen-code@latest
+  uninstall_command: npm:@qwen-code/qwen-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Unpinned bootstrap script: QwenLM updates install-qwen-standalone.sh on release
+  # and publishes no checksum for the script itself. The script downloads a
+  # standalone release archive and verifies it against SHA256SUMS before installing
+  # into $HOME/.local/lib/qwen-code and $HOME/.local/bin/qwen.
+  # Uninstall removes only the wrapper and standalone runtime directory, leaving
+  # ~/.qwen config and credentials intact.
+  install_method: curlpipe
+  download_url: https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh
+  install_scope: user
+  installed_binary: qwen
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/qwen" && rm -rf "$HOME/.local/lib/qwen-code"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+      # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+      install_command: node@24 npm:@qwen-code/qwen-code@latest
+      uninstall_command: npm:@qwen-code/qwen-code
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+    # Homebrew core formula, maintained outside QwenLM; Qwen tells brew users
+    # to run `brew upgrade`, so it does not update itself.
+    - install_method: brew
+      install_command: qwen-code
+      uninstall_command: qwen-code
+      self_updating: false
+      official_support: false

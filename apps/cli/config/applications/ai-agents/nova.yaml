@@ -1,0 +1,36 @@
+name: Nova
+description: Compass AI's terminal-first AI coding assistant
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://github.com/Compass-Agentic-Platform/nova
+# Website: https://www.compassap.ai/portfolio/nova.html
+macos:
+  install_method: mise
+  install_command: node@24 npm:@compass-ai/nova@latest
+  uninstall_command: npm:@compass-ai/nova
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+windows:
+  install_method: mise
+  install_command: node@24 npm:@compass-ai/nova@latest
+  uninstall_command: npm:@compass-ai/nova
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # mise installs npm:@compass-ai/nova without sudo npm -g. Node is installed in
+  # the same mise call because the npm backend needs it.
+  # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+  # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+  install_method: mise
+  install_command: node@24 npm:@compass-ai/nova@latest
+  uninstall_command: npm:@compass-ai/nova
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js

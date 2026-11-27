@@ -1,0 +1,65 @@
+name: Qoder CLI
+description: Qoder AI's agentic terminal coding assistant
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://docs.qoder.com/cli/quickstart
+# Website: https://qoder.com/cli
+macos:
+  # Unpinned bootstrap script: Qoder updates the installer on release and publishes
+  # no checksum for the script itself. The script fetches manifest.json from
+  # qoder-ide.oss-accelerate.aliyuncs.com, verifies the native archive's SHA-256
+  # checksum, and delegates to `qodercli install --force` into $HOME/.qoder/bin,
+  # $HOME/.qoder/entry, and $HOME/.local/bin/qodercli.
+  # Qoder CLI has auto-upgrade enabled by default.
+  install_method: curlpipe
+  download_url: https://qoder.com/install
+  install_scope: user
+  installed_binary: qodercli
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/qodercli" && rm -rf "$HOME/.qoder/bin" "$HOME/.qoder/entry"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@24 npm:@qoder-ai/qodercli@latest
+      uninstall_command: npm:@qoder-ai/qodercli
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  # Qoder documents a native PowerShell installer for Windows and calls npm its legacy channel; DevEx's curlpipe runs scripts with bash, so Windows uses the
+  # vendor's npm package through mise.
+  install_method: mise
+  install_command: node@24 npm:@qoder-ai/qodercli@latest
+  uninstall_command: npm:@qoder-ai/qodercli
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Unpinned bootstrap script: Qoder updates the installer on release and publishes
+  # no checksum for the script itself. The script fetches manifest.json from
+  # qoder-ide.oss-accelerate.aliyuncs.com, verifies the native archive's SHA-256
+  # checksum, and delegates to `qodercli install --force` into $HOME/.qoder/bin,
+  # $HOME/.qoder/entry, and $HOME/.local/bin/qodercli.
+  # Uninstall removes only the symlink, bin, and entry directories, leaving
+  # ~/.qoder/.auth and user settings intact.
+  install_method: curlpipe
+  download_url: https://qoder.com/install
+  install_scope: user
+  installed_binary: qodercli
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/qodercli" && rm -rf "$HOME/.qoder/bin" "$HOME/.qoder/entry"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+      # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+      install_command: node@24 npm:@qoder-ai/qodercli@latest
+      uninstall_command: npm:@qoder-ai/qodercli
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js

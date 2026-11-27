@@ -1,0 +1,41 @@
+name: Bob
+description: IBM's AI-powered terminal development partner (Bob Shell)
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://bob.ibm.com/docs/shell/getting-started/install-and-setup
+# IBM's bobshell.sh wrapper requires preinstalled Node.js >= 22.15 and runs
+# npm/pnpm/yarn global install of @ibm/bob rather than installing a native binary.
+macos:
+  install_method: mise
+  install_command: node@24 npm:@ibm/bob@latest
+  uninstall_command: npm:@ibm/bob
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+windows:
+  install_method: mise
+  install_command: node@24 npm:@ibm/bob@latest
+  uninstall_command: npm:@ibm/bob
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # mise installs npm:@ibm/bob without sudo npm -g. Node is installed in the
+  # same mise call because the npm backend needs it (@ibm/bob requires Node >= 22.15).
+  # Not marked self_updating even though Bob Shell enables bobShell.autoUpdate by default and
+  # treats global/mise npm paths as an auto-updatable npm install.
+  # Its updater runs a global npm install outside mise's prefix, so the mise
+  # copy would stay stale; DevEx upgrades it through mise instead (#654).
+  # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+  # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+  install_method: mise
+  install_command: node@24 npm:@ibm/bob@latest
+  uninstall_command: npm:@ibm/bob
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js

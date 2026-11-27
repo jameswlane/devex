@@ -1,0 +1,71 @@
+name: Codebuddy Code
+description: Tencent Cloud's terminal AI coding agent
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://www.codebuddy.cn/cli/
+macos:
+  # Unpinned bootstrap script: Tencent updates install.sh on release and publishes
+  # no checksum for the script itself. The script downloads checksums.txt from
+  # Tencent COS and verifies the native archive's SHA-256 checksum before running
+  # `codebuddy install` into $HOME/.local/share/codebuddy and $HOME/.local/bin/codebuddy.
+  # Codebuddy auto-updates by default unless DISABLE_AUTOUPDATER=1 is set.
+  install_method: curlpipe
+  download_url: https://www.codebuddy.cn/cli/install.sh
+  install_scope: user
+  installed_binary: codebuddy
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/codebuddy" && rm -rf "$HOME/.local/share/codebuddy"
+  official_support: true
+  alternatives:
+    - install_method: brew
+      install_command: Tencent-CodeBuddy/tap/codebuddy-code
+      uninstall_command: Tencent-CodeBuddy/tap/codebuddy-code
+      brew_tap: Tencent-CodeBuddy/tap
+      self_updating: true
+      official_support: true
+    - install_method: mise
+      install_command: node@24 npm:@tencent-ai/codebuddy-code@latest
+      uninstall_command: npm:@tencent-ai/codebuddy-code
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  install_method: mise
+  install_command: node@24 npm:@tencent-ai/codebuddy-code@latest
+  uninstall_command: npm:@tencent-ai/codebuddy-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Unpinned bootstrap script: Tencent updates install.sh on release and publishes
+  # no checksum for the script itself. The script downloads checksums.txt from
+  # Tencent COS and verifies the native archive's SHA-256 checksum before running
+  # `codebuddy install` into $HOME/.local/share/codebuddy and $HOME/.local/bin/codebuddy.
+  # Uninstall removes only the symlink and versioned binaries, leaving ~/.codebuddy intact.
+  install_method: curlpipe
+  download_url: https://www.codebuddy.cn/cli/install.sh
+  install_scope: user
+  installed_binary: codebuddy
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/codebuddy" && rm -rf "$HOME/.local/share/codebuddy"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+      # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+      install_command: node@24 npm:@tencent-ai/codebuddy-code@latest
+      uninstall_command: npm:@tencent-ai/codebuddy-code
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+    - install_method: brew
+      install_command: Tencent-CodeBuddy/tap/codebuddy-code
+      uninstall_command: Tencent-CodeBuddy/tap/codebuddy-code
+      brew_tap: Tencent-CodeBuddy/tap
+      self_updating: true
+      official_support: true

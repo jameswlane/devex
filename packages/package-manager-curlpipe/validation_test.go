@@ -195,6 +195,11 @@ var _ = Describe("Curlpipe Validation", func() {
 				"zed.dev",
 				"herdr.dev",
 				"t3.codes",
+				"www.codebuddy.cn",
+				"app.factory.ai",
+				"x.ai",
+				"qoder.com",
+				"qwen-code-assets.oss-cn-hangzhou.aliyuncs.com",
 			}
 
 			for _, expected := range expectedDomains {

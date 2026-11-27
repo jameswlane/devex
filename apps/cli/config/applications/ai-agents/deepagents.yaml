@@ -1,0 +1,36 @@
+name: DeepAgents
+description: LangChain's open-source terminal coding agent (Deep Agents Code)
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://docs.langchain.com/oss/deepagents/code/overview
+# Source repo: https://github.com/langchain-ai/deepagents
+# Note: npm's deepagents-acp is an ACP server only and npm's deepagents-cli is
+# deprecated in favor of the Python deepagents-code CLI (binary: dcode).
+# The official https://langch.in/dcode script installs deepagents-code as a uv tool.
+# self_updating is false for this mise pipx channel: although dcode enables
+# auto_update by default for ~/.local/share/uv/tools/ installs, detect_install_method()
+# returns "other" for mise-managed prefixes and skips self-updating, leaving
+# upgrades to mise (devex upgrade).
+macos:
+  install_method: mise
+  install_command: uv@latest pipx:deepagents-code[python=3.14]@latest
+  uninstall_command: pipx:deepagents-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+# No windows block: LangChain documents WSL for Windows users.
+linux:
+  # mise's pipx backend runs uv tool install with an isolated mise-managed
+  # Python 3.14 runtime (deepagents-code requires Python >=3.14,<3.15) without
+  # touching system Python. uv is installed in the same mise call; uninstall
+  # removes deepagents-code and keeps uv.
+  install_method: mise
+  install_command: uv@latest pipx:deepagents-code[python=3.14]@latest
+  uninstall_command: pipx:deepagents-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise

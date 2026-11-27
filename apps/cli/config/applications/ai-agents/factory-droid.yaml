@@ -1,0 +1,67 @@
+name: Factory Droid
+description: Factory AI's terminal software engineering agent
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://docs.factory.com/droid-cli/quickstart
+macos:
+  # Unpinned bootstrap script: Factory updates the installer on release and
+  # publishes no checksum for the script itself. The script downloads the native
+  # droid binary and its .sha256 file from downloads.factory.ai, verifies the
+  # SHA-256 checksum, and installs into $HOME/.local/bin/droid.
+  # Standalone installations auto-update by default; npm builds disable auto-update.
+  install_method: curlpipe
+  download_url: https://app.factory.ai/cli
+  install_scope: user
+  installed_binary: droid
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/droid"
+  official_support: true
+  alternatives:
+    - install_method: brew
+      install_command: droid
+      uninstall_command: droid
+      brew_cask: true
+      self_updating: true
+      official_support: true
+    - install_method: mise
+      install_command: node@24 npm:droid@latest
+      uninstall_command: npm:droid
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  # Factory documents a native PowerShell installer for Windows; DevEx's curlpipe runs scripts with bash, so Windows uses the
+  # vendor's npm package through mise.
+  install_method: mise
+  install_command: node@24 npm:droid@latest
+  uninstall_command: npm:droid
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Unpinned bootstrap script: Factory updates the installer on release and
+  # publishes no checksum for the script itself. The script downloads the native
+  # droid binary and its .sha256 file from downloads.factory.ai, verifies the
+  # SHA-256 checksum, and installs into $HOME/.local/bin/droid.
+  # Uninstall removes only the binary, leaving ~/.factory config and credentials intact.
+  install_method: curlpipe
+  download_url: https://app.factory.ai/cli
+  install_scope: user
+  installed_binary: droid
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/droid"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+      # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+      install_command: node@24 npm:droid@latest
+      uninstall_command: npm:droid
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js

@@ -1,0 +1,53 @@
+name: siGit Code
+description: Local-first on-device LLM coding agent by siGit
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+# Vendor docs: https://github.com/getsigit/sigit/blob/main/docs/install.md
+# Uses @getsigit/sigit (current official npm package); @smbcloud/sigit in the
+# ACP registry is the previous package name.
+macos:
+  install_method: brew
+  install_command: getsigit/tap/sigit
+  uninstall_command: getsigit/tap/sigit
+  brew_tap: getsigit/tap
+  self_updating: false
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@24 npm:@getsigit/sigit[allow_low_downloads=true]@latest
+      uninstall_command: npm:@getsigit/sigit
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  install_method: winget
+  install_command: getSigit.siGitCode
+  uninstall_command: getSigit.siGitCode
+  self_updating: false
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@24 npm:@getsigit/sigit[allow_low_downloads=true]@latest
+      uninstall_command: npm:@getsigit/sigit
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+linux:
+  # mise installs npm:@getsigit/sigit without sudo npm -g. The npm package
+  # resolves the matching prebuilt native sigit binary via optionalDependencies.
+  # allow_low_downloads=true is set because mise's aube backend blocks newly
+  # scoped packages with fewer than 1000 weekly downloads (@getsigit/sigit was
+  # renamed from @smbcloud/sigit and verified against github.com/getsigit/sigit).
+  # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+  # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+  install_method: mise
+  install_command: node@24 npm:@getsigit/sigit[allow_low_downloads=true]@latest
+  uninstall_command: npm:@getsigit/sigit
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
