@@ -196,7 +196,8 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 				} else {
 					// Try to get from configuration
 					if app, err := settings.GetApplicationByName(name); err == nil {
-						appsToCheck = append(appsToCheck, *app)
+						// The record may be stored under the catalog's spelling.
+						appsToCheck = append(appsToCheck, resolveTrackedApp(repo, settings, *app))
 					} else {
 						// Warnings go to stderr so JSON/YAML output on stdout stays parseable.
 						fmt.Fprintf(os.Stderr, "Warning: Unknown application '%s': not tracked by DevEx and not found in configuration\n", name)
@@ -230,12 +231,14 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 	results := make([]status.AppStatus, 0, len(appsToCheck))
 	for _, app := range appsToCheck {
 		appStatus := checkAppStatus(ctx, &app, settings, verbose)
-		if reason := unresolvedChannelReason(repo, settings, app); reason != "" {
+		reason := unresolvedChannelReason(repo, settings, app)
+		if reason != "" {
 			appStatus.Issues = []string{"Recorded install channel cannot be resolved: " + reason}
 		}
 
-		// Attempt fixes if requested
-		if fix && len(appStatus.Issues) > 0 {
+		// Attempt fixes if requested; nothing can be repaired on a channel
+		// DevEx cannot resolve.
+		if fix && reason == "" && len(appStatus.Issues) > 0 {
 			attemptFixes(ctx, &app, &appStatus, settings)
 		}
 

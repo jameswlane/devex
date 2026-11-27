@@ -290,6 +290,26 @@ var _ = Describe("Install Channels CLI", func() {
 			Expect(unresolvedChannelReason(repo, settings, tracked[0])).To(ContainSubstring(`"flatpak"`))
 		})
 
+		It("names the unresolved channel for a lowercase devex status --fix --app (V1)", func() {
+			Expect(repo.AddApp("Ghostty")).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"flatpak","channel":"flatpak"}`)).To(Succeed())
+			captured, err := os.CreateTemp(GinkgoT().TempDir(), "status")
+			Expect(err).NotTo(HaveOccurred())
+			realStdout := os.Stdout
+			os.Stdout = captured
+			DeferCleanup(func() { os.Stdout = realStdout })
+			cmd := NewStatusCmd(repo, settings)
+			cmd.SetOut(&out)
+			cmd.SetErr(&errOut)
+			cmd.SetArgs([]string{"--app", "ghostty", "--fix", "--format", "yaml"})
+			_ = cmd.Execute()
+			os.Stdout = realStdout
+			printed, err := os.ReadFile(captured.Name())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(printed)).To(ContainSubstring("Recorded install channel cannot be resolved"))
+			Expect(string(printed)).NotTo(ContainSubstring("install_method: apt"))
+		})
+
 		It("checks the catalog's definition when a saved one disagrees with the recorded channel (Q2/T2)", func() {
 			// The saved definition selected apt, but the receipt records snap,
 			// whose catalog package differs from the saved snap alternative.
