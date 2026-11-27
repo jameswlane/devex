@@ -209,3 +209,17 @@ var _ = Describe("Desktop application selection", func() {
 		}
 	})
 })
+
+var _ = Describe("custom setup system info", func() {
+	It("reports has_desktop for an unnamed Linux desktop only on a graphical host", func() {
+		unknown := platform.DetectionResult{OS: "linux", DesktopEnv: "unknown"}
+
+		DeferCleanup(platform.SetGraphicalDesktopForTesting(true))
+		Expect(buildSystemInfo(unknown)["has_desktop"]).To(BeTrue())
+		Expect(buildSystemInfo(platform.DetectionResult{OS: "linux", DesktopEnv: "none"})["has_desktop"]).To(BeFalse())
+
+		DeferCleanup(platform.SetGraphicalDesktopForTesting(false))
+		Expect(buildSystemInfo(unknown)["has_desktop"]).To(BeFalse())
+		Expect(buildSystemInfo(platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"})["has_desktop"]).To(BeTrue())
+	})
+})

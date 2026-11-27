@@ -248,6 +248,50 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 		Expect(out.String()).NotTo(ContainSubstring("Removed APT keyring"))
 	})
 
+	It("keeps the keyring when /etc/apt/sources.list references it", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
+		files["/etc/apt/sources.list"] = "deb [signed-by=/etc/apt/keyrings/cursor.gpg] https://downloads.cursor.com/aptrepo stable main\n"
+
+		var out bytes.Buffer
+		cmd := commands.NewUninstallCmd(mockRepo, settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
+
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(removed).To(Equal([]string{cursorSourcePath}))
+		Expect(out.String()).NotTo(ContainSubstring("Removed APT keyring"))
+	})
+
+	It("keeps the keyring when a remaining source file cannot be read", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
+		const unreadable = "/etc/apt/sources.list.d/unreadable.sources"
+		files[unreadable] = ""
+		DeferCleanup(commands.SetAptManagedFileHooksForTest(
+			func(path string) ([]byte, error) {
+				if path == unreadable {
+					return nil, os.ErrPermission
+				}
+				content, ok := files[path]
+				if !ok {
+					return nil, os.ErrNotExist
+				}
+				return []byte(content), nil
+			}, nil, nil))
+
+		var out bytes.Buffer
+		cmd := commands.NewUninstallCmd(mockRepo, settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
+
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(removed).To(Equal([]string{cursorSourcePath}))
+		Expect(out.String()).NotTo(ContainSubstring("Removed APT keyring"))
+	})
+
 	It("keeps the keyring when another installed app references the same key_name", func() {
 		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
 		recordCursorOwnership(cursorSourcePath, cursorKeyPath)

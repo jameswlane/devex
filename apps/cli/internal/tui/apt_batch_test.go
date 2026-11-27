@@ -476,6 +476,36 @@ var _ = Describe("APT batching", func() {
 		Expect(owned).To(BeFalse())
 	})
 
+	It("does not claim ownership of a pre-existing source or keyring it overwrites", func() {
+		sdktest.NewRecorder(GinkgoT(), "true")
+		tracked := mocks.NewMockRepository()
+		installer.repo = tracked
+		installer.executor = NewMockCommandExecutor()
+		const (
+			userSource = "/etc/apt/sources.list.d/devex-unit-test-user.list"
+			userKey    = "/etc/apt/keyrings/devex-unit-test-user.gpg"
+		)
+		previous := lstatAptFile
+		lstatAptFile = func(path string) (os.FileInfo, error) {
+			if path == userSource || path == userKey {
+				return os.Lstat(GinkgoT().TempDir())
+			}
+			return previous(path)
+		}
+		DeferCleanup(func() { lstatAptFile = previous })
+
+		Expect(installer.addAptSources(context.Background(), "Cursor", types.OSConfig{
+			AptSources: []types.AptSource{{
+				SourceName: userSource,
+				SourceRepo: "deb https://downloads.cursor.com/aptrepo stable main",
+			}},
+		})).To(Succeed())
+		_, owned := AptManagedFileOwner(tracked, userSource)
+		Expect(owned).To(BeFalse())
+		_, owned = AptManagedFileOwner(tracked, userKey)
+		Expect(owned).To(BeFalse())
+	})
+
 	It("does not claim ownership of a pre-existing matching source file", func() {
 		tracked := mocks.NewMockRepository()
 		installer.repo = tracked

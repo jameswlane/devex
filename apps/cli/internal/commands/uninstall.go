@@ -991,12 +991,24 @@ func aptSourceReferencedByOtherApp(repo types.Repository, settings config.CrossP
 	return "", false
 }
 
-// anyRemainingAptSourceReferencesKey reports whether any remaining .list or
-// .sources file in /etc/apt/sources.list.d references cleanedKey.
+// anyRemainingAptSourceReferencesKey reports whether /etc/apt/sources.list or
+// any remaining .list or .sources file in /etc/apt/sources.list.d references
+// cleanedKey. A source that cannot be inspected counts as a reference, so the
+// keyring is kept.
 func anyRemainingAptSourceReferencesKey(cleanedKey string) bool {
+	references := func(path string) bool {
+		content, err := readAptManagedFile(path)
+		if err != nil {
+			return !errors.Is(err, os.ErrNotExist)
+		}
+		return strings.Contains(string(content), cleanedKey)
+	}
+	if references("/etc/apt/sources.list") {
+		return true
+	}
 	entries, err := readAptSourcesDir("/etc/apt/sources.list.d")
 	if err != nil {
-		return false
+		return !errors.Is(err, os.ErrNotExist)
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -1006,11 +1018,7 @@ func anyRemainingAptSourceReferencesKey(cleanedKey string) bool {
 		if !strings.HasSuffix(name, ".list") && !strings.HasSuffix(name, ".sources") {
 			continue
 		}
-		content, readErr := readAptManagedFile(filepath.Join("/etc/apt/sources.list.d", name))
-		if readErr != nil {
-			continue
-		}
-		if strings.Contains(string(content), cleanedKey) {
+		if references(filepath.Join("/etc/apt/sources.list.d", name)) {
 			return true
 		}
 	}

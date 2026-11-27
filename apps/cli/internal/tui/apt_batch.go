@@ -98,6 +98,9 @@ func isAptApp(app types.CrossPlatformApp) bool {
 	return app.GetOSConfig().InstallMethod == "apt"
 }
 
+// lstatAptFile reports whether an APT source or keyring path exists; tests replace it.
+var lstatAptFile = os.Lstat
+
 // recordAptManagedFile stores ownership under the repository lock.
 func (si *StreamingInstaller) recordAptManagedFile(path, appName string) {
 	if si.repo == nil {
@@ -117,17 +120,20 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, appName string,
 		if si.apt.has(si.apt.sourcesAdded, source.SourceName) {
 			continue
 		}
-		sourceMatches := false
+		// Ownership is recorded only for paths that were absent before DevEx
+		// wrote them; a pre-existing or uninspectable file stays the user's.
+		sourceMatches, sourceAbsent := false, false
 		if source.SourceName != "" {
-			if content, err := os.ReadFile(source.SourceName); err == nil && strings.TrimSpace(string(content)) == strings.TrimSpace(source.SourceRepo) {
-				sourceMatches = true
-			}
+			content, err := os.ReadFile(source.SourceName)
+			sourceMatches = err == nil && strings.TrimSpace(string(content)) == strings.TrimSpace(source.SourceRepo)
+			_, statErr := lstatAptFile(source.SourceName)
+			sourceAbsent = errors.Is(statErr, os.ErrNotExist)
 		}
-		keyExists := false
+		keyExists, keyAbsent := false, false
 		if source.KeyName != "" {
-			if info, err := os.Stat(source.KeyName); err == nil && info.Mode().IsRegular() {
-				keyExists = true
-			}
+			info, err := lstatAptFile(source.KeyName)
+			keyExists = err == nil && info.Mode().IsRegular()
+			keyAbsent = errors.Is(err, os.ErrNotExist)
 		}
 		if sourceMatches && (source.KeySource == "" || keyExists) {
 			continue
@@ -143,7 +149,7 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, appName string,
 			if err := si.addModernGPGKey(ctx, source.KeySource, source.KeyName, source.KeyFingerprint, source.RequireDearmor); err != nil {
 				return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
 			}
-			if !keyExists && source.KeyName != "" {
+			if keyAbsent {
 				si.recordAptManagedFile(source.KeyName, appName)
 			}
 		}
@@ -154,7 +160,7 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, appName string,
 			if err := si.executeCommandStream(ctx, addSourceCmd); err != nil {
 				return fmt.Errorf("failed to add APT source %s: %w", source.SourceName, err)
 			}
-			if source.SourceName != "" {
+			if sourceAbsent {
 				si.recordAptManagedFile(source.SourceName, appName)
 			}
 		}
