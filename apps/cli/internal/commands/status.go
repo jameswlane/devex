@@ -302,9 +302,11 @@ func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSetti
 	}
 	definition, found, err := channels.StatusDefinition(repo, catalog, inCatalog, app.Name)
 	if err != nil {
-		// The recorded channel cannot be resolved: report it as unknown
-		// rather than probe another channel.
-		return app
+		// The recorded channel cannot be resolved: no install method, so
+		// status reports it as unknown rather than probe another channel.
+		var bare types.AppConfig
+		bare.Name = app.Name
+		return bare
 	}
 	if found {
 		resolved := definition.ToLegacyAppConfig()

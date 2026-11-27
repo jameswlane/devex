@@ -69,12 +69,17 @@ func Status(ctx context.Context, s config.CrossPlatformSettings, repo StatusRead
 			}
 		}
 	}
+	unresolved := map[string]string{}
 	resolveStatusApp := func(app types.AppConfig) types.AppConfig {
 		// The installed definition wins over configured channel preferences
 		// so status probes the channel that was actually installed.
 		catalogApp, inCatalog := catalogByName[normalizeInstallLookup(app.Name)]
 		if definition, found, err := channels.StatusDefinition(recordReader, catalogApp, inCatalog, app.Name); err != nil {
-			return app
+			// No install method: reported as unknown, never probed.
+			unresolved[app.Name] = err.Error()
+			var bare types.AppConfig
+			bare.Name = app.Name
+			return bare
 		} else if found {
 			resolved := definition.ToLegacyAppConfig()
 			resolved.Name = app.Name
@@ -103,7 +108,9 @@ func Status(ctx context.Context, s config.CrossPlatformSettings, repo StatusRead
 			continue
 		}
 		result := status.AppStatus{Name: app.Name, InstallMethod: app.InstallMethod, Channel: app.Channel, Status: "unknown", Issues: []string{}}
-		if app.InstallMethod == "" {
+		if reason, ok := unresolved[app.Name]; ok {
+			result.Issues = append(result.Issues, "Recorded install channel cannot be resolved: "+reason)
+		} else if app.InstallMethod == "" {
 			result.Issues = append(result.Issues, "Install method unknown: the application is not in the DevEx configuration")
 		}
 		if probe != nil && app.InstallMethod != "" {

@@ -443,9 +443,6 @@ func StatusDefinition(repo RecordReader, catalog types.CrossPlatformApp, inCatal
 		if label == "" || strings.EqualFold(label, saved.SelectedChannel()) {
 			return saved, true, nil
 		}
-		if selected, err := saved.WithChannel(label); err == nil {
-			return selected, true, nil
-		}
 	}
 	if inCatalog {
 		if InstalledChannelForApp(repo, catalog) == "" {
