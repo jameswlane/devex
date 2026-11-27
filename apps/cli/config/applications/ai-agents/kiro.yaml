@@ -1,0 +1,48 @@
+# Upstream: https://kiro.dev (downloads: https://kiro.dev/downloads/ide/)
+name: Kiro
+description: Amazon's agentic IDE with spec-driven development (VS Code based)
+category: AI Code Editors
+default: false
+desktop_environments:
+  - graphical
+linux:
+  # Kiro publishes signed .deb packages but no apt repository. Pinned to
+  # 1.4.154 and verified against the SHA-256 DevEx computed from the vendor
+  # download. The package's postinst only registers an apt source when the
+  # package is named `code`, so it adds none for `kiro`. Kiro needs Ubuntu
+  # 24.04+ or Debian 13+, and downloads its own updates in the background.
+  # Uninstall removes the package (postrm drops /usr/bin/kiro) and keeps
+  # ~/.kiro and ~/.config/Kiro.
+  install_method: deb
+  install_command: kiro
+  installed_binary: /usr/bin/kiro
+  uninstall_command: kiro
+  download_url: https://prod.download.desktop.kiro.dev/releases/stable/linux-x64/signed/1.4.154/deb/kiro-ide-1.4.154-stable-linux-x64.deb
+  verification:
+    sha256: 72c8aaa43e9fe70866486f5914c4a9db0574071ac0be75cc1217e3d3fa2493f6
+  self_updating: true
+  official_support: true
+  platform_requirements:
+    - os: debian
+      version: 13+
+      arch: amd64
+    - os: ubuntu
+      version: 24.04+
+      arch: amd64
+  alternatives:
+    - install_method: deb
+      install_command: kiro
+      installed_binary: /usr/bin/kiro
+      uninstall_command: kiro
+      download_url: https://prod.download.desktop.kiro.dev/releases/stable/linux-arm64/signed/1.4.154/deb/kiro-ide-1.4.154-stable-linux-arm64.deb
+      verification:
+        sha256: 75d39ed5b0988a41513d9462ecad60399a96552eff417c64e1c2f2649390e7a3
+      self_updating: true
+      official_support: true
+      platform_requirements:
+        - os: debian
+          version: 13+
+          arch: arm64
+        - os: ubuntu
+          version: 24.04+
+          arch: arm64

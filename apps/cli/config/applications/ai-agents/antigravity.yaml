@@ -1,0 +1,72 @@
+# Upstream: https://antigravity.google (downloads: https://antigravity.google/download)
+name: Antigravity
+description: Google's agent-first development environment (Antigravity 2)
+category: AI Code Editors
+default: false
+desktop_environments:
+  - graphical
+linux:
+  # Google ships Antigravity for Linux only as a tarball (no apt repository,
+  # .deb or AppImage). post_install downloads the pinned 2.36.0 tarball for
+  # this machine's architecture, checks the SHA-256 DevEx computed from the
+  # vendor download, and unpacks it into /opt/antigravity with the Electron
+  # sandbox helper made setuid root. It links /usr/local/bin/antigravity and
+  # adds a desktop entry. On Linux the app only shows an "Update Available"
+  # button that asks you to download the new tarball, so it is not marked
+  # self-updating; DevEx upgrades it by moving the pin. Uninstall removes
+  # /opt/antigravity, the link and the desktop entry, and keeps ~/.antigravity
+  # and ~/.config/Antigravity.
+  install_method: curlpipe
+  installed_binary: antigravity
+  self_updating: false
+  official_support: true
+  platform_requirements:
+    - os: debian
+      version: 10+
+    - os: ubuntu
+      version: 20.04+
+  dependencies:
+    - curl
+  post_install:
+    - scope: system
+      shell: |
+        set -eu
+        case "$(uname -m)" in
+          x86_64) arch=linux-x64; sum=6fe418f08e760c0b7f2975df9daef6eb6cbc47c65161251349e0ce255c608fb6 ;;
+          aarch64|arm64) arch=linux-arm; sum=2c322f0a77dbd0591cdaaa28b1be4ca49e56b137bb3410f43e9c510e5600d83f ;;
+          *) echo "Antigravity has no Linux build for $(uname -m)." >&2; exit 1 ;;
+        esac
+        url="https://storage.googleapis.com/antigravity-public/antigravity-hub/2.36.0-5596661662220288/$arch/Antigravity.tar.gz"
+        tmp="$(mktemp -d)"
+        trap 'rm -rf "$tmp"' EXIT
+        curl -fsSL --proto '=https' -o "$tmp/Antigravity.tar.gz" "$url"
+        echo "$sum  $tmp/Antigravity.tar.gz" | sha256sum -c - >/dev/null
+        mkdir -p "$tmp/unpacked"
+        tar -xzf "$tmp/Antigravity.tar.gz" -C "$tmp/unpacked" --strip-components=1
+        [ -x "$tmp/unpacked/antigravity" ] || { echo "The Antigravity tarball has no antigravity binary." >&2; exit 1; }
+        chown root:root "$tmp/unpacked/chrome-sandbox"
+        chmod 4755 "$tmp/unpacked/chrome-sandbox"
+        rm -rf /opt/antigravity.new
+        mv "$tmp/unpacked" /opt/antigravity.new
+        rm -rf /opt/antigravity
+        mv /opt/antigravity.new /opt/antigravity
+        ln -sfn /opt/antigravity/antigravity /usr/local/bin/antigravity
+        cat > /usr/share/applications/antigravity.desktop <<'DESKTOP'
+        [Desktop Entry]
+        Name=Antigravity
+        Comment=Google's agent-first development environment
+        Exec=/opt/antigravity/antigravity %U
+        Terminal=false
+        Type=Application
+        Categories=Development;IDE;
+        StartupWMClass=Antigravity
+        DESKTOP
+  uninstall_command: |
+    set -eu
+    SUDO=""
+    if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+    if [ "$(readlink /usr/local/bin/antigravity 2>/dev/null || true)" = "/opt/antigravity/antigravity" ]; then
+      $SUDO rm -f /usr/local/bin/antigravity
+    fi
+    $SUDO rm -rf /opt/antigravity
+    $SUDO rm -f /usr/share/applications/antigravity.desktop
