@@ -339,10 +339,14 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 	byName := map[string]types.CrossPlatformApp{}
 	aliases := map[string]string{}
 	depPrefs := planChannelPreferences(r).WithoutExplicitChannel()
+	// Resolution errors only matter for the dependencies the plan reaches.
+	resolveErrs := map[string]error{}
 	for _, app := range s.GetAllApps() {
 		recorded := channels.InstalledChannelForApp(r.Repo, app)
 		if selected, _, resolveErr := channels.ResolveForInstall(app, depPrefs, recorded); resolveErr == nil {
 			app = selected
+		} else {
+			resolveErrs[normalizeInstallLookup(app.Name)] = resolveErr
 		}
 		byName[normalizeInstallLookup(app.Name)] = app
 		aliases[normalizeInstallLookup(app.Name)] = normalizeInstallLookup(app.Name)
@@ -353,6 +357,7 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 	}
 	for _, app := range apps {
 		byName[normalizeInstallLookup(app.Name)] = app
+		delete(resolveErrs, normalizeInstallLookup(app.Name))
 	}
 	visited := map[string]bool{}
 	var visit func(types.CrossPlatformApp) error
@@ -363,6 +368,9 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 		key := normalizeInstallLookup(app.Name)
 		if visited[key] {
 			return nil
+		}
+		if resolveErr := resolveErrs[key]; resolveErr != nil {
+			return &Error{Category: "invalid_request", Message: resolveErr.Error(), cause: resolveErr}
 		}
 		visited[key] = true
 		if err := orgPolicy.CheckApp(app); err != nil {

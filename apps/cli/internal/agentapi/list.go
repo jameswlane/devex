@@ -51,23 +51,22 @@ func GetInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 	for _, app := range allApps {
 		if installedAppsCache[app.Name] {
 			resolved := app
-			if data, err := repo.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); err == nil && data != "" {
-				var saved types.CrossPlatformApp
-				if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
-					resolved = saved
-				}
+			method := ""
+			definition, found, resolveErr := channels.StatusDefinition(repo, app, true, app.Name)
+			switch {
+			case resolveErr != nil:
+				// The recorded channel is no longer offered: report it as
+				// recorded, never as the catalog default.
+				method = "unknown"
+			case found:
+				resolved = definition
 			}
-			recorded := channels.RecordedChannelForApp(repo, resolved)
-			if recorded != "" {
-				if switched, _, err := channels.Resolve(resolved, channels.Preferences{}, recorded); err == nil {
-					resolved = switched
-				}
-			}
-			// Determine installation method and channel
-			method := DetectInstallationMethod(resolved)
 			selectedCh := resolved.SelectedChannel()
-			if selectedCh == "" {
-				selectedCh = recorded
+			if resolveErr != nil {
+				selectedCh = channels.InstalledChannelForApp(repo, app)
+			}
+			if method == "" {
+				method = DetectInstallationMethod(resolved)
 			}
 
 			installedApp := InstalledApp{

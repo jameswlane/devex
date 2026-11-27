@@ -225,6 +225,34 @@ var _ = Describe("Channel resolution", func() {
 			}
 		})
 
+		It("identifies an unavailable channel by a unique package match", func() {
+			app := types.CrossPlatformApp{
+				Name: "Tool",
+				Linux: types.OSConfig{
+					InstallMethod: "mise", InstallCommand: "new-tool@latest", OfficialSupport: true,
+					Alternatives: []types.OSConfig{
+						{Channel: "mise-fedora", InstallMethod: "mise", InstallCommand: "old-tool@latest", PlatformRequirements: []types.PlatformRequirement{{OS: "fedora"}}},
+					},
+				},
+			}
+			Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "mise", Packages: []string{"old-tool@latest"}}, app)).To(Equal("mise-fedora"))
+			_, _, err := channels.ResolveForInstall(app, channels.Preferences{}, "mise-fedora")
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("maintains the saved definition when it agrees with the recorded channel", func() {
+			repo := mocks.NewMockRepository()
+			saved := newGit()
+			saved.Linux.InstallCommand = "old-git"
+			data, err := json.Marshal(saved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.Set("installed-app-definition:git", string(data))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("git"), `{"manager":"apt","channel":"apt"}`)).To(Succeed())
+			installed, err := channels.InstalledDefinition(repo, newGit())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed.GetOSConfig().InstallCommand).To(Equal("old-git"))
+		})
+
 		It("ignores a saved definition that does not decode (Q1)", func() {
 			repo := mocks.NewMockRepository()
 			Expect(repo.Set("installed-app-definition:tool", `{"Name":"Tool","Linux":{"InstallMethod":"dnf","InstallCommand":7}}`)).To(Succeed())

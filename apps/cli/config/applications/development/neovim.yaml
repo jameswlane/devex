@@ -32,8 +32,7 @@ macos:
       post_install:
         - shell: sudo mv nvim-macos-arm64 /usr/local/ && rm -f nvim-macos-arm64.tar.gz
         - path: [/usr/local/nvim-macos-arm64/bin]
-    - channel: curlpipe-x86_64
-      install_method: curlpipe
+    - install_method: curlpipe
       download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-macos-x86_64.tar.gz
       destination: /usr/local
       official_support: true

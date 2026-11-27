@@ -267,6 +267,19 @@ func pickManagerChannel(app types.CrossPlatformApp, mgr string, packages []strin
 			unavailable = append(unavailable, ch.Name)
 		}
 	}
+	// A unique package match identifies the installed channel even when it is
+	// no longer available here, so install refuses instead of switching.
+	if len(packages) > 0 {
+		var matches []string
+		for _, name := range append(append([]string(nil), available...), unavailable...) {
+			if packagesMatch(app, name, packages) {
+				matches = append(matches, name)
+			}
+		}
+		if len(matches) == 1 {
+			return matches[0]
+		}
+	}
 	candidates := available
 	if len(candidates) == 0 {
 		candidates = unavailable
@@ -280,7 +293,7 @@ func pickManagerChannel(app types.CrossPlatformApp, mgr string, packages []strin
 	if len(packages) > 0 {
 		var matches []string
 		for _, name := range candidates {
-			if selected, err := app.WithChannel(name); err == nil && samePackages(selected.GetOSConfig(), packages) {
+			if packagesMatch(app, name, packages) {
 				matches = append(matches, name)
 			}
 		}
@@ -313,6 +326,41 @@ func savedChannel(app types.CrossPlatformApp, saved types.CrossPlatformApp) stri
 		return name
 	}
 	return cfg.ChannelName()
+}
+
+// packagesMatch reports whether app's channel name installs exactly packages,
+// looking the channel up whether or not it is available on this platform.
+func packagesMatch(app types.CrossPlatformApp, name string, packages []string) bool {
+	if selected, err := app.WithChannel(name); err == nil {
+		return samePackages(selected.GetOSConfig(), packages)
+	}
+	for _, cfg := range channelConfigs(app) {
+		if strings.EqualFold(cfg.ChannelName(), name) && samePackages(cfg, packages) {
+			return true
+		}
+	}
+	return false
+}
+
+// channelConfigs returns the active platform block's primary and alternatives.
+func channelConfigs(app types.CrossPlatformApp) []types.OSConfig {
+	var primary types.OSConfig
+	switch {
+	case app.AllPlatforms.InstallMethod != "":
+		primary = app.AllPlatforms
+	case types.CatalogOS() == "darwin":
+		primary = app.MacOS
+	case types.CatalogOS() == "windows":
+		primary = app.Windows
+	default:
+		primary = app.Linux
+	}
+	if primary.InstallMethod == "" {
+		return nil
+	}
+	only := primary
+	only.Alternatives = nil
+	return append([]types.OSConfig{only}, primary.Alternatives...)
 }
 
 // samePackages reports whether cfg installs exactly the packages a receipt lists.
@@ -401,21 +449,29 @@ func InstalledChannelForApp(repo RecordReader, app types.CrossPlatformApp) strin
 // that was not installed.
 func InstalledDefinition(repo RecordReader, app types.CrossPlatformApp) (types.CrossPlatformApp, error) {
 	label := InstalledChannelForApp(repo, app)
-	if label == "" || strings.EqualFold(app.SelectedChannel(), label) {
+	if label == "" {
+		return app, nil
+	}
+	var saved types.CrossPlatformApp
+	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
+		if json.Unmarshal([]byte(data), &saved) != nil {
+			saved = types.CrossPlatformApp{}
+		}
+	}
+	// The saved definition names what was actually installed, even if the
+	// catalog has since renamed the package inside the same channel.
+	if saved.Name != "" && strings.EqualFold(saved.SelectedChannel(), label) {
+		return saved, nil
+	}
+	if strings.EqualFold(app.SelectedChannel(), label) {
 		return app, nil
 	}
 	if selected, err := app.WithChannel(label); err == nil {
 		return selected, nil
 	}
-	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
-		var saved types.CrossPlatformApp
-		if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
-			if strings.EqualFold(saved.SelectedChannel(), label) {
-				return saved, nil
-			}
-			if selected, err := saved.WithChannel(label); err == nil {
-				return selected, nil
-			}
+	if saved.Name != "" {
+		if selected, err := saved.WithChannel(label); err == nil {
+			return selected, nil
 		}
 	}
 	return types.CrossPlatformApp{}, fmt.Errorf("%s is installed through channel %q, which the catalog no longer offers and no saved definition describes; run 'devex uninstall --app %q' or remove it manually", app.Name, label, app.Name)

@@ -261,7 +261,16 @@ func (app CrossPlatformApp) WithChannel(name string) (CrossPlatformApp, error) {
 				}
 			}
 		}
-		// Otherwise fall back to the default channel if available.
+		// The catalog marks an official channel but none is available here:
+		// refuse rather than quietly install a community channel.
+		if matchIdx < 0 {
+			for _, cfg := range all {
+				if cfg.OfficialSupport {
+					return CrossPlatformApp{}, fmt.Errorf("%s has no official channel available on %s; available channels: %s", app.Name, catalogOS, FormatAvailableChannels(app.Channels()))
+				}
+			}
+		}
+		// No channel is marked official: fall back to the default channel if available.
 		if matchIdx < 0 {
 			for i, cfg := range all {
 				if strings.EqualFold(cfg.ChannelName(), defaultName) && isChannelAvailable(cfg) {

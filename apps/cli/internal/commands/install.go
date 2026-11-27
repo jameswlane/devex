@@ -189,6 +189,11 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if len(args) > 0 || len(categories) > 0 {
 					return fmt.Errorf("--template cannot be combined with app arguments or --categories")
 				}
+				// Templates install each app's catalog default; they do not
+				// apply channel preferences.
+				if channel != "" {
+					return fmt.Errorf("--template does not support install channels: unset --channel or DEVEX_CHANNEL (%q), or install the apps by name with --channel", channel)
+				}
 				return executeTemplateInstall(ctx, templateID, templateInstallOptions{
 					Answers:        answers,
 					AnswerFiles:    answerFiles,
@@ -226,7 +231,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 	_ = viper.BindPFlag("rollback-on-failure", cmd.Flags().Lookup("rollback-on-failure"))
 	cmd.Flags().String("format", "table", "Output format (table, json; JSON requires --dry-run)")
 	// Define command-specific flags
-	cmd.Flags().String("channel", "", "Install channel to use (for example official, mise, brew); env: DEVEX_CHANNEL")
+	cmd.Flags().String("channel", "", "Install channel to use (for example official, mise, brew); env: DEVEX_CHANNEL; not supported with --template")
 	cmd.Flags().StringSlice("categories", nil, "Install apps from specific categories")
 	cmd.Flags().StringVar(&templateID, "template", "", "Install a DevEx lifecycle template by ID or path")
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")

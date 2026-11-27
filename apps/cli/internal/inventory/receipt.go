@@ -92,17 +92,19 @@ func RegisterInstalled(ctx context.Context, repo types.Repository, app types.Cro
 			return err
 		}
 	}
-	data, err := json.Marshal(app)
-	if err != nil {
-		return err
-	}
-	if err := repo.Set("installed-app-definition:"+strings.ToLower(strings.TrimSpace(app.Name)), string(data)); err != nil {
-		return err
+	// The receipt is still written when saving the definition fails, so
+	// inventory sees the install; the definition error is returned so the
+	// lifecycle stays unfinished and a retry can repair it.
+	var definitionErr error
+	if data, err := json.Marshal(app); err != nil {
+		definitionErr = err
+	} else if err := repo.Set("installed-app-definition:"+strings.ToLower(strings.TrimSpace(app.Name)), string(data)); err != nil {
+		definitionErr = err
 	}
 	if err := Record(ctx, repo, app, RecordOptions{}); err != nil && onReceiptError != nil {
 		onReceiptError(err)
 	}
-	return nil
+	return definitionErr
 }
 
 // ReceiptGetter is the minimal datastore interface ReadReceipt needs.

@@ -10,8 +10,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
+	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
@@ -183,7 +185,7 @@ var _ = Describe("Install Channels CLI", func() {
 		It("reads channels: and channel_order: from config.yaml and obeys flag > env > channels > channel_order", func() {
 			cfgDir := devexpaths.ForHome(tempHome).Config
 			Expect(os.MkdirAll(cfgDir, 0o700)).To(Succeed())
-			cfgYAML := "channels:\n  kimi-code: mise\nchannel_order:\n  - snap\n  - apt\n"
+			cfgYAML := "channels:\n  kimi-code: mise\nchannel_order:\n  - snap\n  - curlpipe\n  - apt\n"
 			Expect(os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(cfgYAML), 0o600)).To(Succeed())
 
 			// Config applies channels: to Kimi Code and channel_order: to Ghostty.
@@ -198,12 +200,34 @@ var _ = Describe("Install Channels CLI", func() {
 			Expect(byName["Kimi Code"].Channel).To(Equal("mise"))
 			Expect(byName["Ghostty"].Channel).To(Equal("snap"))
 
+			// DEVEX_CHANNEL overrides channels:, and --channel overrides DEVEX_CHANNEL.
+			GinkgoT().Setenv("DEVEX_CHANNEL", "curlpipe")
+			for _, tc := range []struct {
+				args []string
+				want string
+			}{
+				{[]string{"install", "Kimi Code", "--dry-run", "--format", "json", "--offline"}, "curlpipe"},
+				{[]string{"install", "Kimi Code", "--channel", "mise", "--dry-run", "--format", "json", "--offline"}, "mise"},
+			} {
+				Expect(runRoot(tc.args...)).To(Succeed())
+				env = channelInstallPlanEnvelope{}
+				Expect(json.Unmarshal(out.Bytes(), &env)).To(Succeed())
+				Expect(env.Error).To(BeNil())
+				Expect(env.Apps[0].Channel).To(Equal(tc.want), "%v", tc.args)
+			}
+			GinkgoT().Setenv("DEVEX_CHANNEL", "")
+
 			// --channel official overrides config preferences.
 			Expect(runRoot("install", "Ghostty", "--channel", "official", "--dry-run", "--format", "json", "--offline")).To(Succeed())
 			env = channelInstallPlanEnvelope{}
 			Expect(json.Unmarshal(out.Bytes(), &env)).To(Succeed())
 			Expect(env.Error).To(BeNil())
 			Expect(env.Apps[0].Channel).To(Equal("apt"))
+		})
+
+		It("refuses an install channel with --template", func() {
+			err := runRoot("install", "--template", "databases", "--channel", "mise", "--dry-run", "--offline")
+			Expect(err).To(MatchError(ContainSubstring("--template does not support install channels")))
 		})
 
 		It("reports offered channels when --channel is unknown or missing on some selected apps", func() {
@@ -309,7 +333,12 @@ var _ = Describe("Install Channels CLI", func() {
 			printed, err := os.ReadFile(captured.Name())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(printed)).To(ContainSubstring("Recorded install channel cannot be resolved"))
-			Expect(string(printed)).NotTo(ContainSubstring("install_method: apt"))
+			var decoded []status.AppStatus
+			Expect(yaml.Unmarshal(printed, &decoded)).To(Succeed())
+			Expect(decoded).To(HaveLen(1))
+			Expect(decoded[0].Status).To(Equal("unknown"))
+			Expect(decoded[0].InstallMethod).To(BeEmpty())
+			Expect(decoded[0].Issues).To(ContainElement(ContainSubstring("Recorded install channel cannot be resolved")))
 		})
 
 		It("checks the catalog's definition when a saved one disagrees with the recorded channel (Q2/T2)", func() {

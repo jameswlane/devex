@@ -67,15 +67,19 @@ func detectChannelSwitch(repo types.Repository, app types.CrossPlatformApp) (cha
 			foundOld = true
 		}
 	}
+	// A tracked record that matches the receipt names what was installed;
+	// the catalog's version of the old channel is only the fallback.
+	if !foundOld && tracked != nil && tracked.InstallMethod != "" && hasReceipt && appConfigMatchesReceipt(*tracked, receipt) {
+		oldCfg = *tracked
+		foundOld = true
+	}
 	if !foundOld {
 		if oldCross, err := app.WithChannel(oldChannel); err == nil {
 			oldCfg = oldCross.ToLegacyAppConfig()
 			foundOld = true
-		} else if tracked != nil && tracked.InstallMethod != "" {
-			if !hasReceipt || appConfigMatchesReceipt(*tracked, receipt) {
-				oldCfg = *tracked
-				foundOld = true
-			}
+		} else if tracked != nil && tracked.InstallMethod != "" && !hasReceipt {
+			oldCfg = *tracked
+			foundOld = true
 		}
 	}
 

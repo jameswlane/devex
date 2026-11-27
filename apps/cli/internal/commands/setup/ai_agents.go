@@ -297,12 +297,22 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 		}
 	}
 
+	// A selected agent that is also another agent's prerequisite keeps the
+	// channel chosen for it, in the prerequisite's earlier slot.
+	selectedByKey := make(map[string]resolvedAgent, len(resolvedSelected))
+	for _, entry := range resolvedSelected {
+		selectedByKey[strings.ToLower(strings.TrimSpace(entry.app.Name))] = entry
+	}
 	for _, key := range prereqOrder {
+		app, prereqErr := prereqApps[key], prereqErrs[key]
+		if entry, ok := selectedByKey[key]; ok {
+			app, prereqErr = entry.app, entry.err
+		}
 		deps = append(deps, planItem{
-			app:        prereqApps[key],
+			app:        app,
 			group:      planDependency,
 			reason:     "AI agents: " + strings.Join(prereqRequesters[key], ", "),
-			channelErr: prereqErrs[key],
+			channelErr: prereqErr,
 		})
 		existingNames[key] = true
 	}

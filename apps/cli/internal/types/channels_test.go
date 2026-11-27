@@ -75,6 +75,19 @@ var _ = Describe("Application install channels", func() {
 		})
 	})
 
+	It("refuses --channel official when every official channel is unavailable here", func() {
+		app := types.CrossPlatformApp{
+			Name: "tool",
+			Linux: types.OSConfig{
+				InstallMethod: "dnf", InstallCommand: "tool", OfficialSupport: true,
+				PlatformRequirements: []types.PlatformRequirement{{OS: "fedora"}},
+				Alternatives:         []types.OSConfig{{InstallMethod: "mise", InstallCommand: "tool@latest"}},
+			},
+		}
+		_, err := app.WithChannel(types.ChannelOfficial)
+		Expect(err).To(MatchError(ContainSubstring("tool has no official channel available on linux")))
+	})
+
 	newMultiChannelApp := func() types.CrossPlatformApp {
 		return types.CrossPlatformApp{
 			Name:        "codex",
