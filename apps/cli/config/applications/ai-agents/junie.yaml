@@ -1,0 +1,76 @@
+# Upstream: https://junie.jetbrains.com/ (https://github.com/JetBrains/junie)
+name: Junie
+description: JetBrains' LLM-agnostic terminal AI coding agent CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/JetBrains/junie#readme and
+  # https://junie.jetbrains.com/docs/junie-cli.html#step-1-install-junie-cli
+  # Unpinned bootstrap script: JetBrains redirects junie.jetbrains.com/install.sh
+  # to JetBrains/junie install.sh and publishes no checksum for the script itself.
+  # The script fetches update-info.jsonl, verifies the downloaded zip archive's
+  # SHA-256 with shasum/sha256sum, extracts into ~/.local/share/junie/versions/<ver>,
+  # links ~/.local/share/junie/current, and installs the auto-updating shim at
+  # ~/.local/bin/junie. Plain `junie` auto-updates its default channel by default.
+  install_method: curlpipe
+  download_url: https://junie.jetbrains.com/install.sh
+  install_scope: user
+  installed_binary: junie
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/junie" && rm -rf "$HOME/.local/share/junie"
+  official_support: true
+  alternatives:
+    - install_method: brew
+      install_command: jetbrains-junie/junie/junie
+      uninstall_command: jetbrains-junie/junie/junie
+      brew_tap: jetbrains-junie/junie
+      installed_binary: junie
+      self_updating: false
+      official_support: true
+    - install_method: mise
+      install_command: node@24 npm:@jetbrains/junie@latest
+      uninstall_command: npm:@jetbrains/junie
+      installed_binary: junie
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  # Official npm channel documented in JetBrains/junie README (`npm install -g @jetbrains/junie`).
+  install_method: mise
+  install_command: node@24 npm:@jetbrains/junie@latest
+  uninstall_command: npm:@jetbrains/junie
+  installed_binary: junie
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Official install docs: https://github.com/JetBrains/junie#readme and
+  # https://junie.jetbrains.com/docs/junie-cli.html#step-1-install-junie-cli
+  # Unpinned bootstrap script: JetBrains redirects junie.jetbrains.com/install.sh
+  # to JetBrains/junie install.sh and publishes no checksum for the script itself.
+  # The script fetches update-info.jsonl, verifies the downloaded zip archive's
+  # SHA-256 with sha256sum/shasum, extracts into ~/.local/share/junie/versions/<ver>,
+  # links ~/.local/share/junie/current, and installs the auto-updating shim at
+  # ~/.local/bin/junie. Plain `junie` auto-updates its default channel by default.
+  # Uninstall removes only the shim and ~/.local/share/junie runtime, preserving
+  # ~/.junie config, credentials, and logs.
+  install_method: curlpipe
+  download_url: https://junie.jetbrains.com/install.sh
+  install_scope: user
+  installed_binary: junie
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/junie" && rm -rf "$HOME/.local/share/junie"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@24 npm:@jetbrains/junie@latest
+      uninstall_command: npm:@jetbrains/junie
+      installed_binary: junie
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js

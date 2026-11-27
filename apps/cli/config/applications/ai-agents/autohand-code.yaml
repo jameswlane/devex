@@ -1,0 +1,68 @@
+# Upstream: https://github.com/autohandai/code-cli (https://www.autohand.ai/code/)
+name: Autohand Code
+description: Open-source terminal-native AI coding agent supporting 15+ model providers
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Autohand's documented npm package (autohand-cli) installed through mise,
+  # not its install.sh: the script replaces every writable `agent` command on
+  # PATH with a link to Autohand and installs zit/git-zit when they are absent,
+  # side effects DevEx cannot turn off or undo. Uninstall removes only the
+  # package and keeps ~/.autohand.
+  install_method: mise
+  install_command: node@24 npm:autohand-cli@latest
+  uninstall_command: npm:autohand-cli
+  installed_binary: autohand
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+  alternatives:
+    - install_method: brew
+      install_command: autohandai/code/autohand-code
+      uninstall_command: autohandai/code/autohand-code
+      brew_tap: autohandai/code
+      installed_binary: autohand
+      self_updating: false
+      official_support: true
+windows:
+  # Official Windows channels: winget (`Autohand.AutohandCodeCLI`) and npm (`autohand-cli`).
+  install_method: winget
+  install_command: Autohand.AutohandCodeCLI
+  uninstall_command: Autohand.AutohandCodeCLI
+  installed_binary: autohand
+  self_updating: false
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@24 npm:autohand-cli@latest
+      uninstall_command: npm:autohand-cli
+      installed_binary: autohand
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+linux:
+  # Autohand's documented npm package (autohand-cli) installed through mise,
+  # not its install.sh: the script replaces every writable `agent` command on
+  # PATH with a link to Autohand and installs zit/git-zit when they are absent,
+  # side effects DevEx cannot turn off or undo. Uninstall removes only the
+  # package and keeps ~/.autohand.
+  install_method: mise
+  install_command: node@24 npm:autohand-cli@latest
+  uninstall_command: npm:autohand-cli
+  installed_binary: autohand
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+  alternatives:
+    - install_method: brew
+      install_command: autohandai/code/autohand-code
+      uninstall_command: autohandai/code/autohand-code
+      brew_tap: autohandai/code
+      installed_binary: autohand
+      self_updating: false
+      official_support: true

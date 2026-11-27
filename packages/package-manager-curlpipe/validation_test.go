@@ -200,6 +200,18 @@ var _ = Describe("Curlpipe Validation", func() {
 				"x.ai",
 				"qoder.com",
 				"qwen-code-assets.oss-cn-hangzhou.aliyuncs.com",
+				"github.com",
+				"ai.snowflake.com",
+				"ampcode.com",
+				"autohand.ai",
+				"cli.devin.ai",
+				"cli.kiro.dev",
+				"cursor.com",
+				"dev.meta.ai",
+				"fx.sh",
+				"harnlang.com",
+				"junie.jetbrains.com",
+				"kilo.ai",
 			}
 
 			for _, expected := range expectedDomains {

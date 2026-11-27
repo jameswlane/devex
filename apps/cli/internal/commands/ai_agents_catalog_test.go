@@ -133,36 +133,165 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Expect(cmd.Run()).To(HaveOccurred())
 	})
 
+	Describe("uninstall commands run against a temporary home", func() {
+		var home string
+		BeforeEach(func() {
+			if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+				Skip("the Linux uninstall commands run under a non-root sh")
+			}
+			home = GinkgoT().TempDir()
+		})
+		run := func(name string) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			DeferCleanup(cancel)
+			cmd := exec.CommandContext(ctx, "sh", "-c", agents[name].Linux.UninstallCommand)
+			cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DEVEX_LOCK_WAIT_SECONDS=1"}
+			out, err := cmd.CombinedOutput()
+			GinkgoWriter.Println(string(out))
+			return err
+		}
+		touch := func(rel string) string {
+			path := filepath.Join(home, rel)
+			Expect(os.MkdirAll(filepath.Dir(path), 0o755)).To(Succeed())
+			Expect(os.WriteFile(path, []byte("x"), 0o755)).To(Succeed())
+			return path
+		}
+		gone := func(path string) bool {
+			_, err := os.Lstat(path)
+			return os.IsNotExist(err)
+		}
+
+		It("removes Muse Code's launcher state once it holds the update lock", func() {
+			files := []string{touch(".local/bin/muse"), touch(".local/bin/muse-bin-1.0"), touch(".local/bin/.muse-version"), touch(".local/bin/.muse-release-info.json")}
+			Expect(run("Muse Code")).To(Succeed())
+			for _, f := range files {
+				Expect(gone(f)).To(BeTrue(), f)
+			}
+			Expect(gone(filepath.Join(home, ".local/bin/.muse-update-lock"))).To(BeTrue())
+		})
+
+		It("fails Muse Code's uninstall and keeps its files while an update holds the lock", func() {
+			muse := touch(".local/bin/muse")
+			touch(".local/bin/.muse-update-lock/pid")
+			Expect(run("Muse Code")).To(HaveOccurred())
+			Expect(gone(muse)).To(BeFalse())
+		})
+
+		It("treats XDG_BIN_DIR naming ~/bin as one Harn directory", func() {
+			harn := touch("bin/harn")
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			DeferCleanup(cancel)
+			cmd := exec.CommandContext(ctx, "sh", "-c", agents["Harn"].Linux.UninstallCommand)
+			cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "XDG_BIN_DIR=" + filepath.Join(home, "bin")}
+			Expect(cmd.Run()).To(Succeed())
+			Expect(gone(harn)).To(BeTrue())
+		})
+
+		It("tells Harn copies apart behind a symlink followed by ..", func() {
+			one := touch("bin/harn")
+			Expect(os.MkdirAll(filepath.Join(home, "real", "inner"), 0o755)).To(Succeed())
+			Expect(os.Symlink(filepath.Join(home, "real", "inner"), filepath.Join(home, "bin", "link"))).To(Succeed())
+			two := touch("real/harn")
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			DeferCleanup(cancel)
+			cmd := exec.CommandContext(ctx, "sh", "-c", agents["Harn"].Linux.UninstallCommand)
+			// $HOME/bin/link/.. is $HOME/bin logically but $HOME/real physically.
+			cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "XDG_BIN_DIR=" + filepath.Join(home, "bin", "link") + "/.."}
+			output, err := cmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring("Harn is in both"))
+			Expect(gone(one)).To(BeFalse())
+			Expect(gone(two)).To(BeFalse())
+		})
+
+		It("succeeds for Muse Code when ~/.local/bin does not exist", func() {
+			Expect(run("Muse Code")).To(Succeed())
+		})
+
+		It("leaves a lock held by a live updater untouched", func() {
+			muse := touch(".local/bin/muse")
+			lock := filepath.Join(home, ".local/bin/.muse-update-lock")
+			Expect(os.MkdirAll(lock, 0o755)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(lock, "pid"), []byte("1\n"), 0o644)).To(Succeed())
+			Expect(run("Muse Code")).To(HaveOccurred())
+			Expect(gone(muse)).To(BeFalse())
+			pid, err := os.ReadFile(filepath.Join(lock, "pid"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(pid)).To(Equal("1\n"))
+			entries, err := os.ReadDir(lock)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(entries).To(HaveLen(1))
+		})
+
+		It("removes an unrecorded Harn install from the one directory holding it", func() {
+			harn := touch("bin/harn")
+			Expect(run("Harn")).To(Succeed())
+			Expect(gone(harn)).To(BeTrue())
+		})
+
+		It("stops when an unrecorded Harn is in two directories", func() {
+			one, two := touch("bin/harn"), touch(".local/bin/harn")
+			Expect(run("Harn")).To(HaveOccurred())
+			Expect(gone(one)).To(BeFalse())
+			Expect(gone(two)).To(BeFalse())
+		})
+
+		It("removes a recorded Harn install only from its directory", func() {
+			other, mine := touch("bin/harn"), touch(".local/bin/harn")
+			Expect(os.MkdirAll(filepath.Join(home, ".harn"), 0o755)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(home, ".harn/devex-install-dir"), []byte(filepath.Join(home, ".local/bin")+"\n"), 0o644)).To(Succeed())
+			Expect(run("Harn")).To(Succeed())
+			Expect(gone(mine)).To(BeTrue())
+			Expect(gone(other)).To(BeFalse())
+		})
+	})
+
 	It("ships and strictly validates every AI coding agent definition", func() {
 		Expect(files).To(Equal([]string{
 			"aider.yaml",
+			"amp.yaml",
 			"auggie-cli.yaml",
+			"autohand-code.yaml",
 			"bob.yaml",
 			"claude-code.yaml",
 			"cline.yaml",
 			"codebuddy-code.yaml",
 			"codex.yaml",
 			"copilot-cli.yaml",
+			"cortex-code.yaml",
+			"crow-cli.yaml",
+			"cursor-cli.yaml",
 			"deepagents.yaml",
+			"devin.yaml",
 			"dimcode.yaml",
 			"dirac.yaml",
 			"factory-droid.yaml",
 			"fast-agent.yaml",
+			"fx.yaml",
 			"gemini-cli.yaml",
 			"goose.yaml",
 			"grok-build.yaml",
+			"harn.yaml",
+			"junie.yaml",
+			"kilo.yaml",
+			"kimchi.yaml",
 			"kimi-code.yaml",
+			"kiro-cli.yaml",
 			"lm-studio.yaml",
 			"minimax-code.yaml",
 			"minion-code.yaml",
 			"mistral-vibe.yaml",
+			"muse-code.yaml",
 			"nova.yaml",
 			"ollama.yaml",
 			"opencode.yaml",
 			"pi.yaml",
+			"poolside.yaml",
 			"qoder-cli.yaml",
 			"qwen-code.yaml",
 			"sigit-code.yaml",
+			"stakpak.yaml",
+			"vt-code.yaml",
 		}))
 
 		result, err := config.ValidateConfig(context.Background(), settings, true)
@@ -212,6 +341,25 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			checkUniqueMethods("linux", app.Linux)
 			checkUniqueMethods("macos", app.MacOS)
 			checkUniqueMethods("windows", app.Windows)
+
+			for label, cfg := range map[string]types.OSConfig{
+				"linux":   app.Linux,
+				"macos":   app.MacOS,
+				"windows": app.Windows,
+			} {
+				if cfg.InstallMethod == "" {
+					continue
+				}
+				seen := map[string]bool{cfg.InstallMethod: true}
+				for _, alt := range cfg.Alternatives {
+					checkCurlpipe(label+"-alt", alt)
+					if alt.InstallMethod == "curlpipe" && installers.IsReleaseArchive(alt.DownloadURL) && len(alt.PlatformRequirements) > 0 {
+						continue
+					}
+					Expect(seen[alt.InstallMethod]).To(BeFalse(), "%s (%s) duplicate channel %q", name, label, alt.InstallMethod)
+					seen[alt.InstallMethod] = true
+				}
+			}
 
 			legacy := app.ToLegacyAppConfig()
 			Expect(legacy.SelfUpdating).To(Equal(app.Linux.SelfUpdating), name)
@@ -319,6 +467,22 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Qoder CLI", "Qoder CLI", "curlpipe", "https://qoder.com/install", "user", true, nil, nil, `rm -f "$HOME/.local/bin/qodercli" && rm -rf "$HOME/.qoder/bin" "$HOME/.qoder/entry"`),
 		Entry("Qwen Code", "Qwen Code", "curlpipe", "https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/qwen" && rm -rf "$HOME/.local/lib/qwen-code"`),
 		Entry("siGit Code", "siGit Code", "mise", "node@24 npm:@getsigit/sigit[allow_low_downloads=true]@latest", "", false, []string{"Node.js"}, nil, "npm:@getsigit/sigit"),
+		Entry("Amp", "Amp", "curlpipe", "https://ampcode.com/install.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/amp" "$HOME/.amp/bin/amp"`),
+		Entry("Autohand Code", "Autohand Code", "mise", "node@24 npm:autohand-cli@latest", "", false, []string{"Node.js"}, nil, "npm:autohand-cli"),
+		Entry("Cortex Code", "Cortex Code", "curlpipe", "https://ai.snowflake.com/static/cc-scripts/install.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/cortex" && rm -rf "$HOME/.local/share/cortex"`),
+		Entry("crow-cli", "crow-cli", "mise", "uv@latest pipx:crow-cli[python=3.13]@latest", "", false, []string{"mise"}, nil, "pipx:crow-cli"),
+		Entry("Cursor CLI", "Cursor CLI", "curlpipe", "https://cursor.com/install", "user", true, nil, nil, `case "$(readlink "$HOME/.local/bin/agent" 2>/dev/null || true)" in "$HOME"/.local/share/cursor-agent/*) rm -f "$HOME/.local/bin/agent" || exit 1 ;; esac; rm -f "$HOME/.local/bin/cursor-agent" && rm -rf "$HOME/.local/share/cursor-agent"`),
+		Entry("Devin", "Devin", "mise", "node@24 npm:devin@latest", "", false, []string{"Node.js"}, nil, "npm:devin"),
+		Entry("fx", "fx", "curlpipe", "https://fx.sh/setup.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/fx"`),
+		Entry("Harn", "Harn", "curlpipe", "https://harnlang.com/install.sh", "user", false, nil, nil, `d="$(cat "$HOME/.harn/devex-install-dir" 2>/dev/null || true)"; if [ -z "$d" ]; then for c in ${XDG_BIN_DIR:+"$XDG_BIN_DIR"} "$HOME/bin" "$HOME/.local/bin" "$HOME/.harn/bin"; do if [ -e "$c/harn" ]; then p="$(CDPATH= cd -P -- "$c" && pwd -P)" || exit 1; if [ -n "$d" ] && [ "$p" != "$dp" ]; then echo "Harn is in both $d and $c, and DevEx did not record which it installed; remove that copy by hand." >&2; exit 1; fi; d="$c"; dp="$p"; fi; done; fi; if [ -n "$d" ]; then rm -f "$d/harn" "$d/harn-dap" "$d/harn-lsp" && rm -rf "$d/harn-licenses" || exit 1; fi; rm -f "$HOME/.harn/devex-install-dir"`),
+		Entry("Junie", "Junie", "curlpipe", "https://junie.jetbrains.com/install.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/junie" && rm -rf "$HOME/.local/share/junie"`),
+		Entry("Kilo", "Kilo", "curlpipe", "https://kilo.ai/cli/install", "user", false, nil, nil, `rm -f "$HOME/.kilo/bin/kilo" && rm -rf "$HOME/.kilo/bin/tree-sitter" && case "$(readlink "$HOME/.local/bin/kilo" 2>/dev/null || true)" in */.kilo/bin/kilo) rm -f "$HOME/.local/bin/kilo" ;; esac`),
+		Entry("Kimchi", "Kimchi", "mise", "github:getkimchi/kimchi@latest", "", false, []string{"mise"}, nil, "github:getkimchi/kimchi"),
+		Entry("Kiro CLI", "Kiro CLI", "curlpipe", "https://cli.kiro.dev/install", "user", true, nil, nil, `rm -f "$HOME/.local/bin/kiro-cli" "$HOME/.local/bin/kiro-cli-chat"`),
+		Entry("Muse Code", "Muse Code", "curlpipe", "https://dev.meta.ai/install.sh", "user", true, nil, nil, `B="$HOME/.local/bin"; [ -d "$B" ] || exit 0; L="$B/.muse-update-lock"; T="$B/.muse-uninstall.$$"; i=0; while :; do rm -rf "$T"; mkdir "$T" && echo "$$" > "$T/pid" || exit 1; if mv "$T" "$L" 2>/dev/null && [ ! -e "$L/.muse-uninstall.$$" ] && [ "$(cat "$L/pid" 2>/dev/null)" = "$$" ]; then break; fi; rm -rf "$L/.muse-uninstall.$$" "$T"; i=$((i + 1)); if [ "$i" -ge "${DEVEX_LOCK_WAIT_SECONDS:-60}" ]; then echo "Muse Code is updating itself; run the uninstall again shortly (if no update is running, remove $L first)." >&2; exit 1; fi; sleep 1; done; rc=0; rm -f "$B/muse" "$B/muse-bin" "$B/muse-bin-"* "$B/.muse-launcher.previous" "$B/.muse-launcher."* "$B/.muse-version" "$B/.muse-release-info.json" "$B/.muse-update-checked-at" "$B/.muse-update-notice" "$B/.muse-update."* "$B/.muse-state" || rc=1; rm -rf "$B/.muse-updater" "$B/.muse-install-lock" || rc=1; rm -rf "$L" || rc=1; exit "$rc"`),
+		Entry("Poolside", "Poolside", "mise", "github:poolsideai/pool@latest", "", false, []string{"mise"}, nil, "github:poolsideai/pool"),
+		Entry("Stakpak", "Stakpak", "mise", "github:stakpak/agent@latest", "", true, []string{"mise"}, nil, "github:stakpak/agent"),
+		Entry("VT Code", "VT Code", "curlpipe", "https://raw.githubusercontent.com/vinhnx/vtcode/main/scripts/install.sh", "user", false, nil, nil, `rm -f "$HOME/.local/bin/vtcode"`),
 	)
 
 	DescribeTable("plans each AI coding agent upgrade on Ubuntu 24.04",
@@ -354,6 +518,22 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Qoder CLI updates itself", "Qoder CLI", "Qoder CLI manages its own updates; skipped"),
 		Entry("Qwen Code updates itself", "Qwen Code", "Qwen Code manages its own updates; skipped"),
 		Entry("siGit Code upgrades through mise", "siGit Code", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@getsigit/sigit"`),
+		Entry("Amp updates itself", "Amp", "Amp manages its own updates; skipped"),
+		Entry("Autohand Code upgrades through mise", "Autohand Code", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:autohand-cli"`),
+		Entry("Cortex Code updates itself", "Cortex Code", "Cortex Code manages its own updates; skipped"),
+		Entry("crow-cli upgrades through mise", "crow-cli", `Plugin invocation: devex-plugin-package-manager-mise "update" "pipx:crow-cli"`),
+		Entry("Cursor CLI updates itself", "Cursor CLI", "Cursor CLI manages its own updates; skipped"),
+		Entry("Devin upgrades through mise", "Devin", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:devin"`),
+		Entry("fx updates itself", "fx", "fx manages its own updates; skipped"),
+		Entry("Harn reruns its installer", "Harn", `Plugin invocation: devex-plugin-package-manager-curlpipe "install" "--user" "https://harnlang.com/install.sh"`),
+		Entry("Junie updates itself", "Junie", "Junie manages its own updates; skipped"),
+		Entry("Kilo reruns its installer", "Kilo", `Plugin invocation: devex-plugin-package-manager-curlpipe "install" "--user" "https://kilo.ai/cli/install"`),
+		Entry("Kimchi upgrades through mise", "Kimchi", `Plugin invocation: devex-plugin-package-manager-mise "update" "github:getkimchi/kimchi"`),
+		Entry("Kiro CLI updates itself", "Kiro CLI", "Kiro CLI manages its own updates; skipped"),
+		Entry("Muse Code updates itself", "Muse Code", "Muse Code manages its own updates; skipped"),
+		Entry("Poolside upgrades through mise", "Poolside", `Plugin invocation: devex-plugin-package-manager-mise "update" "github:poolsideai/pool"`),
+		Entry("Stakpak updates itself", "Stakpak", "Stakpak manages its own updates; skipped"),
+		Entry("VT Code reruns its installer", "VT Code", `Plugin invocation: devex-plugin-package-manager-curlpipe "install" "--user" "https://raw.githubusercontent.com/vinhnx/vtcode/main/scripts/install.sh"`),
 	)
 
 	DescribeTable("plans each AI coding agent uninstall on Ubuntu 24.04, keeping config",
@@ -393,6 +573,22 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Qoder CLI", "Qoder CLI", `curlpipe: rm -f "$HOME/.local/bin/qodercli" && rm -rf "$HOME/.qoder/bin" "$HOME/.qoder/entry"`),
 		Entry("Qwen Code", "Qwen Code", `curlpipe: rm -f "$HOME/.local/bin/qwen" && rm -rf "$HOME/.local/lib/qwen-code"`),
 		Entry("siGit Code", "siGit Code", "mise: npm:@getsigit/sigit"),
+		Entry("Amp", "Amp", `curlpipe: rm -f "$HOME/.local/bin/amp" "$HOME/.amp/bin/amp"`),
+		Entry("Autohand Code", "Autohand Code", "mise: npm:autohand-cli"),
+		Entry("Cortex Code", "Cortex Code", `curlpipe: rm -f "$HOME/.local/bin/cortex" && rm -rf "$HOME/.local/share/cortex"`),
+		Entry("crow-cli", "crow-cli", "mise: pipx:crow-cli"),
+		Entry("Cursor CLI", "Cursor CLI", `curlpipe: case "$(readlink "$HOME/.local/bin/agent" 2>/dev/null || true)" in "$HOME"/.local/share/cursor-agent/*) rm -f "$HOME/.local/bin/agent" || exit 1 ;; esac; rm -f "$HOME/.local/bin/cursor-agent" && rm -rf "$HOME/.local/share/cursor-agent"`),
+		Entry("Devin", "Devin", "mise: npm:devin"),
+		Entry("fx", "fx", `curlpipe: rm -f "$HOME/.local/bin/fx"`),
+		Entry("Harn", "Harn", `curlpipe: d="$(cat "$HOME/.harn/devex-install-dir" 2>/dev/null || true)"; if [ -z "$d" ]; then for c in ${XDG_BIN_DIR:+"$XDG_BIN_DIR"} "$HOME/bin" "$HOME/.local/bin" "$HOME/.harn/bin"; do if [ -e "$c/harn" ]; then p="$(CDPATH= cd -P -- "$c" && pwd -P)" || exit 1; if [ -n "$d" ] && [ "$p" != "$dp" ]; then echo "Harn is in both $d and $c, and DevEx did not record which it installed; remove that copy by hand." >&2; exit 1; fi; d="$c"; dp="$p"; fi; done; fi; if [ -n "$d" ]; then rm -f "$d/harn" "$d/harn-dap" "$d/harn-lsp" && rm -rf "$d/harn-licenses" || exit 1; fi; rm -f "$HOME/.harn/devex-install-dir"`),
+		Entry("Junie", "Junie", `curlpipe: rm -f "$HOME/.local/bin/junie" && rm -rf "$HOME/.local/share/junie"`),
+		Entry("Kilo", "Kilo", `curlpipe: rm -f "$HOME/.kilo/bin/kilo" && rm -rf "$HOME/.kilo/bin/tree-sitter" && case "$(readlink "$HOME/.local/bin/kilo" 2>/dev/null || true)" in */.kilo/bin/kilo) rm -f "$HOME/.local/bin/kilo" ;; esac`),
+		Entry("Kimchi", "Kimchi", "mise: github:getkimchi/kimchi"),
+		Entry("Kiro CLI", "Kiro CLI", `curlpipe: rm -f "$HOME/.local/bin/kiro-cli" "$HOME/.local/bin/kiro-cli-chat"`),
+		Entry("Muse Code", "Muse Code", `curlpipe: B="$HOME/.local/bin"; [ -d "$B" ] || exit 0; L="$B/.muse-update-lock"; T="$B/.muse-uninstall.$$"; i=0; while :; do rm -rf "$T"; mkdir "$T" && echo "$$" > "$T/pid" || exit 1; if mv "$T" "$L" 2>/dev/null && [ ! -e "$L/.muse-uninstall.$$" ] && [ "$(cat "$L/pid" 2>/dev/null)" = "$$" ]; then break; fi; rm -rf "$L/.muse-uninstall.$$" "$T"; i=$((i + 1)); if [ "$i" -ge "${DEVEX_LOCK_WAIT_SECONDS:-60}" ]; then echo "Muse Code is updating itself; run the uninstall again shortly (if no update is running, remove $L first)." >&2; exit 1; fi; sleep 1; done; rc=0; rm -f "$B/muse" "$B/muse-bin" "$B/muse-bin-"* "$B/.muse-launcher.previous" "$B/.muse-launcher."* "$B/.muse-version" "$B/.muse-release-info.json" "$B/.muse-update-checked-at" "$B/.muse-update-notice" "$B/.muse-update."* "$B/.muse-state" || rc=1; rm -rf "$B/.muse-updater" "$B/.muse-install-lock" || rc=1; rm -rf "$L" || rc=1; exit "$rc"`),
+		Entry("Poolside", "Poolside", "mise: github:poolsideai/pool"),
+		Entry("Stakpak", "Stakpak", "mise: github:stakpak/agent"),
+		Entry("VT Code", "VT Code", `curlpipe: rm -f "$HOME/.local/bin/vtcode"`),
 	)
 
 	It("refuses to rerun an install script for an offline upgrade", func() {

@@ -1,0 +1,50 @@
+# Upstream: https://kimchi.dev/ (https://github.com/getkimchi/kimchi)
+name: Kimchi
+description: Multi-model terminal AI coding agent built on the pi-mono SDK
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/getkimchi/kimchi#quick-start
+  install_method: brew
+  install_command: getkimchi/tap/kimchi
+  uninstall_command: getkimchi/tap/kimchi
+  brew_tap: getkimchi/tap
+  installed_binary: kimchi
+  self_updating: false
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: github:getkimchi/kimchi@latest
+      uninstall_command: github:getkimchi/kimchi
+      installed_binary: kimchi
+      self_updating: false
+      official_support: false
+      dependencies:
+        - mise
+linux:
+  # Official docs: https://github.com/getkimchi/kimchi#quick-start. Installed
+  # through mise's github backend from Kimchi's official GitHub release
+  # archives (kimchi_linux_<arch>.tar.gz) instead of its install.sh, which is
+  # served from github.com release downloads: DevEx's interactive installer
+  # does not run scripts from github.com, and install.sh does not verify
+  # checksums.txt. mise owns upgrades (devex upgrade); uninstall removes only
+  # the mise tool and keeps ~/.config/kimchi. Windows is omitted because Kimchi
+  # only documents PowerShell install.ps1 and WSL.
+  install_method: mise
+  install_command: github:getkimchi/kimchi@latest
+  uninstall_command: github:getkimchi/kimchi
+  installed_binary: kimchi
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+  alternatives:
+    - install_method: brew
+      install_command: getkimchi/tap/kimchi
+      uninstall_command: getkimchi/tap/kimchi
+      brew_tap: getkimchi/tap
+      installed_binary: kimchi
+      self_updating: false
+      official_support: true

@@ -33,6 +33,17 @@ var trustedDomains = []string{
 	"x.ai",
 	"qoder.com",
 	"qwen-code-assets.oss-cn-hangzhou.aliyuncs.com",
+	"ai.snowflake.com",
+	"ampcode.com",
+	"autohand.ai",
+	"cli.devin.ai",
+	"cli.kiro.dev",
+	"cursor.com",
+	"dev.meta.ai",
+	"fx.sh",
+	"harnlang.com",
+	"junie.jetbrains.com",
+	"kilo.ai",
 }
 
 // GetTrustedDomains returns the list of trusted domains

@@ -118,6 +118,142 @@ func aiAgentCatalogSettings(homeDir string) config.CrossPlatformSettings {
 				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:mistral-vibe[python=3.14]@latest"},
 				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:mistral-vibe[python=3.14]@latest"},
 			},
+			{
+				Name:        "Amp",
+				Description: "Amp's frontier agentic coding CLI for the terminal",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://ampcode.com/install.sh", InstallScope: "user", InstalledBinary: "amp"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://ampcode.com/install.sh", InstallScope: "user", InstalledBinary: "amp"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:@ampcode/cli@latest"},
+			},
+			{
+				Name:        "Autohand Code",
+				Description: "Open-source terminal-native AI coding agent",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:autohand-cli@latest", InstalledBinary: "autohand"},
+				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:autohand-cli@latest", InstalledBinary: "autohand"},
+				Windows:     types.OSConfig{InstallMethod: "winget", InstallCommand: "Autohand.AutohandCodeCLI"},
+			},
+			{
+				Name:        "Cortex Code",
+				Description: "Snowflake's terminal AI coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://ai.snowflake.com/static/cc-scripts/install.sh", InstallScope: "user", InstalledBinary: "cortex"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://ai.snowflake.com/static/cc-scripts/install.sh", InstallScope: "user", InstalledBinary: "cortex"},
+			},
+			{
+				Name:        "crow-cli",
+				Description: "Minimal ACP-native AI coding agent",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:crow-cli[python=3.13]@latest"},
+				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:crow-cli[python=3.13]@latest"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:crow-cli[python=3.13]@latest"},
+			},
+			{
+				Name:        "Cursor CLI",
+				Description: "Cursor's standalone terminal AI coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://cursor.com/install", InstallScope: "user", InstalledBinary: "cursor-agent"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://cursor.com/install", InstallScope: "user", InstalledBinary: "cursor-agent"},
+			},
+			{
+				Name:        "Devin",
+				Description: "Cognition's terminal AI coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:devin@latest", InstalledBinary: "devin"},
+				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:devin@latest", InstalledBinary: "devin"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:devin@latest"},
+			},
+			{
+				Name:        "fx",
+				Description: "Vercel Labs' tiny native Zig coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://fx.sh/setup.sh", InstallScope: "user", InstalledBinary: "fx"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://fx.sh/setup.sh", InstallScope: "user", InstalledBinary: "fx"},
+			},
+			{
+				Name:        "Harn",
+				Description: "Programming language and runtime for AI coding agents",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://harnlang.com/install.sh", InstallScope: "user", InstalledBinary: "harn"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://harnlang.com/install.sh", InstallScope: "user", InstalledBinary: "harn"},
+			},
+			{
+				Name:        "Junie",
+				Description: "JetBrains' LLM-agnostic terminal AI coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://junie.jetbrains.com/install.sh", InstallScope: "user", InstalledBinary: "junie"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://junie.jetbrains.com/install.sh", InstallScope: "user", InstalledBinary: "junie"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:@jetbrains/junie@latest"},
+			},
+			{
+				Name:        "Kilo",
+				Description: "Open-source terminal AI coding agent",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://kilo.ai/cli/install", InstallScope: "user", InstalledBinary: "kilo"},
+				MacOS:       types.OSConfig{InstallMethod: "brew", InstallCommand: "Kilo-Org/tap/kilo"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:@kilocode/cli@latest"},
+			},
+			{
+				Name:        "Kimchi",
+				Description: "Multi-model terminal AI coding agent",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "github:getkimchi/kimchi@latest", InstalledBinary: "kimchi"},
+				MacOS:       types.OSConfig{InstallMethod: "brew", InstallCommand: "getkimchi/tap/kimchi"},
+			},
+			{
+				Name:        "Kiro CLI",
+				Description: "Amazon's terminal AI coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://cli.kiro.dev/install", InstallScope: "user", InstalledBinary: "kiro-cli"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://cli.kiro.dev/install", InstallScope: "user", InstalledBinary: "kiro-cli"},
+			},
+			{
+				Name:        "Muse Code",
+				Description: "Meta's terminal AI coding agent",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://dev.meta.ai/install.sh", InstallScope: "user", InstalledBinary: "muse"},
+				MacOS:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://dev.meta.ai/install.sh", InstallScope: "user", InstalledBinary: "muse"},
+			},
+			{
+				Name:        "Poolside",
+				Description: "Poolside's terminal and ACP AI coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "github:poolsideai/pool@latest"},
+				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "github:poolsideai/pool@latest"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "github:poolsideai/pool@latest"},
+			},
+			{
+				Name:        "Stakpak",
+				Description: "Open-source DevOps AI coding agent CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "github:stakpak/agent@latest"},
+				MacOS:       types.OSConfig{InstallMethod: "brew", InstallCommand: "stakpak/stakpak/stakpak"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "github:stakpak/agent@latest"},
+			},
+			{
+				Name:        "VT Code",
+				Description: "Open-source Rust terminal coding agent",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://raw.githubusercontent.com/vinhnx/vtcode/main/scripts/install.sh", InstallScope: "user", InstalledBinary: "vtcode"},
+				MacOS:       types.OSConfig{InstallMethod: "brew", InstallCommand: "vinhnx/tap/vtcode"},
+			},
 		},
 	}
 }
@@ -218,8 +354,13 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 		It("offers the preset step only when a selected app maps to a harness ID", func() {
 			model := NewSetupModel(repo, settings, platform.DetectionResult{OS: "linux"})
 			model.step = StepAIAgents
-			// Select Python non-harness agents only -> preset step is skipped.
-			for _, name := range []string{"Aider", "fast-agent", "Minion Code", "Mistral Vibe"} {
+			// Select non-harness agents only -> preset step is skipped.
+			for _, name := range []string{
+				"Aider", "Amp", "Autohand Code", "Cortex Code", "crow-cli", "Cursor CLI",
+				"Devin", "fast-agent", "fx", "Harn", "Junie", "Kilo", "Kimchi",
+				"Kiro CLI", "Minion Code", "Mistral Vibe", "Muse Code", "Poolside",
+				"Stakpak", "VT Code",
+			} {
 				model.step = StepAIAgents
 				model.selections.selectedAIAgents = map[string]bool{name: true}
 				model, _ = model.handleEnter()
@@ -251,7 +392,19 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			model := NewSetupModel(repo, settings, platform.DetectionResult{OS: "linux"})
 			model.step = StepAIAgents
 			model.cursor = 0
-			view := model.View()
+			// The list scrolls once the catalog has more agents than fit, so
+			// collect every window while moving down through all of them.
+			var views strings.Builder
+			for i := 0; i < 200; i++ {
+				views.WriteString(model.View())
+				previous := model.cursor
+				model, _ = model.handleDown()
+				if model.cursor == previous {
+					break
+				}
+			}
+			view := views.String()
+			model.cursor = 0
 			Expect(view).To(ContainSubstring("Agent CLIs"))
 			Expect(view).To(ContainSubstring("Agent harnesses"))
 			Expect(view).To(ContainSubstring("AI editors"))
@@ -561,17 +714,38 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			if runtime.GOOS != "linux" {
 				Skip("fixtures model Linux automated setup")
 			}
-			viper.Set("setup.ai_agents.apps", []string{"claude code", "AIDER", "fast-agent", "MINION CODE", "mistral vibe"})
+			viper.Set("setup.ai_agents.apps", []string{
+				"claude code", "AIDER", "amp", "autohand code", "cortex code", "crow-cli",
+				"cursor cli", "devin", "fast-agent", "FX", "harn", "junie", "kilo",
+				"kimchi", "kiro cli", "MINION CODE", "mistral vibe", "muse code",
+				"poolside", "stakpak", "vt code",
+			})
 			viper.Set("setup.ai_agents.preset", "balanced")
 
 			model, err := createAutomatedSetupModel(repo, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(model.selections.selectedAIAgents).To(Equal(map[string]bool{
-				"Claude Code":  true,
-				"Aider":        true,
-				"fast-agent":   true,
-				"Minion Code":  true,
-				"Mistral Vibe": true,
+				"Claude Code":   true,
+				"Aider":         true,
+				"Amp":           true,
+				"Autohand Code": true,
+				"Cortex Code":   true,
+				"crow-cli":      true,
+				"Cursor CLI":    true,
+				"Devin":         true,
+				"fast-agent":    true,
+				"fx":            true,
+				"Harn":          true,
+				"Junie":         true,
+				"Kilo":          true,
+				"Kimchi":        true,
+				"Kiro CLI":      true,
+				"Minion Code":   true,
+				"Mistral Vibe":  true,
+				"Muse Code":     true,
+				"Poolside":      true,
+				"Stakpak":       true,
+				"VT Code":       true,
 			}))
 			Expect(model.selections.aiAgentPreset).To(Equal("balanced"))
 
@@ -580,7 +754,12 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			for _, app := range apps {
 				names = append(names, app.Name)
 			}
-			Expect(names).To(ContainElements("Bubblewrap", "socat", "Claude Code", "Aider", "fast-agent", "Minion Code", "Mistral Vibe"))
+			Expect(names).To(ContainElements(
+				"Bubblewrap", "socat", "Claude Code", "Aider", "Amp", "Autohand Code",
+				"Cortex Code", "crow-cli", "Cursor CLI", "Devin", "fast-agent", "fx",
+				"Harn", "Junie", "Kilo", "Kimchi", "Kiro CLI", "Minion Code",
+				"Mistral Vibe", "Muse Code", "Poolside", "Stakpak", "VT Code",
+			))
 		})
 
 		It("skips AI agents by default when no config is set", func() {

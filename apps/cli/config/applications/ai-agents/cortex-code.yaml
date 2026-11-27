@@ -1,0 +1,40 @@
+# Upstream: https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code
+name: Cortex Code
+description: Snowflake's terminal AI coding agent CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code
+  # Unpinned bootstrap script: Snowflake updates install.sh on release and
+  # publishes no checksum for the script itself. The script fetches
+  # stable_version.txt and manifest.json from sfc-repo.snowflakecomputing.com,
+  # verifies the downloaded tarball's SHA-256 against the manifest checksum,
+  # unpacks into ~/.local/share/cortex/<version>, and links ~/.local/bin/cortex.
+  # Cortex Code auto-updates by default (autoUpdate in ~/.snowflake/cortex/settings.json).
+  install_method: curlpipe
+  download_url: https://ai.snowflake.com/static/cc-scripts/install.sh
+  install_scope: user
+  installed_binary: cortex
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/cortex" && rm -rf "$HOME/.local/share/cortex"
+  official_support: true
+linux:
+  # Official install docs: https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code
+  # Unpinned bootstrap script: Snowflake updates install.sh on release and
+  # publishes no checksum for the script itself. The script fetches
+  # stable_version.txt and manifest.json from sfc-repo.snowflakecomputing.com,
+  # verifies the downloaded tarball's SHA-256 against the manifest checksum,
+  # unpacks into ~/.local/share/cortex/<version>, and links ~/.local/bin/cortex.
+  # Cortex Code auto-updates by default (autoUpdate in ~/.snowflake/cortex/settings.json).
+  # Uninstall removes only the symlink and ~/.local/share/cortex runtime, leaving
+  # ~/.snowflake/cortex config and credentials intact. Windows is omitted because
+  # Snowflake only documents a PowerShell irm|iex script.
+  install_method: curlpipe
+  download_url: https://ai.snowflake.com/static/cc-scripts/install.sh
+  install_scope: user
+  installed_binary: cortex
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/cortex" && rm -rf "$HOME/.local/share/cortex"
+  official_support: true

@@ -1,0 +1,98 @@
+# Upstream: https://harnlang.com/ (https://github.com/burin-labs/harn)
+name: Harn
+description: Programming language and runtime for building and running ACP AI coding agents
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/burin-labs/harn#install-and-run
+  # Unpinned bootstrap script: Burin Labs updates install.sh on release and
+  # publishes no checksum for the script itself. The script downloads the
+  # matching GitHub release archive and SHA256SUMS, strictly verifies SHA-256
+  # (refusing to install unverified), and installs harn, harn-dap, harn-lsp,
+  # and harn-licenses/ into $XDG_BIN_DIR, ~/bin or ~/.local/bin (the first on PATH),
+  # else ~/.harn/bin.
+  install_method: curlpipe
+  download_url: https://harnlang.com/install.sh
+  install_scope: user
+  installed_binary: harn
+  self_updating: false
+  # The installer picks one directory: $XDG_BIN_DIR, else ~/bin or ~/.local/bin
+  # (the first that exists and is on PATH), else ~/.harn/bin. post_install
+  # records it so uninstall removes Harn from that directory only. Without a
+  # record (older installs), uninstall removes the one candidate holding harn
+  # and stops if there are several.
+  post_install:
+    - scope: user
+      shell: |
+        set -eu
+        on_path() { case ":$PATH:" in *":$1:"*) return 0 ;; esac; return 1; }
+        if [ -n "${XDG_BIN_DIR:-}" ]; then dir="$XDG_BIN_DIR"
+        elif [ -d "$HOME/bin" ] && on_path "$HOME/bin"; then dir="$HOME/bin"
+        elif [ -d "$HOME/.local/bin" ] && on_path "$HOME/.local/bin"; then dir="$HOME/.local/bin"
+        else dir="$HOME/.harn/bin"; fi
+        if [ ! -x "$dir/harn" ]; then
+          echo "Harn's installer did not put harn in $dir; uninstall it by hand." >&2
+          exit 1
+        fi
+        mkdir -p "$HOME/.harn"
+        printf '%s\n' "$dir" > "$HOME/.harn/devex-install-dir"
+  uninstall_command: d="$(cat "$HOME/.harn/devex-install-dir" 2>/dev/null || true)"; if [ -z "$d" ]; then for c in ${XDG_BIN_DIR:+"$XDG_BIN_DIR"} "$HOME/bin" "$HOME/.local/bin" "$HOME/.harn/bin"; do if [ -e "$c/harn" ]; then p="$(CDPATH= cd -P -- "$c" && pwd -P)" || exit 1; if [ -n "$d" ] && [ "$p" != "$dp" ]; then echo "Harn is in both $d and $c, and DevEx did not record which it installed; remove that copy by hand." >&2; exit 1; fi; d="$c"; dp="$p"; fi; done; fi; if [ -n "$d" ]; then rm -f "$d/harn" "$d/harn-dap" "$d/harn-lsp" && rm -rf "$d/harn-licenses" || exit 1; fi; rm -f "$HOME/.harn/devex-install-dir"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: github:burin-labs/harn@latest
+      uninstall_command: github:burin-labs/harn
+      installed_binary: harn
+      self_updating: false
+      official_support: false
+      dependencies:
+        - mise
+linux:
+  # Official install docs: https://github.com/burin-labs/harn#install-and-run
+  # Unpinned bootstrap script: Burin Labs updates install.sh on release and
+  # publishes no checksum for the script itself. The script downloads the
+  # matching GitHub release .tar.xz archive and SHA256SUMS, strictly verifies
+  # SHA-256 (refusing to install unverified), and installs harn, harn-dap,
+  # harn-lsp, and harn-licenses/ into $XDG_BIN_DIR, ~/bin or ~/.local/bin (the first on PATH),
+  # else ~/.harn/bin.
+  # Uninstall removes only the installed binaries and license directory, leaving
+  # any user configuration under ~/.harn intact. Windows is omitted because
+  # Burin Labs only documents a PowerShell irm|iex script.
+  install_method: curlpipe
+  download_url: https://harnlang.com/install.sh
+  install_scope: user
+  installed_binary: harn
+  self_updating: false
+  # The installer picks one directory: $XDG_BIN_DIR, else ~/bin or ~/.local/bin
+  # (the first that exists and is on PATH), else ~/.harn/bin. post_install
+  # records it so uninstall removes Harn from that directory only. Without a
+  # record (older installs), uninstall removes the one candidate holding harn
+  # and stops if there are several.
+  post_install:
+    - scope: user
+      shell: |
+        set -eu
+        on_path() { case ":$PATH:" in *":$1:"*) return 0 ;; esac; return 1; }
+        if [ -n "${XDG_BIN_DIR:-}" ]; then dir="$XDG_BIN_DIR"
+        elif [ -d "$HOME/bin" ] && on_path "$HOME/bin"; then dir="$HOME/bin"
+        elif [ -d "$HOME/.local/bin" ] && on_path "$HOME/.local/bin"; then dir="$HOME/.local/bin"
+        else dir="$HOME/.harn/bin"; fi
+        if [ ! -x "$dir/harn" ]; then
+          echo "Harn's installer did not put harn in $dir; uninstall it by hand." >&2
+          exit 1
+        fi
+        mkdir -p "$HOME/.harn"
+        printf '%s\n' "$dir" > "$HOME/.harn/devex-install-dir"
+  uninstall_command: d="$(cat "$HOME/.harn/devex-install-dir" 2>/dev/null || true)"; if [ -z "$d" ]; then for c in ${XDG_BIN_DIR:+"$XDG_BIN_DIR"} "$HOME/bin" "$HOME/.local/bin" "$HOME/.harn/bin"; do if [ -e "$c/harn" ]; then p="$(CDPATH= cd -P -- "$c" && pwd -P)" || exit 1; if [ -n "$d" ] && [ "$p" != "$dp" ]; then echo "Harn is in both $d and $c, and DevEx did not record which it installed; remove that copy by hand." >&2; exit 1; fi; d="$c"; dp="$p"; fi; done; fi; if [ -n "$d" ]; then rm -f "$d/harn" "$d/harn-dap" "$d/harn-lsp" && rm -rf "$d/harn-licenses" || exit 1; fi; rm -f "$HOME/.harn/devex-install-dir"
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: github:burin-labs/harn@latest
+      uninstall_command: github:burin-labs/harn
+      installed_binary: harn
+      self_updating: false
+      official_support: false
+      dependencies:
+        - mise

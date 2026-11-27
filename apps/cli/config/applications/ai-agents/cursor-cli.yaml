@@ -1,0 +1,81 @@
+# Upstream: https://cursor.com/docs/cli/overview (https://cursor.com/install)
+name: Cursor CLI
+description: Cursor's standalone terminal AI coding agent CLI (cursor-agent)
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://cursor.com/docs/cli/overview
+  # Unpinned bootstrap script: Cursor serves a version-updated script at
+  # cursor.com/install and publishes no checksum for the script or archive.
+  # It fetches agent-cli-package.tar.gz over HTTPS from downloads.cursor.com,
+  # unpacks into ~/.local/share/cursor-agent/versions/<ver>, and symlinks
+  # ~/.local/bin/cursor-agent and ~/.local/bin/agent. Cursor CLI auto-updates
+  # by default (`agent update` also triggers updates manually).
+  install_method: curlpipe
+  download_url: https://cursor.com/install
+  install_scope: user
+  installed_binary: cursor-agent
+  self_updating: true
+  # Cursor's script deletes ~/.local/bin/agent before linking its own, so the
+  # install refuses when another tool owns that name.
+  pre_install:
+    - scope: user
+      shell: |
+        set -eu
+        agent="$HOME/.local/bin/agent"
+        if [ -e "$agent" ] || [ -L "$agent" ]; then
+          case "$(readlink "$agent" 2>/dev/null || true)" in
+            "$HOME"/.local/share/cursor-agent/*) ;;
+            *)
+              echo "$agent belongs to another tool, and Cursor's installer would replace it. Move or remove it, then install Cursor CLI again." >&2
+              exit 1
+              ;;
+          esac
+        fi
+  uninstall_command: case "$(readlink "$HOME/.local/bin/agent" 2>/dev/null || true)" in "$HOME"/.local/share/cursor-agent/*) rm -f "$HOME/.local/bin/agent" || exit 1 ;; esac; rm -f "$HOME/.local/bin/cursor-agent" && rm -rf "$HOME/.local/share/cursor-agent"
+  official_support: true
+  alternatives:
+    # Community Homebrew cask: https://formulae.brew.sh/cask/cursor-cli
+    - install_method: brew
+      install_command: cursor-cli
+      uninstall_command: cursor-cli
+      brew_cask: true
+      installed_binary: cursor-agent
+      self_updating: true
+      official_support: false
+linux:
+  # Official install docs: https://cursor.com/docs/cli/overview
+  # Unpinned bootstrap script: Cursor serves a version-updated script at
+  # cursor.com/install and publishes no checksum for the script or archive.
+  # It fetches agent-cli-package.tar.gz over HTTPS from downloads.cursor.com,
+  # unpacks into ~/.local/share/cursor-agent/versions/<ver>, and symlinks
+  # ~/.local/bin/cursor-agent and ~/.local/bin/agent. Cursor CLI auto-updates
+  # by default (`agent update` also triggers updates manually).
+  # Uninstall removes only the versioned runtime and symlinks pointing into it,
+  # leaving ~/.cursor and ~/.config/cursor intact. Windows is omitted because
+  # Cursor only documents a PowerShell irm|iex script.
+  install_method: curlpipe
+  download_url: https://cursor.com/install
+  install_scope: user
+  installed_binary: cursor-agent
+  self_updating: true
+  # Cursor's script deletes ~/.local/bin/agent before linking its own, so the
+  # install refuses when another tool owns that name.
+  pre_install:
+    - scope: user
+      shell: |
+        set -eu
+        agent="$HOME/.local/bin/agent"
+        if [ -e "$agent" ] || [ -L "$agent" ]; then
+          case "$(readlink "$agent" 2>/dev/null || true)" in
+            "$HOME"/.local/share/cursor-agent/*) ;;
+            *)
+              echo "$agent belongs to another tool, and Cursor's installer would replace it. Move or remove it, then install Cursor CLI again." >&2
+              exit 1
+              ;;
+          esac
+        fi
+  uninstall_command: case "$(readlink "$HOME/.local/bin/agent" 2>/dev/null || true)" in "$HOME"/.local/share/cursor-agent/*) rm -f "$HOME/.local/bin/agent" || exit 1 ;; esac; rm -f "$HOME/.local/bin/cursor-agent" && rm -rf "$HOME/.local/share/cursor-agent"
+  official_support: true
