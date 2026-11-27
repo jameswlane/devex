@@ -1,0 +1,41 @@
+name: Minion Code
+description: AI coding assistant built on the Minion agent framework
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official repo and PyPI package: https://github.com/femto/minion-code and
+  # https://pypi.org/project/minion-code/ (requires Python >=3.11; installs
+  # `minion-code`, `mcode`, and `mc` CLI entrypoints).
+  install_method: mise
+  install_command: uv@latest pipx:minion-code[python=3.12]@latest
+  uninstall_command: pipx:minion-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+windows:
+  # Official repo and PyPI package: https://github.com/femto/minion-code and
+  # https://pypi.org/project/minion-code/ (requires Python >=3.11).
+  install_method: mise
+  install_command: uv@latest pipx:minion-code[python=3.12]@latest
+  uninstall_command: pipx:minion-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # Official repo and PyPI package: https://github.com/femto/minion-code and
+  # https://pypi.org/project/minion-code/ (requires Python >=3.11; exposes
+  # `minion-code`, `mcode`, and `mc` executables).
+  # mise's pipx backend runs uv tool install with an isolated mise-managed
+  # Python 3.12 runtime without touching the system Python. The backend needs uv,
+  # so uv is installed in the same mise call; uninstall removes Minion Code and keeps uv.
+  install_method: mise
+  install_command: uv@latest pipx:minion-code[python=3.12]@latest
+  uninstall_command: pipx:minion-code
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise

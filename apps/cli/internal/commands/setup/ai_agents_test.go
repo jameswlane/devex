@@ -91,6 +91,33 @@ func aiAgentCatalogSettings(homeDir string) config.CrossPlatformSettings {
 				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:aider-chat[python=3.12]@latest"},
 				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:aider-chat[python=3.12]@latest"},
 			},
+			{
+				Name:        "fast-agent",
+				Description: "MCP-native AI coding agent and workflow CLI",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:fast-agent-mcp[python=3.12]@latest"},
+				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:fast-agent-mcp[python=3.12]@latest"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:fast-agent-mcp[python=3.12]@latest"},
+			},
+			{
+				Name:        "Minion Code",
+				Description: "AI coding assistant built on the Minion agent framework",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:minion-code[python=3.12]@latest"},
+				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:minion-code[python=3.12]@latest"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:minion-code[python=3.12]@latest"},
+			},
+			{
+				Name:        "Mistral Vibe",
+				Description: "Mistral AI's open-source terminal coding agent",
+				Category:    CategoryAICodingAgents,
+				Default:     false,
+				Linux:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:mistral-vibe[python=3.14]@latest"},
+				MacOS:       types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:mistral-vibe[python=3.14]@latest"},
+				Windows:     types.OSConfig{InstallMethod: "mise", InstallCommand: "uv@latest pipx:mistral-vibe[python=3.14]@latest"},
+			},
 		},
 	}
 }
@@ -191,10 +218,13 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 		It("offers the preset step only when a selected app maps to a harness ID", func() {
 			model := NewSetupModel(repo, settings, platform.DetectionResult{OS: "linux"})
 			model.step = StepAIAgents
-			// Select Aider only (non-harness agent).
-			model.selections.selectedAIAgents["Aider"] = true
-			model, _ = model.handleEnter()
-			Expect(model.step).To(Equal(StepShell))
+			// Select Python non-harness agents only -> preset step is skipped.
+			for _, name := range []string{"Aider", "fast-agent", "Minion Code", "Mistral Vibe"} {
+				model.step = StepAIAgents
+				model.selections.selectedAIAgents = map[string]bool{name: true}
+				model, _ = model.handleEnter()
+				Expect(model.step).To(Equal(StepShell), name)
+			}
 
 			// Select Claude Code (harness agent) -> preset step is shown.
 			model, _ = model.prevStep()
@@ -528,14 +558,17 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			if runtime.GOOS != "linux" {
 				Skip("fixtures model Linux automated setup")
 			}
-			viper.Set("setup.ai_agents.apps", []string{"claude code", "AIDER"})
+			viper.Set("setup.ai_agents.apps", []string{"claude code", "AIDER", "fast-agent", "MINION CODE", "mistral vibe"})
 			viper.Set("setup.ai_agents.preset", "balanced")
 
 			model, err := createAutomatedSetupModel(repo, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(model.selections.selectedAIAgents).To(Equal(map[string]bool{
-				"Claude Code": true,
-				"Aider":       true,
+				"Claude Code":  true,
+				"Aider":        true,
+				"fast-agent":   true,
+				"Minion Code":  true,
+				"Mistral Vibe": true,
 			}))
 			Expect(model.selections.aiAgentPreset).To(Equal("balanced"))
 
@@ -544,7 +577,7 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			for _, app := range apps {
 				names = append(names, app.Name)
 			}
-			Expect(names).To(ContainElements("Bubblewrap", "socat", "Claude Code", "Aider"))
+			Expect(names).To(ContainElements("Bubblewrap", "socat", "Claude Code", "Aider", "fast-agent", "Minion Code", "Mistral Vibe"))
 		})
 
 		It("skips AI agents by default when no config is set", func() {

@@ -1,0 +1,64 @@
+name: Mistral Vibe
+description: Mistral AI's open-source terminal coding agent
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/mistralai/mistral-vibe#readme and
+  # https://docs.mistral.ai/vibe/code/overview (PyPI: https://pypi.org/project/mistral-vibe/).
+  # Mistral's https://mistral.ai/vibe/install.sh is a thin wrapper that installs
+  # uv if missing and runs `uv tool install --python cpython-3.14+gil --force mistral-vibe`
+  # (exposing `vibe` and `vibe-acp`). Keeping mise's pipx backend as primary uses
+  # uv under the hood without an unpinned curlpipe script; Homebrew is listed as a
+  # community alternative (https://formulae.brew.sh/formula/mistral-vibe).
+  # Mistral Vibe checks for updates and prompts interactively rather than
+  # auto-updating silently, so self_updating is false.
+  install_method: mise
+  install_command: uv@latest pipx:mistral-vibe[python=3.14]@latest
+  uninstall_command: pipx:mistral-vibe
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+  alternatives:
+    - install_method: brew
+      install_command: mistral-vibe
+      uninstall_command: mistral-vibe
+      installed_binary: vibe
+      self_updating: false
+      official_support: false
+windows:
+  # Official Windows docs (https://github.com/mistralai/mistral-vibe#readme)
+  # instruct installing uv and running `uv tool install --python 3.14 mistral-vibe`.
+  install_method: mise
+  install_command: uv@latest pipx:mistral-vibe[python=3.14]@latest
+  uninstall_command: pipx:mistral-vibe
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # Official install docs: https://github.com/mistralai/mistral-vibe#readme and
+  # https://docs.mistral.ai/vibe/code/overview (PyPI: https://pypi.org/project/mistral-vibe/).
+  # Mistral's https://mistral.ai/vibe/install.sh is a thin wrapper that installs
+  # uv if missing and runs `uv tool install --python cpython-3.14+gil --force mistral-vibe`
+  # (requires Python >=3.12; 3.14 avoids Python 3.15 missing-wheel issues; exposes
+  # `vibe` and `vibe-acp`). mise's pipx backend runs uv tool install with an
+  # isolated mise-managed Python runtime without touching the system Python.
+  # The backend needs uv, so uv is installed in the same mise call; uninstall
+  # removes Mistral Vibe and keeps uv. Homebrew (Linuxbrew) is a community alternative.
+  install_method: mise
+  install_command: uv@latest pipx:mistral-vibe[python=3.14]@latest
+  uninstall_command: pipx:mistral-vibe
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+  alternatives:
+    - install_method: brew
+      install_command: mistral-vibe
+      uninstall_command: mistral-vibe
+      installed_binary: vibe
+      self_updating: false
+      official_support: false
