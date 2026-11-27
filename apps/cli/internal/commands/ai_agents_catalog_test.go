@@ -203,7 +203,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			Expect(out.String()).To(ContainSubstring("Would install " + name))
 		},
 		Entry("Claude Code", "Claude Code", "curlpipe", "https://claude.ai/install.sh", "user", true, nil, []string{"Bubblewrap", "socat"}, `rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"`),
-		Entry("Codex CLI", "Codex CLI", "mise", "codex@latest", "", false, []string{"mise"}, []string{"Bubblewrap"}, "codex"),
+		Entry("Codex CLI", "Codex CLI", "curlpipe", "https://chatgpt.com/codex/install.sh", "user", true, nil, []string{"Bubblewrap"}, `rm -f "$HOME/.local/bin/codex" && rm -rf "$HOME/.codex/packages/standalone"`),
 		Entry("Gemini CLI", "Gemini CLI", "mise", "node@24 npm:@google/gemini-cli@latest", "", true, []string{"Node.js"}, nil, "npm:@google/gemini-cli"),
 		Entry("GitHub Copilot CLI", "GitHub Copilot CLI", "curlpipe", "https://raw.githubusercontent.com/github/copilot-cli/main/install.sh", "user", true, nil, []string{"Bubblewrap"}, `rm -f "$HOME/.local/bin/copilot"`),
 		Entry("OpenCode", "OpenCode", "curlpipe", "https://opencode.ai/install", "user", true, nil, nil, `rm -f "$HOME/.opencode/bin/opencode"`),
@@ -211,6 +211,59 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Aider", "Aider", "mise", "uv@latest pipx:aider-chat[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:aider-chat"),
 		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, nil, "aqua:aaif-goose/goose"),
 	)
+
+	DescribeTable("plans each AI coding agent upgrade on Ubuntu 24.04",
+		func(name, want string) {
+			var out bytes.Buffer
+			cmd := commands.NewRootCmd("test", mocks.NewMockRepository(), settings)
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs([]string{"upgrade", "--dry-run", "--non-interactive", name})
+			Expect(cmd.Execute()).To(Succeed(), out.String())
+			Expect(out.String()).To(ContainSubstring(want))
+		},
+		Entry("Claude Code updates itself", "Claude Code", "Claude Code manages its own updates; skipped"),
+		Entry("Codex CLI updates itself", "Codex CLI", "Codex CLI manages its own updates; skipped"),
+		Entry("Gemini CLI updates itself", "Gemini CLI", "Gemini CLI manages its own updates; skipped"),
+		Entry("GitHub Copilot CLI updates itself", "GitHub Copilot CLI", "GitHub Copilot CLI manages its own updates; skipped"),
+		Entry("OpenCode updates itself", "OpenCode", "OpenCode manages its own updates; skipped"),
+		Entry("Kimi Code reruns its installer", "Kimi Code", `Plugin invocation: devex-plugin-package-manager-curlpipe "install" "--user" "https://code.kimi.com/kimi-code/install.sh"`),
+		Entry("Aider upgrades through mise", "Aider", `Plugin invocation: devex-plugin-package-manager-mise "update" "pipx:aider-chat"`),
+		Entry("Goose upgrades through mise", "Goose", `Plugin invocation: devex-plugin-package-manager-mise "update" "aqua:aaif-goose/goose"`),
+	)
+
+	DescribeTable("plans each AI coding agent uninstall on Ubuntu 24.04, keeping config",
+		func(name, want string) {
+			repo := mocks.NewMockRepository()
+			Expect(repo.AddApp(name)).To(Succeed())
+			var out bytes.Buffer
+			cmd := commands.NewRootCmd("test", repo, settings)
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs([]string{"uninstall", "--app", name, "--dry-run"})
+			Expect(cmd.Execute()).To(Succeed(), out.String())
+			Expect(out.String()).To(ContainSubstring("Would uninstall " + name + " via " + want))
+			Expect(out.String()).NotTo(ContainSubstring("Would remove configuration"))
+			Expect(out.String()).NotTo(ContainSubstring("Would remove data"))
+		},
+		Entry("Claude Code", "Claude Code", `curlpipe: rm -f "$HOME/.local/bin/claude" && rm -rf "$HOME/.local/share/claude"`),
+		Entry("Codex CLI", "Codex CLI", `curlpipe: rm -f "$HOME/.local/bin/codex" && rm -rf "$HOME/.codex/packages/standalone"`),
+		Entry("Gemini CLI", "Gemini CLI", "mise: npm:@google/gemini-cli"),
+		Entry("GitHub Copilot CLI", "GitHub Copilot CLI", `curlpipe: rm -f "$HOME/.local/bin/copilot"`),
+		Entry("OpenCode", "OpenCode", `curlpipe: rm -f "$HOME/.opencode/bin/opencode"`),
+		Entry("Kimi Code", "Kimi Code", `curlpipe: rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),
+		Entry("Aider", "Aider", "mise: pipx:aider-chat"),
+		Entry("Goose", "Goose", "mise: aqua:aaif-goose/goose"),
+	)
+
+	It("refuses to rerun an install script for an offline upgrade", func() {
+		var out bytes.Buffer
+		cmd := commands.NewRootCmd("test", mocks.NewMockRepository(), settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"upgrade", "--dry-run", "--non-interactive", "--offline", "Kimi Code"})
+		Expect(cmd.Execute()).To(MatchError(ContainSubstring("rerunning the install script needs the network")))
+	})
 
 	It("resolves Ollama with system hook-driven install, curl/zstd dependencies, and full cleanup uninstall", func() {
 		app, ok := agents["Ollama"]

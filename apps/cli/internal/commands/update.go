@@ -166,7 +166,7 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 			supported = true
 		case "apk", "emerge":
 			supported = action == "update"
-		case "snap", "nixpkgs", "mas":
+		case "snap", "nixpkgs", "mas", "mise", "curlpipe":
 			supported = action == "upgrade"
 		}
 		if !supported {
@@ -178,6 +178,9 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 			continue
 		}
 		packages, scope, err := maintenancePackages(c)
+		if c.InstallMethod == "mise" || c.InstallMethod == "curlpipe" {
+			packages, scope, err = reinstallTargets(c)
+		}
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", app.Name, err))
 			continue
@@ -214,6 +217,15 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 		args := []string{action}
 		if key.manager == "apt" && action == "upgrade" {
 			args[0] = "upgrade-packages"
+		}
+		if key.manager == "mise" && action == "upgrade" {
+			// The mise plugin's update command runs `mise upgrade <tools>`.
+			args[0] = "update"
+		}
+		if key.manager == "curlpipe" && action == "upgrade" {
+			// Install scripts fetch the newest release, so running the
+			// script again is the vendor's documented upgrade.
+			args[0] = "install"
 		}
 		if key.scope != "" {
 			args = append(args, key.scope)
@@ -264,6 +276,40 @@ func maintenancePackages(c types.OSConfig) ([]string, string, error) {
 	}
 }
 
+// reinstallTargets names what a mise or curlpipe upgrade acts on: the mise
+// tools that uninstall removes, or the install script URL. A script pinned by
+// checksum would install the same release again, and a hook-driven entry has
+// no script to run, so both are refused.
+func reinstallTargets(c types.OSConfig) ([]string, string, error) {
+	if c.InstallMethod == "curlpipe" {
+		if c.IsHookDrivenCurlpipe() {
+			return nil, "", fmt.Errorf("install hooks have no upgrade step; reinstall it with devex install")
+		}
+		if viper.GetBool("offline") {
+			return nil, "", fmt.Errorf("rerunning the install script needs the network; retry without --offline")
+		}
+		if len(c.Verification.Arguments()) > 0 {
+			return nil, "", fmt.Errorf("the install script is pinned by checksum; upgrade it by updating the catalog entry")
+		}
+		target := c.DownloadURL
+		if target == "" {
+			target = strings.TrimSpace(c.InstallCommand)
+		}
+		if target == "" || strings.ContainsAny(target, " \t") {
+			return nil, "", fmt.Errorf("no single install script URL configured")
+		}
+		scope := ""
+		if c.InstallScope == "user" {
+			scope = "--user"
+		}
+		return []string{target}, scope, nil
+	}
+	if strings.TrimSpace(c.UninstallCommand) == "" {
+		return nil, "", fmt.Errorf("no mise tools configured in uninstall_command")
+	}
+	return strings.Fields(c.UninstallCommand), "", nil
+}
+
 // maintenanceNativeCommands documents the audited plugin contracts.
 func maintenanceNativeCommands(op packageMaintenanceOperation) []string {
 	commands := map[string][]string{
@@ -275,6 +321,7 @@ func maintenanceNativeCommands(op packageMaintenanceOperation) []string {
 		"xbps:upgrade": {"xbps-install --yes --update"}, "eopkg:upgrade": {"eopkg upgrade --yes-all"},
 		"snap:upgrade": {"snap refresh"}, "nixpkgs:upgrade": {"nix-env --upgrade"}, "mas:upgrade": {"mas upgrade"},
 		"winget:update": {"winget source update"}, "winget:upgrade": {"winget upgrade"},
+		"mise:update": {"mise upgrade"},
 	}
 	result := append([]string(nil), commands[op.manager+":"+op.args[0]]...)
 	if op.manager == "apt" && interaction.IsInteractiveMode() {

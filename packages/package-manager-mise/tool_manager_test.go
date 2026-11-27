@@ -174,8 +174,10 @@ var _ = Describe("Tool Manager", func() {
 					{Args: []string{"use", "--global", "aqua:aaif-goose/goose@latest"}},
 					{Args: []string{"where", "aqua:aaif-goose/goose"}},
 					{Args: []string{"unuse", "--global", "aqua:aaif-goose/goose"}},
+					{Args: []string{"prune", "--yes", "aqua:aaif-goose/goose"}},
 					{Args: []string{"use", "--global", "pipx:aider-chat[python=3.12]@latest"}},
 					{Args: []string{"unuse", "--global", "pipx:aider-chat"}},
+					{Args: []string{"prune", "--yes", "pipx:aider-chat"}},
 				}))
 			})
 

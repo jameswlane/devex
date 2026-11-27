@@ -22,15 +22,31 @@ windows:
   dependencies:
     - Node.js
 linux:
-  # mise resolves codex from its registry to aqua:openai/codex, the official
-  # GitHub release binaries OpenAI documents as an install option.
-  install_method: mise
-  install_command: codex@latest
-  uninstall_command: codex
-  self_updating: false
+  # OpenAI's standalone installer (https://learn.chatgpt.com/docs/codex/cli),
+  # unpinned: OpenAI updates install.sh on release and publishes no checksum
+  # for the script itself. The script verifies the release archive against
+  # codex-package_SHA256SUMS, unpacks it under ~/.codex/packages/standalone
+  # and links ~/.local/bin/codex to it. It records the release it installed
+  # so Codex can update itself, so DevEx leaves updates to Codex. Uninstall
+  # removes the binary link and the standalone releases, and keeps
+  # ~/.codex config, sessions and credentials.
+  install_method: curlpipe
+  download_url: https://chatgpt.com/codex/install.sh
+  install_scope: user
+  installed_binary: codex
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/codex" && rm -rf "$HOME/.codex/packages/standalone"
   official_support: true
-  dependencies:
-    - mise
+  alternatives:
+    # mise resolves codex to aqua:openai/codex, OpenAI's GitHub release
+    # binaries. A community channel, not one OpenAI documents.
+    - install_method: mise
+      install_command: codex@latest
+      uninstall_command: codex
+      self_updating: false
+      official_support: false
+      dependencies:
+        - mise
   # Linux sandbox uses bubblewrap + seccomp; docs instruct installing system
   # bubblewrap on Linux/WSL2: https://developers.openai.com/codex/concepts/sandboxing
   sandbox_prerequisites:

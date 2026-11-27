@@ -120,6 +120,7 @@ var (
 		"claude.ai",
 		"opencode.ai",
 		"code.kimi.com",
+		"chatgpt.com",
 		"zed.dev",
 	}
 )
