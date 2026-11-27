@@ -360,8 +360,9 @@ var _ = Describe("AI Agent Harnesses catalog", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("Superset is not supported on linux/arm64"))
 
+		// IsSupported reads the host distribution; resolve Ubuntu explicitly so
+		// macOS and Windows runners check the same selection.
 		orca := harnesses["Orca"]
-		Expect(orca.IsSupported()).To(BeTrue())
 		ubuntuArm64 := platform.DetectionResult{OS: "linux", Distribution: "ubuntu", DistributionLike: []string{"debian"}, Version: "24.04", Architecture: "arm64"}
 		resolved := orca.LinuxConfigForPlatform(ubuntuArm64)
 		Expect(resolved.InstallMethod).To(Equal("deb"))
