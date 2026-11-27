@@ -449,7 +449,8 @@ var _ = Describe("Agent apply and diff commands", func() {
 	})
 
 	It("renders local_models plan and GPU line in diff and apply --dry-run through root command with zero writes and zero pulls", func() {
-		agentsYAML := filepath.Join(home, ".config", "devex", "config", "agents.yaml")
+		homeSettings := config.CrossPlatformSettings{HomeDir: home}
+		agentsYAML := filepath.Join(homeSettings.GetUserConfigDir(), "agents.yaml")
 		Expect(os.MkdirAll(filepath.Dir(agentsYAML), 0o750)).To(Succeed())
 		Expect(os.WriteFile(agentsYAML, []byte("agents:\n  local_models:\n    - qwen2.5-coder:7b\n    - llama3.2\n"), 0o600)).To(Succeed())
 

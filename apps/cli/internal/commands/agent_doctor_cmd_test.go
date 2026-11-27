@@ -395,10 +395,10 @@ var _ = Describe("Agent doctor and login commands", func() {
 
 			fsRoot := GinkgoT().TempDir()
 			Expect(os.MkdirAll(filepath.Join(fsRoot, "run/systemd/system"), 0o755)).To(Succeed())
-			Expect(os.MkdirAll(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0"), 0o755)).To(Succeed())
-			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0/class"), []byte("0x030000\n"), 0o644)).To(Succeed())
-			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0/vendor"), []byte("0x10de\n"), 0o644)).To(Succeed())
-			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000:01:00.0/device"), []byte("0x2684\n"), 0o644)).To(Succeed())
+			Expect(os.MkdirAll(filepath.Join(fsRoot, "sys/bus/pci/devices/0000-01-00.0"), 0o755)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000-01-00.0/class"), []byte("0x030000\n"), 0o644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000-01-00.0/vendor"), []byte("0x10de\n"), 0o644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(fsRoot, "sys/bus/pci/devices/0000-01-00.0/device"), []byte("0x2684\n"), 0o644)).To(Succeed())
 
 			GinkgoT().Setenv("OPENAI_API_KEY", sentinel)
 			probe := makeFakeBinProbe("", map[string]string{"OPENAI_API_KEY": sentinel})
