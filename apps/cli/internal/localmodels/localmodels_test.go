@@ -116,7 +116,7 @@ var _ = Describe("Local model runtimes", func() {
 			Expect(report.GPUs[0].Name).To(Equal("NVIDIA GeForce RTX 4090"))
 			Expect(report.GPUs[0].DriverVersion).To(Equal("550.54.15"))
 			Expect(report.GPUs[0].Memory).To(Equal("24564 MiB"))
-			Expect(report.GPUs[0].PCIAddress).To(Equal("0000:01:00.0"))
+			Expect(report.GPUs[0].PCIAddress).To(Equal("0000-01-00.0")) // fixture dirs use - for : (Windows paths cannot contain colons)
 		})
 
 		It("parses multi-GPU nvidia-smi CSV fixtures", func() {
