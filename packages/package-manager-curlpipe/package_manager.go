@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -120,7 +119,6 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 		}
 		fmt.Fprintf(os.Stderr, "Download verification: checksum=%t signature=%t (false means skipped)\n", verified.ChecksumVerified, verified.SignatureVerified)
 		// Run the file with bash as a separate argv
-		shell, shellArgs := scriptCommand(tempFile.Name())
 		if userScope {
 			// When DevEx is elevated the script runs as the invoking user, who
 			// must be able to read the root-owned temp file. Install scripts are
@@ -129,11 +127,11 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 			if err := os.Chmod(tempFile.Name(), 0o644); err != nil {
 				return fmt.Errorf("failed to make script readable for the invoking user: %w", err)
 			}
-			if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, shell, shellArgs...); err != nil {
+			if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "bash", tempFile.Name()); err != nil {
 				return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
 			}
 		} else {
-			if err := sdk.ExecCommandWithContext(ctx, true, shell, shellArgs...); err != nil {
+			if err := sdk.ExecCommandWithContext(ctx, true, "bash", tempFile.Name()); err != nil {
 				return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
 			}
 		}
@@ -195,16 +193,4 @@ func (p *CurlpipePlugin) handleListTrusted(ctx context.Context, args []string) e
 	}
 	p.logger.Printf("\nNote: Use --force flag to bypass domain validation (use with extreme caution)\n")
 	return nil
-}
-
-// scriptCommand runs an install script with bash. Unattended runs detach
-// the script from the controlling terminal, so installers that prompt
-// through /dev/tty (Codex asks whether to launch) cannot block.
-func scriptCommand(script string) (string, []string) {
-	if sdk.Unattended() {
-		if _, err := exec.LookPath("setsid"); err == nil {
-			return "setsid", []string{"-w", "bash", script}
-		}
-	}
-	return "bash", []string{script}
 }

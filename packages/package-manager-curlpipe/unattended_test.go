@@ -10,7 +10,7 @@ import (
 
 var _ = Describe("Unattended curlpipe execution", func() {
 	It("downloads and executes a fake installer with stdin closed", func() {
-		recorder := sdktest.NewRecorder(GinkgoT(), "curl", "bash", "setsid")
+		recorder := sdktest.NewRecorder(GinkgoT(), "curl", "bash")
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		GinkgoT().Setenv("TMPDIR", GinkgoT().TempDir())
@@ -22,13 +22,13 @@ var _ = Describe("Unattended curlpipe execution", func() {
 		Expect(calls[0].Args).To(HaveLen(5))
 		script := calls[0].Args[2]
 		Expect(calls).To(Equal([]sdktest.Call{{Args: []string{"-fsSL", "-o", script, "--", url}}}))
-		Expect(recorder.Calls("setsid")).To(Equal([]sdktest.Call{{Args: []string{"-w", "bash", script}, ElevationRequested: true}}))
+		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{script}, ElevationRequested: true}}))
 		var manual *sdk.ManualRemovalRequiredError
 		Expect(plugin.Execute("remove", []string{"example"})).To(BeAssignableToTypeOf(manual))
 	})
 
 	It("runs the downloaded script at user scope without sudo when --user is passed", func() {
-		recorder := sdktest.NewRecorder(GinkgoT(), "curl", "bash", "setsid")
+		recorder := sdktest.NewRecorder(GinkgoT(), "curl", "bash")
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		GinkgoT().Setenv("TMPDIR", GinkgoT().TempDir())
@@ -40,6 +40,6 @@ var _ = Describe("Unattended curlpipe execution", func() {
 		Expect(calls[0].Args).To(HaveLen(5))
 		script := calls[0].Args[2]
 		Expect(calls).To(Equal([]sdktest.Call{{Args: []string{"-fsSL", "-o", script, "--", url}}}))
-		Expect(recorder.Calls("setsid")).To(Equal([]sdktest.Call{{Args: []string{"-w", "bash", script}, ElevationRequested: false}}))
+		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{script}, ElevationRequested: false}}))
 	})
 })

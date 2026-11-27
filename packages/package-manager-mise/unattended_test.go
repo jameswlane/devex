@@ -35,10 +35,9 @@ var _ = Describe("Unattended mise execution", func() {
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin := main.NewMisePlugin()
-		GinkgoT().Setenv("MISE_LOCAL", "0")
 		Expect(plugin.HandleUpdate(context.Background(), []string{"node@24", "java@21"})).To(Succeed())
 		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{
-			{Args: []string{"upgrade", "--global", "node@24", "java@21"}},
+			{Args: []string{"upgrade", "node@24", "java@21"}},
 		}))
 	})
 
