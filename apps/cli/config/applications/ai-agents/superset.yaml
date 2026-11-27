@@ -18,7 +18,7 @@ macos:
     - git
 linux:
   # Official .deb release (Package: superset) provides its own .desktop entry
-  # and icons; Electron auto-updates via latest-linux.yml. Only amd64 is built.
+  # and icons; the app updates itself. Only amd64 is built.
   install_method: deb
   install_command: superset
   installed_binary: /usr/bin/superset
@@ -35,19 +35,3 @@ linux:
       arch: amd64
     - os: ubuntu
       arch: amd64
-  alternatives:
-    - install_method: appimage
-      install_command: https://github.com/ParadevAI/Paradev/releases/download/desktop-v2.0.12/Paradev-x86_64.AppImage Paradev-x86_64.AppImage --gui
-      installed_binary: Paradev-x86_64.AppImage
-      uninstall_command: Paradev-x86_64.AppImage
-      download_url: https://github.com/ParadevAI/Paradev/releases/download/desktop-v2.0.12/Paradev-x86_64.AppImage
-      destination: ~/Applications/
-      verification:
-        sha256: 90eb8a1230c6e522cd7f2019815e4681a8c3f05e05a478a4709fd246004a6e4b
-      self_updating: true
-      official_support: true
-      dependencies:
-        - git
-      platform_requirements:
-        - os: linux
-          arch: amd64

@@ -19,14 +19,8 @@ func UnsupportedOSSkipMessage(appName, currentOS string, supportedPlatforms []st
 }
 
 func ResolveAppsByName(settings config.CrossPlatformSettings, requested []string) ([]types.CrossPlatformApp, error) {
-	resolved, skipped, err := resolveAppsByName(settings, requested, false)
-	if err != nil {
-		return nil, err
-	}
-	if len(skipped) > 0 {
-		return nil, &Error{Category: "unsupported_platform", Message: strings.Join(skipped, "; ")}
-	}
-	return resolved, nil
+	resolved, _, err := resolveAppsByName(settings, requested, false)
+	return resolved, err
 }
 
 func resolveAppsByName(settings config.CrossPlatformSettings, requested []string, skipUnsupportedOS bool) ([]types.CrossPlatformApp, []string, error) {

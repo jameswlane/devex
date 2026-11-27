@@ -99,12 +99,12 @@ Desktop GUI harnesses (`Orca`, `Superset`, `Conductor`, `cmux`) declare `desktop
 
 | Harness | Linux | macOS | Windows | Notes |
 | --- | --- | --- | --- | --- |
-| Orca | `deb orca-ide` (`amd64`/`arm64`, SHA-256 pinned; `AppImage` alt) | `brew --cask stablyai/orca/orca` | `winget StablyAI.Orca` | Graphical desktop; self-updating (`devex` skips) |
+| Orca | `deb orca-ide` (Debian/Ubuntu `amd64`/`arm64`, SHA-256 pinned) | `brew --cask stablyai/orca/orca` | `winget StablyAI.Orca` | Graphical desktop; self-updating (`devex` skips) |
 | Herdr | `curlpipe --user` (`https://herdr.dev/install.sh`) | `brew herdr` | `mise herdr@latest` | Headless-capable Rust TUI + Unix-socket daemon; script verifies release SHA-256; self-updating (`herdr update`) |
 | T3 Code | `curlpipe --user` (`https://t3.codes/install.sh`); background service via `t3 service install` | `brew --cask t3-code` | `winget T3Tools.T3Code` | Self-updating; script verifies `SHA256SUMS`; uninstall runs `t3 uninstall --yes`, which keeps `~/.t3/userdata` and `service.env` |
 | Conductor | Unsupported on Linux (skipped cleanly) | `brew --cask conductor` | Unsupported | macOS desktop app; self-updating |
 | Claude Squad | Pinned GitHub release tarball (`amd64`/`arm64`, SHA-256 verified) + `/usr/local/bin/cs` link | `brew claude-squad` | Unsupported | Requires `tmux`, `git`, and `GitHub CLI` |
-| Superset | `deb superset` (`amd64` only, SHA-256 pinned; `AppImage` alt) | `brew --cask paradev` | Unsupported | Rebranded to Paradev; graphical desktop; self-updating; requires `git` |
+| Superset | `deb superset` (Debian/Ubuntu `amd64` only, SHA-256 pinned) | `brew --cask paradev` | Unsupported | Rebranded to Paradev; graphical desktop; self-updating; requires `git` |
 | cmux | Unsupported on Linux (skipped cleanly) | `brew --cask cmux` | Unsupported | Native Swift/AppKit Ghostty-based macOS terminal; self-updating |
 | OpenChamber | `mise node@24 npm:@openchamber/web@latest` (depends on `Node.js`) | `brew --cask openchamber` | `winget OpenChamber.OpenChamber` | Bundles OpenCode server; binds `127.0.0.1:3000` by default; optional `openchamber startup enable` |
 | Paseo | `mise node@24 npm:@getpaseo/cli@latest` (depends on `Node.js`) | `brew --cask paseo` | `winget Paseo.Paseo` | Local daemon binds `127.0.0.1:6767` by default; start with `paseo` or `paseo daemon start` |

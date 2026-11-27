@@ -41,6 +41,9 @@ linux:
         if [ ! -e /usr/local/bin/cs ]; then
           ln -s /usr/local/bin/claude-squad /usr/local/bin/cs
         fi
+        for tool in tmux git gh; do
+          command -v "$tool" >/dev/null 2>&1 || echo "Claude Squad needs $tool at runtime: run 'devex install tmux git \"GitHub CLI\"'."
+        done
   uninstall_command: |
     set -eu
     SUDO=""
@@ -72,6 +75,9 @@ linux:
             if [ ! -e /usr/local/bin/cs ]; then
               ln -s /usr/local/bin/claude-squad /usr/local/bin/cs
             fi
+            for tool in tmux git gh; do
+              command -v "$tool" >/dev/null 2>&1 || echo "Claude Squad needs $tool at runtime: run 'devex install tmux git \"GitHub CLI\"'."
+            done
       uninstall_command: |
         set -eu
         SUDO=""

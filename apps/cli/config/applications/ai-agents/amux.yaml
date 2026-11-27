@@ -42,10 +42,22 @@ macos:
         tmp_target="$(mktemp -d /var/tmp/devex-amux-build.XXXXXX)"
         trap 'rm -rf "$tmp_target"' EXIT
         CARGO_TARGET_DIR="$tmp_target" CARGO_INCREMENTAL=0 cargo build --manifest-path "$checkout/Cargo.toml" --release -p amux-server -p amux-cli
-        install -m 0755 "$tmp_target/release/amux-server" "$bin_dir/amux-server-rs"
+        # The server binds every interface unless AMUX_RS_BIND is set, so the
+        # command on PATH is a launcher that defaults it to loopback.
+        mkdir -p "$checkout/.devex"
+        install -m 0755 "$tmp_target/release/amux-server" "$checkout/.devex/amux-server"
+        launcher="$(mktemp "$bin_dir/.amux-server-rs.XXXXXX")"
+        cat <<'LAUNCHER' > "$launcher"
+        #!/bin/sh
+        : "${AMUX_RS_BIND:=127.0.0.1}"
+        export AMUX_RS_BIND
+        exec "$HOME/.local/share/amux/.devex/amux-server" "$@"
+        LAUNCHER
+        chmod 0755 "$launcher"
+        mv -f "$launcher" "$bin_dir/amux-server-rs"
         install -m 0755 "$tmp_target/release/amux-rs" "$bin_dir/amux-rs"
         echo "amux built and installed to $bin_dir/amux-server-rs and $bin_dir/amux-rs."
-        echo "Run bound to localhost with: AMUX_RS_BIND=127.0.0.1 AMUX_RS_PORT=8824 $bin_dir/amux-server-rs"
+        echo "Run it with: $bin_dir/amux-server-rs (binds 127.0.0.1:8824 unless you set AMUX_RS_BIND)."
   uninstall_command: |
     set -eu
     rm -f "$HOME/.local/bin/amux-server-rs" "$HOME/.local/bin/amux-rs"
@@ -86,7 +98,19 @@ linux:
         tmp_target="$(mktemp -d /var/tmp/devex-amux-build.XXXXXX)"
         trap 'rm -rf "$tmp_target"' EXIT
         CARGO_TARGET_DIR="$tmp_target" CARGO_INCREMENTAL=0 cargo build --manifest-path "$checkout/Cargo.toml" --release -p amux-server -p amux-cli
-        install -m 0755 "$tmp_target/release/amux-server" "$bin_dir/amux-server-rs"
+        # The server binds every interface unless AMUX_RS_BIND is set, so the
+        # command on PATH is a launcher that defaults it to loopback.
+        mkdir -p "$checkout/.devex"
+        install -m 0755 "$tmp_target/release/amux-server" "$checkout/.devex/amux-server"
+        launcher="$(mktemp "$bin_dir/.amux-server-rs.XXXXXX")"
+        cat <<'LAUNCHER' > "$launcher"
+        #!/bin/sh
+        : "${AMUX_RS_BIND:=127.0.0.1}"
+        export AMUX_RS_BIND
+        exec "$HOME/.local/share/amux/.devex/amux-server" "$@"
+        LAUNCHER
+        chmod 0755 "$launcher"
+        mv -f "$launcher" "$bin_dir/amux-server-rs"
         install -m 0755 "$tmp_target/release/amux-rs" "$bin_dir/amux-rs"
         unit_dir="$HOME/.local/share/systemd/user"
         unit_file="$unit_dir/amux-server.service"
@@ -118,7 +142,7 @@ linux:
           echo "Enable and start it with: systemctl --user enable --now amux-server.service"
         else
           echo "Installed amux user service file at $unit_file (bound to 127.0.0.1:8824)."
-          echo "systemd user manager is unavailable here; run manually with: AMUX_RS_BIND=127.0.0.1 AMUX_RS_PORT=8824 $bin_dir/amux-server-rs"
+          echo "systemd user manager is unavailable here; run manually with: $bin_dir/amux-server-rs"
           echo "On a systemd host, enable it with: systemctl --user enable --now amux-server.service"
         fi
   uninstall_command: |

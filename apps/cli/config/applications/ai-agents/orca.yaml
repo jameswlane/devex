@@ -22,8 +22,8 @@ windows:
   official_support: true
 linux:
   # Upstream publishes official .deb packages (package/binary name `orca-ide` to
-  # avoid colliding with GNOME Orca) and AppImages for amd64 and arm64. The .deb
-  # provides its own .desktop entry and icons; Electron auto-updates via latest-linux.yml.
+  # avoid colliding with GNOME Orca). The .deb
+  # provides its own .desktop entry and icons; the app updates itself.
   install_method: deb
   install_command: orca-ide
   installed_binary: /usr/bin/orca-ide
@@ -52,30 +52,4 @@ linux:
         - os: debian
           arch: arm64
         - os: ubuntu
-          arch: arm64
-    - install_method: appimage
-      install_command: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux.AppImage orca-linux.AppImage --gui
-      installed_binary: orca-linux.AppImage
-      uninstall_command: orca-linux.AppImage
-      download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux.AppImage
-      destination: ~/Applications/
-      verification:
-        sha256: 7fa4d975bdd151787bb12537908464f87695ecc3f1c26cf553220ee86d3c06c2
-      self_updating: true
-      official_support: true
-      platform_requirements:
-        - os: linux
-          arch: amd64
-    - install_method: appimage
-      install_command: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux-arm64.AppImage orca-linux-arm64.AppImage --gui
-      installed_binary: orca-linux-arm64.AppImage
-      uninstall_command: orca-linux-arm64.AppImage
-      download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux-arm64.AppImage
-      destination: ~/Applications/
-      verification:
-        sha256: 34db076dbf51c89f01a73db9ef6a17c42bb99124e95de197ef579f2cdd9faae6
-      self_updating: true
-      official_support: true
-      platform_requirements:
-        - os: linux
           arch: arm64

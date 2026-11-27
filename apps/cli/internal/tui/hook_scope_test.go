@@ -49,4 +49,16 @@ var _ = Describe("Interactive hook scope", func() {
 		Expect(os.WriteFile(filepath.Join(home, ".zshrc"), []byte("# mine\n"), 0o644)).To(Succeed())
 		Expect(install(ctx, types.InstallCommand{Shell: "exit 3"})).To(Succeed())
 	})
+
+	It("runs a hook-driven user-scope curlpipe app through its hooks, not the curlpipe plugin", func(ctx SpecContext) {
+		installer := NewStreamingInstaller(nil, &MockRepository{}, ctx, config.CrossPlatformSettings{})
+		DeferCleanup(installer.cancel)
+		installer.performanceAnalyzer = nil
+		app := types.CrossPlatformApp{Name: "hook-built", AllPlatforms: types.OSConfig{
+			InstallMethod: "curlpipe", InstallScope: "user",
+			PostInstall: []types.InstallCommand{{Scope: "user", Shell: `echo built > "$HOME/hook-built"`}},
+		}}
+		Expect(installer.InstallApp(ctx, app, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(filepath.Join(home, "hook-built")).To(BeAnExistingFile())
+	})
 })
