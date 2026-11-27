@@ -103,20 +103,24 @@ func filterHeadlessApplications(apps []types.CrossPlatformApp) ([]types.CrossPla
 
 // SelectApplicationsWithWarnings is the shared CLI install execution and
 // planning selection policy: the requested applications filtered for the
-// current desktop environment, plus the sandbox prerequisites declared by the
-// remaining applications.
+// current OS and desktop environment, plus the sandbox prerequisites declared
+// by the remaining applications.
 func SelectApplicationsWithWarnings(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) (SelectionResult, error) {
-	apps, s, err := SelectRequestedApplications(ctx, s, r)
+	apps, s, osWarnings, err := selectRequestedApplications(ctx, s, r, true)
 	if err != nil {
 		return SelectionResult{Settings: s}, err
 	}
-	filtered, warnings := filterHeadlessApplications(apps)
+	filtered, headlessWarnings := filterHeadlessApplications(apps)
 	// A graphical sandbox prerequisite is skipped on headless hosts too.
 	expanded, prereqWarnings := filterHeadlessApplications(expandSandboxPrerequisites(filtered, s))
+	warnings := make([]string, 0, len(osWarnings)+len(headlessWarnings)+len(prereqWarnings))
+	warnings = append(warnings, osWarnings...)
+	warnings = append(warnings, headlessWarnings...)
+	warnings = append(warnings, prereqWarnings...)
 	return SelectionResult{
 		Apps:     expanded,
 		Settings: s,
-		Warnings: append(warnings, prereqWarnings...),
+		Warnings: warnings,
 	}, nil
 }
 
@@ -131,21 +135,27 @@ func SelectApplications(ctx context.Context, s config.CrossPlatformSettings, r P
 // SelectRequestedApplications resolves only the requested applications, for
 // operations such as update and upgrade that must not add install prerequisites.
 func SelectRequestedApplications(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) ([]types.CrossPlatformApp, config.CrossPlatformSettings, error) {
+	apps, merged, _, err := selectRequestedApplications(ctx, s, r, false)
+	return apps, merged, err
+}
+
+func selectRequestedApplications(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest, skipUnsupportedOS bool) ([]types.CrossPlatformApp, config.CrossPlatformSettings, []string, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, s, err
+		return nil, s, nil, err
 	}
 	if len(r.Names) > 0 && len(r.Categories) > 0 {
-		return nil, s, &Error{Category: "invalid_request", Message: "cannot combine applications and categories"}
+		return nil, s, nil, &Error{Category: "invalid_request", Message: "cannot combine applications and categories"}
 	}
 	configured, merged, present, err := ConfiguredApplications(ctx, s)
 	if err != nil {
-		return nil, s, err
+		return nil, s, nil, err
 	}
 	s = merged
 	var apps []types.CrossPlatformApp
+	var warnings []string
 	switch {
 	case len(r.Names) > 0:
-		apps, err = ResolveAppsByName(s, r.Names)
+		apps, warnings, err = resolveAppsByName(s, r.Names, skipUnsupportedOS)
 	case len(r.Categories) > 0:
 		apps, err = ResolveAppsByCategory(s, r.Categories)
 	case present:
@@ -154,12 +164,12 @@ func SelectRequestedApplications(ctx context.Context, s config.CrossPlatformSett
 		apps = s.GetDefaultApps()
 	}
 	if err != nil {
-		return nil, s, err
+		return nil, s, nil, err
 	}
-	if len(apps) == 0 && !present {
-		return nil, s, &Error{Category: "not_found", Message: "no applications matched the install request"}
+	if len(apps) == 0 && len(warnings) == 0 && !present {
+		return nil, s, nil, &Error{Category: "not_found", Message: "no applications matched the install request"}
 	}
-	return apps, s, nil
+	return apps, s, warnings, nil
 }
 
 // expandSandboxPrerequisites puts the current-platform sandbox_prerequisites

@@ -26,6 +26,8 @@ var trustedDomains = []string{
 	"code.kimi.com",
 	"chatgpt.com",
 	"zed.dev",
+	"herdr.dev",
+	"t3.codes",
 }
 
 // GetTrustedDomains returns the list of trusted domains

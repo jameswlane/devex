@@ -1,0 +1,16 @@
+# Upstream: https://conductor.build (Melty Labs / Meta; macOS desktop app)
+# macOS only: Conductor ships no Linux or Windows build. Note that Conductor
+# joined Meta and may restrict new signups.
+name: Conductor
+description: macOS desktop workspace for running parallel coding agents in Git worktrees with a diff and pull request flow
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - graphical
+macos:
+  install_method: brew
+  install_command: conductor
+  uninstall_command: conductor
+  brew_cask: true
+  self_updating: true
+  official_support: true

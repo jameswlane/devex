@@ -91,6 +91,25 @@ Uninstalling an APT-backed editor removes the package, the DevEx-managed APT sou
 | Windsurf | `apt devin-desktop` (signed `windsurf-stable.codeiumdata.com` repo, `amd64` only) | Renamed by the vendor to Devin Desktop; unsupported on `linux/arm64` | `devin-desktop` package, `/etc/apt/sources.list.d/windsurf.list`, `/etc/apt/keyrings/windsurf-stable.gpg` (when created by DevEx) |
 | Zed | `curlpipe --user` (`https://zed.dev/install.sh`) | Self-updating (`devex` skips); installs `~/.local/zed.app`, `~/.local/bin/zed`, and `dev.zed.Zed.desktop` | `~/.local/zed.app`, `~/.local/bin/zed`, `~/.local/share/applications/dev.zed.Zed.desktop` |
 
+## AI Agent Harnesses
+
+The `AI Agent Harnesses` category (`applications/ai-agents/{amux,claude-squad,cmux,conductor,herdr,openchamber,orca,paseo,superset,t3-code}.yaml`) ships opt-in (`default: false`) definitions for GUIs, terminal multiplexers, and background servers that run and supervise coding agents. They are kept separate from `AI Coding Agents` so `--categories "AI Coding Agents"` does not pull in orchestrators or desktop apps. Install an individual harness with `devex install "T3 Code"` or install the category with `devex install --categories "AI Agent Harnesses"`. Interactive `devex setup` lists them under **Agent harnesses** in the AI coding agents step.
+
+Desktop GUI harnesses (`Orca`, `Superset`, `Conductor`, `cmux`) declare `desktop_environments: [graphical]` and are skipped on headless Linux hosts. Harnesses with no Linux build (`Conductor` and `cmux`) emit a skip notice on Linux (`Skipped <Name>: not supported on linux (supported platforms: macOS)`). Local servers that install a user systemd unit (`T3 Code`, `amux`) write it under `~/.local/share/systemd/user/`, bind to `127.0.0.1` by default, and leave it disabled until you opt in with `systemctl --user enable --now`. Uninstall removes installed binaries, packages, and DevEx-created service units while preserving user config, sessions, databases, and credentials.
+
+| Harness | Linux | macOS | Windows | Notes |
+| --- | --- | --- | --- | --- |
+| Orca | `deb orca-ide` (`amd64`/`arm64`, SHA-256 pinned; `AppImage` alt) | `brew --cask stablyai/orca/orca` | `winget StablyAI.Orca` | Graphical desktop; self-updating (`devex` skips) |
+| Herdr | `curlpipe --user` (`https://herdr.dev/install.sh`) | `brew herdr` | `mise herdr@latest` | Headless-capable Rust TUI + Unix-socket daemon; script verifies release SHA-256 |
+| T3 Code | `curlpipe --user` (`https://t3.codes/install.sh`) + disabled `t3code.service` (`127.0.0.1:3773`) | `brew --cask t3-code` | `winget T3Tools.T3Code` | Self-updating; script verifies `SHA256SUMS`; uninstall keeps `~/.t3/userdata` and `service.env` |
+| Conductor | Unsupported on Linux (skipped cleanly) | `brew --cask conductor` | Unsupported | macOS desktop app; self-updating |
+| Claude Squad | Pinned GitHub release tarball (`amd64`/`arm64`, SHA-256 verified) + `/usr/local/bin/cs` link | `brew claude-squad` | Unsupported | Requires `tmux`, `git`, and `GitHub CLI` |
+| Superset | `deb superset` (`amd64` only, SHA-256 pinned; `AppImage` alt) | `brew --cask paradev` | Unsupported | Rebranded to Paradev; graphical desktop; self-updating; requires `git` |
+| cmux | Unsupported on Linux (skipped cleanly) | `brew --cask cmux` | Unsupported | Native Swift/AppKit Ghostty-based macOS terminal; self-updating |
+| OpenChamber | `mise node@24 npm:@openchamber/web@latest` (depends on `Node.js`) | `brew --cask openchamber` | `winget OpenChamber.OpenChamber` | Bundles OpenCode server; binds `127.0.0.1:3000` by default; optional `openchamber startup enable` |
+| Paseo | `mise node@24 npm:@getpaseo/cli@latest` (depends on `Node.js`) | `brew --cask paseo` | `winget Paseo.Paseo` | Local daemon binds `127.0.0.1:6767` by default; start with `paseo` or `paseo daemon start` |
+| amux | User-scope Rust build from `mixpeek/amux` + disabled `amux-server.service` (`127.0.0.1:8824`) | User-scope Rust build from `mixpeek/amux` | Unsupported | Requires `git`, `tmux`, and `Rust`; uninstall keeps `~/.amux` |
+
 ### Homebrew formulae and Casks
 
 On macOS, `install_method: brew` installs a formula unless you select a Cask. Select GUI apps with `options: [--cask]` (or `install_command: --cask NAME`); the older `brew_cask: true` flag means the same thing. DevEx uses the selection for installation, `devex status` checks and removal. `--cask` and `--formula` are the only Homebrew options accepted.

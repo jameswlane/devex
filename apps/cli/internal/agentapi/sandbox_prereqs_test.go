@@ -194,4 +194,33 @@ var _ = Describe("Sandbox prerequisite selection expansion", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appNames(apps)).To(Equal([]string{"Claude Code"}))
 	})
+
+	It("skips OS-unsupported apps in install selections and reports unsupported_platform in ResolveAppsByName", func() {
+		settings.ApplicationOverrides = append(settings.ApplicationOverrides, types.CrossPlatformApp{
+			Name:     "Mac Only Harness",
+			Category: "AI Agent Harnesses",
+			MacOS:    types.OSConfig{InstallMethod: "brew", InstallCommand: "mac-only-harness", UninstallCommand: "mac-only-harness", BrewCask: true},
+		})
+
+		wantSkip := agentapi.UnsupportedOSSkipMessage("Mac Only Harness", "linux", []string{"macOS"})
+
+		onlyUnsupported, err := agentapi.SelectApplicationsWithWarnings(context.Background(), settings, agentapi.PlanRequest{
+			Names: []string{"Mac Only Harness"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(onlyUnsupported.Apps).To(BeEmpty())
+		Expect(onlyUnsupported.Warnings).To(Equal([]string{wantSkip}))
+
+		mixed, err := agentapi.SelectApplicationsWithWarnings(context.Background(), settings, agentapi.PlanRequest{
+			Names: []string{"Gemini CLI", "Mac Only Harness"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(appNames(mixed.Apps)).To(Equal([]string{"Gemini CLI"}))
+		Expect(mixed.Warnings).To(Equal([]string{wantSkip}))
+
+		_, err = agentapi.ResolveAppsByName(settings, []string{"Mac Only Harness"})
+		Expect(err).To(HaveOccurred())
+		Expect(agentapi.APIError(err).Category).To(Equal("unsupported_platform"))
+		Expect(err.Error()).To(ContainSubstring("Mac Only Harness is not supported on linux (supported platforms: macOS)"))
+	})
 })

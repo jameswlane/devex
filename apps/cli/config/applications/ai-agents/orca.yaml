@@ -1,0 +1,81 @@
+# Upstream: https://github.com/stablyai/orca (https://orca.dev)
+name: Orca
+description: Cross-platform desktop IDE for orchestrating fleets of AI coding agents in parallel Git worktrees
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - graphical
+macos:
+  # Always use the tap-qualified cask; bare `orca` in Homebrew is an unrelated Plotly cask.
+  install_method: brew
+  install_command: stablyai/orca/orca
+  uninstall_command: stablyai/orca/orca
+  brew_tap: stablyai/orca
+  brew_cask: true
+  self_updating: true
+  official_support: true
+windows:
+  install_method: winget
+  install_command: StablyAI.Orca
+  uninstall_command: StablyAI.Orca
+  self_updating: true
+  official_support: true
+linux:
+  # Upstream publishes official .deb packages (package/binary name `orca-ide` to
+  # avoid colliding with GNOME Orca) and AppImages for amd64 and arm64. The .deb
+  # provides its own .desktop entry and icons; Electron auto-updates via latest-linux.yml.
+  install_method: deb
+  install_command: orca-ide
+  installed_binary: /usr/bin/orca-ide
+  uninstall_command: orca-ide
+  download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-ide_1.4.280_amd64.deb
+  verification:
+    sha256: 1deb6f50cb59a40bb328e0c7502fc7f36c936be6aea3934c976bab175d56c6ea
+  self_updating: true
+  official_support: true
+  platform_requirements:
+    - os: debian
+      arch: amd64
+    - os: ubuntu
+      arch: amd64
+  alternatives:
+    - install_method: deb
+      install_command: orca-ide
+      installed_binary: /usr/bin/orca-ide
+      uninstall_command: orca-ide
+      download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-ide_1.4.280_arm64.deb
+      verification:
+        sha256: 3849d3dedcd2835709482e8ad1025e6f44fac219e51e26ad67c4f0078003ba3c
+      self_updating: true
+      official_support: true
+      platform_requirements:
+        - os: debian
+          arch: arm64
+        - os: ubuntu
+          arch: arm64
+    - install_method: appimage
+      install_command: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux.AppImage orca-linux.AppImage --gui
+      installed_binary: orca-linux.AppImage
+      uninstall_command: orca-linux.AppImage
+      download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux.AppImage
+      destination: ~/Applications/
+      verification:
+        sha256: 7fa4d975bdd151787bb12537908464f87695ecc3f1c26cf553220ee86d3c06c2
+      self_updating: true
+      official_support: true
+      platform_requirements:
+        - os: linux
+          arch: amd64
+    - install_method: appimage
+      install_command: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux-arm64.AppImage orca-linux-arm64.AppImage --gui
+      installed_binary: orca-linux-arm64.AppImage
+      uninstall_command: orca-linux-arm64.AppImage
+      download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-linux-arm64.AppImage
+      destination: ~/Applications/
+      verification:
+        sha256: 34db076dbf51c89f01a73db9ef6a17c42bb99124e95de197ef579f2cdd9faae6
+      self_updating: true
+      official_support: true
+      platform_requirements:
+        - os: linux
+          arch: arm64

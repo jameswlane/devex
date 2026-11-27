@@ -1,0 +1,39 @@
+# Upstream: https://github.com/openchamber/openchamber (https://openchamber.dev)
+name: OpenChamber
+description: Multi-platform web, desktop, and mobile agentic workspace built on OpenCode
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: openchamber
+  uninstall_command: openchamber
+  brew_cask: true
+  self_updating: true
+  official_support: true
+windows:
+  install_method: winget
+  install_command: OpenChamber.OpenChamber
+  uninstall_command: OpenChamber.OpenChamber
+  self_updating: true
+  official_support: true
+linux:
+  # Installs the official @openchamber/web CLI and local server (which bundles
+  # the matching OpenCode server) via mise with Node.js 24 (upstream requires
+  # Node.js >=24.14.0; Node 24 avoids Node 26's libatomic.so.1 requirement on
+  # Debian/Ubuntu). Works on headless servers and desktops across amd64/arm64.
+  install_method: mise
+  install_command: node@24 npm:@openchamber/web@latest
+  uninstall_command: npm:@openchamber/web
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+  post_install:
+    - scope: user
+      shell: |
+        set -eu
+        echo "OpenChamber installed via mise (binds to 127.0.0.1:3000 by default; no service was enabled)."
+        echo "Start it manually with: openchamber"
+        echo "To opt in to a user startup service later: openchamber startup enable"

@@ -1,0 +1,82 @@
+# Upstream: https://github.com/smtg-ai/claude-squad (https://smtg-ai.github.io/claude-squad/)
+name: Claude Squad
+description: Terminal TUI for managing multiple AI coding agents in isolated tmux sessions and Git worktrees
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: claude-squad
+  uninstall_command: claude-squad
+  official_support: true
+  dependencies:
+    - tmux
+    - git
+    - GitHub CLI
+linux:
+  # Installs the pinned official GitHub release archive verified against
+  # upstream checksums.txt instead of upstream install.sh (which runs sudo
+  # apt-get and appends to shell rc files without checksum verification).
+  # Also links /usr/local/bin/cs -> /usr/local/bin/claude-squad when free.
+  install_method: curlpipe
+  installed_binary: claude-squad
+  download_url: https://github.com/smtg-ai/claude-squad/releases/download/v1.0.20/claude-squad_1.0.20_linux_amd64.tar.gz
+  destination: /usr/local/bin
+  verification:
+    sha256: 42574a4e1700119774f21fb4ced45df4fb1e0bde74a2132e7bca537b050c4863
+  self_updating: false
+  official_support: true
+  dependencies:
+    - tmux
+    - git
+    - GitHub CLI
+  platform_requirements:
+    - os: linux
+      arch: amd64
+  post_install:
+    - scope: system
+      shell: |
+        set -eu
+        if [ ! -e /usr/local/bin/cs ]; then
+          ln -s /usr/local/bin/claude-squad /usr/local/bin/cs
+        fi
+  uninstall_command: |
+    set -eu
+    SUDO=""
+    if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+    if [ -L /usr/local/bin/cs ] && [ "$(readlink /usr/local/bin/cs 2>/dev/null || true)" = "/usr/local/bin/claude-squad" ]; then
+      $SUDO rm -f /usr/local/bin/cs
+    fi
+    $SUDO rm -f /usr/local/bin/claude-squad
+  alternatives:
+    - install_method: curlpipe
+      installed_binary: claude-squad
+      download_url: https://github.com/smtg-ai/claude-squad/releases/download/v1.0.20/claude-squad_1.0.20_linux_arm64.tar.gz
+      destination: /usr/local/bin
+      verification:
+        sha256: 9139d192d77f4d35209f7e6c81beb64264dd78f86933f6b2ef35574b7a8c7102
+      self_updating: false
+      official_support: true
+      dependencies:
+        - tmux
+        - git
+        - GitHub CLI
+      platform_requirements:
+        - os: linux
+          arch: arm64
+      post_install:
+        - scope: system
+          shell: |
+            set -eu
+            if [ ! -e /usr/local/bin/cs ]; then
+              ln -s /usr/local/bin/claude-squad /usr/local/bin/cs
+            fi
+      uninstall_command: |
+        set -eu
+        SUDO=""
+        if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+        if [ -L /usr/local/bin/cs ] && [ "$(readlink /usr/local/bin/cs 2>/dev/null || true)" = "/usr/local/bin/claude-squad" ]; then
+          $SUDO rm -f /usr/local/bin/cs
+        fi
+        $SUDO rm -f /usr/local/bin/claude-squad
