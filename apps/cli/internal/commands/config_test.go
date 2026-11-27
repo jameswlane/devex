@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -338,6 +339,32 @@ configure_ssh: false`,
 				appPath := filepath.Join(configDir, "applications", "development", "git.yaml")
 				Expect(appPath).To(BeAnExistingFile())
 				Expect(filepath.Join(configDir, "applications.yaml")).NotTo(BeAnExistingFile())
+			})
+
+			It("runs the editor in the config directory with relative paths, so the Windows command line stays short", func() {
+				if runtime.GOOS == "windows" {
+					Skip("records arguments with a POSIX shell script")
+				}
+				record := filepath.Join(GinkgoT().TempDir(), "editor-args")
+				editor := filepath.Join(GinkgoT().TempDir(), "record-editor")
+				Expect(os.WriteFile(editor, []byte("#!/bin/sh\npwd -P > \""+record+"\"\nprintf '%s\\n' \"$@\" >> \""+record+"\"\n"), 0o700)).To(Succeed())
+				GinkgoT().Setenv("EDITOR", editor)
+
+				cmd := commands.NewConfigCmd(mockRepo, *settings)
+				cmd.SetArgs([]string{"edit", "applications"})
+				Expect(cmd.Execute()).To(Succeed())
+
+				data, err := os.ReadFile(record)
+				Expect(err).NotTo(HaveOccurred())
+				lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+				resolvedConfigDir, err := filepath.EvalSymlinks(configDir)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lines[0]).To(Equal(resolvedConfigDir))
+				Expect(len(lines)).To(BeNumerically(">", 1))
+				for _, arg := range lines[1:] {
+					Expect(filepath.IsAbs(arg)).To(BeFalse(), arg)
+					Expect(filepath.Join(configDir, arg)).To(BeAnExistingFile())
+				}
 			})
 		})
 	})

@@ -518,7 +518,21 @@ func editConfiguration(ctx context.Context, settings config.CrossPlatformSetting
 	if err != nil {
 		return err
 	}
+	// Run from the config directory with relative paths: Windows caps a .cmd
+	// editor's command line (code.cmd, for example) at 8191 characters, and the
+	// catalog has enough files to pass that with absolute paths.
+	if strings.ContainsAny(editor, `/\`) && !filepath.IsAbs(editor) {
+		if abs, absErr := filepath.Abs(editor); absErr == nil {
+			editor = abs
+		}
+	}
+	for i, file := range files {
+		if rel, relErr := filepath.Rel(configDir, file); relErr == nil {
+			files[i] = rel
+		}
+	}
 	cmd := exec.CommandContext(ctx, editor, files...) // #nosec G702 -- opens the user's own $EDITOR by design
+	cmd.Dir = configDir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
