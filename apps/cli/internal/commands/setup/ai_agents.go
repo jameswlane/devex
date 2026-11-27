@@ -306,7 +306,8 @@ func (m *SetupModel) succeededHarnessIDs() []string {
 		if !ok {
 			continue
 		}
-		if outcome, hasOutcome := recorded[app.Name]; hasOutcome && (outcome == tui.OutcomeFailed || outcome == tui.OutcomeCanceled) {
+		// Only an agent this run installed or found installed gets configured.
+		if outcome := recorded[app.Name]; outcome != tui.OutcomeInstalled && outcome != tui.OutcomeSkipped {
 			continue
 		}
 		ids = append(ids, id)

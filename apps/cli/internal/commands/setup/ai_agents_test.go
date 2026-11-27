@@ -353,6 +353,7 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			model.installation.outcomeRecorder().Record("Claude Code", tui.OutcomeInstalled, nil)
 			model.installation.outcomeRecorder().Record("Gemini CLI", tui.OutcomeInstalled, nil)
 
+			recordSelectedAgentsInstalled(model)
 			model.handleAIAgentsConfiguration(context.Background(), nil)
 
 			agentsPath := filepath.Join(settings.GetUserConfigDir(), "agents.yaml")
@@ -393,6 +394,7 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			model.selections.selectedAIAgents["Claude Code"] = true
 			model.selections.aiAgentPreset = ""
 
+			recordSelectedAgentsInstalled(model)
 			model.handleAIAgentsConfiguration(context.Background(), nil)
 
 			agentsPath := filepath.Join(settings.GetUserConfigDir(), "agents.yaml")
@@ -415,6 +417,7 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			model.selections.selectedAIAgents["Codex CLI"] = true
 			model.selections.aiAgentPreset = config.AgentPresetStrict
 
+			recordSelectedAgentsInstalled(model)
 			model.handleAIAgentsConfiguration(context.Background(), nil)
 
 			after, err := os.ReadFile(agentsPath)
@@ -433,12 +436,27 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			model.selections.selectedAIAgents["Claude Code"] = true
 
 			Expect(model.renderAIAgentsPreview()).To(ContainSubstring("Keep existing agents configuration unchanged"))
+			recordSelectedAgentsInstalled(model)
 			model.handleAIAgentsConfiguration(context.Background(), nil)
 
 			_, statErr := os.Stat(filepath.Join(tierSettings.GetUserConfigDir(), "agents.yaml"))
 			Expect(os.IsNotExist(statErr)).To(BeTrue())
 			Expect(applyCalls).To(BeEmpty())
 			Expect(model.installation.getChanges()).To(ContainElement(keptAgentsConfigNote))
+		})
+
+		It("configures only agents whose install succeeded", func() {
+			newAgentDoctorProbe = func() agentdoctor.Probe { return fakeProbeWithSecret("") }
+			model := NewSetupModel(repo, settings, platform.DetectionResult{OS: "linux"})
+			model.selections.selectedAIAgents["Claude Code"] = true
+			model.selections.selectedAIAgents["Codex CLI"] = true
+			model.installation.outcomeRecorder().Record("Claude Code", tui.OutcomeNotRun, nil)
+
+			model.handleAIAgentsConfiguration(context.Background(), nil)
+
+			_, statErr := os.Stat(filepath.Join(settings.GetUserConfigDir(), "agents.yaml"))
+			Expect(os.IsNotExist(statErr)).To(BeTrue())
+			Expect(applyCalls).To(BeEmpty())
 		})
 
 		It("reports tool-agents apply failures as warnings without failing setup", func() {
@@ -448,6 +466,7 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			model := NewSetupModel(repo, settings, platform.DetectionResult{OS: "linux"})
 			model.selections.selectedAIAgents["Claude Code"] = true
 
+			recordSelectedAgentsInstalled(model)
 			model.handleAIAgentsConfiguration(context.Background(), nil)
 
 			Expect(model.HasErrors()).To(BeFalse())
@@ -466,6 +485,7 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			newAgentDoctorProbe = func() agentdoctor.Probe { return fakeProbeWithSecret("") }
 			model := NewSetupModel(repo, settings, platform.DetectionResult{OS: "linux"})
 
+			recordSelectedAgentsInstalled(model)
 			model.handleAIAgentsConfiguration(context.Background(), nil)
 
 			agentsPath := filepath.Join(settings.GetUserConfigDir(), "agents.yaml")
@@ -589,4 +609,11 @@ func captureStdout(fn func()) string {
 	out := <-done
 	_ = r.Close()
 	return strings.TrimSpace(out)
+}
+
+// recordSelectedAgentsInstalled records a successful install for every selected agent.
+func recordSelectedAgentsInstalled(model *SetupModel) {
+	for _, app := range model.getSelectedAIAgentApps() {
+		model.installation.outcomeRecorder().Record(app.Name, tui.OutcomeInstalled, nil)
+	}
 }

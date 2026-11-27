@@ -73,6 +73,12 @@ data-science)
 	ANSWERS=(components=jupyter,mlflow)
 	EXPECT=(svc:docker ctr:devex-jupyter ctr:devex-mlflow)
 	;;
+ai-assisted)
+	ANSWERS=(agents=claude-code,codex,gemini-cli,copilot-cli,opencode,goose,aider,kimi-code preset=balanced)
+	EXPECT=(pkg:bubblewrap pkg:socat "run:claude --version" "run:codex --version" "run:gemini --version"
+		"run:copilot --version" "run:opencode --version" "run:goose --version" "run:aider --version"
+		"run:kimi --version" "run:test -s $HOME/.config/devex/config/agents.yaml")
+	;;
 game-development)
 	ANSWERS=(engine=godot)
 	EXPECT=(flatpak:org.godotengine.Godot)

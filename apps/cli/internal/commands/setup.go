@@ -117,6 +117,11 @@ Run 'devex setup' to begin the guided installation process.`,
 			if err := setup.ValidateAIAgentSelection(settings, detectedPlatform); err != nil {
 				return err
 			}
+			// Custom setup flows have no AI agents step, so reject selections
+			// they would silently ignore before any change.
+			if setupConfig != nil && setup.IsInteractiveMode() && len(viper.GetStringSlice("setup.ai_agents.apps")) > 0 {
+				return fmt.Errorf("setup.ai_agents.apps/--ai-agents cannot be combined with a custom --config setup flow; run 'devex install <agent>' and 'devex agent apply --init' instead")
+			}
 			// Explicit application lists install through a path without the AI
 			// agents step, so reject the combination before any change.
 			if !setup.IsInteractiveMode() && viper.IsSet("applications") && len(viper.GetStringSlice("setup.ai_agents.apps")) > 0 {

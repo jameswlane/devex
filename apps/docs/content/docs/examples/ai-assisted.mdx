@@ -9,6 +9,8 @@ import { Callout } from 'fumadocs-ui/components/callout'
 
 The built-in `ai-assisted` lifecycle template installs your choice of catalog AI coding agent CLIs, prepends Linux sandbox prerequisites (`Bubblewrap`, `socat`), and writes and applies a minimal `agents.yaml` when none exists.
 
+The `agents.yaml` step and the `preset` input apply only to Claude Code, Codex CLI, Gemini CLI and OpenCode. When you pick only other agents (Copilot CLI, Goose, Aider or Kimi Code), the template installs them and writes no `agents.yaml`.
+
 ```bash
 devex template info ai-assisted
 devex init --profile ai-assisted   # optional: record the profile in ~/.devex

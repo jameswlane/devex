@@ -232,7 +232,6 @@ lifecycle:
         equals(inputs.preset, "unchanged")
         && (contains(inputs.agents, "claude-code") || contains(inputs.agents, "codex")
         || contains(inputs.agents, "gemini-cli") || contains(inputs.agents, "opencode"))
-      on_error: continue
       shell:
         command: devex
         args:
@@ -253,7 +252,6 @@ lifecycle:
         !equals(inputs.preset, "unchanged")
         && (contains(inputs.agents, "claude-code") || contains(inputs.agents, "codex")
         || contains(inputs.agents, "gemini-cli") || contains(inputs.agents, "opencode"))
-      on_error: continue
       shell:
         command: devex
         args:

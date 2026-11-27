@@ -19,6 +19,7 @@ var _ = Describe("agentapply helpers", func() {
 		GinkgoT().Setenv("PATH", "/usr/bin")
 		GinkgoT().Setenv("MISE_DATA_DIR", "")
 		GinkgoT().Setenv("XDG_DATA_HOME", "")
+		GinkgoT().Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 
 		agentapply.EnsureUserBinDirsOnPath(home)
 		agentapply.EnsureUserBinDirsOnPath(home)
