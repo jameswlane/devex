@@ -54,6 +54,10 @@ func channelSetupSettings(homeDir string) config.CrossPlatformSettings {
 						},
 					},
 				},
+				// Automated setup filters agents by the host it runs on; these
+				// blocks keep Kimi Code selectable on macOS and Windows runners.
+				MacOS:   types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:@moonshot-ai/kimi-code@latest", OfficialSupport: true},
+				Windows: types.OSConfig{InstallMethod: "mise", InstallCommand: "node@24 npm:@moonshot-ai/kimi-code@latest", OfficialSupport: true},
 			},
 			{
 				Name:                "Ghostty",

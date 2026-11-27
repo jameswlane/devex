@@ -18,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 )
 
 type channelTestInstaller struct {
@@ -180,7 +181,7 @@ var _ = Describe("Install Channels CLI", func() {
 		})
 
 		It("reads channels: and channel_order: from config.yaml and obeys flag > env > channels > channel_order", func() {
-			cfgDir := filepath.Join(tempHome, ".config", "devex")
+			cfgDir := devexpaths.ForHome(tempHome).Config
 			Expect(os.MkdirAll(cfgDir, 0o700)).To(Succeed())
 			cfgYAML := "channels:\n  kimi-code: mise\nchannel_order:\n  - snap\n  - apt\n"
 			Expect(os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(cfgYAML), 0o600)).To(Succeed())
