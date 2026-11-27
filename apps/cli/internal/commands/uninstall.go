@@ -180,6 +180,9 @@ var (
 	getUninstallInstaller  = installers.GetInstaller
 	removeOrphanedPackages = handleOrphanRemoval
 	removeDockerDataFiles  = cleanupDockerData
+	readAptManagedFile     = os.ReadFile
+	statAptManagedFile     = os.Stat
+	removeAptManagedFile   = removePrivilegedAptFile
 )
 
 func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSettings, name string) (types.AppConfig, error) {
@@ -339,7 +342,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	return executeUninstall(ctx, appsToUninstall, failures, uninstallExecution{
 		category: category, dryRun: dryRun, force: force, keepConfig: keepConfig, keepData: keepData,
 		removeOrphans: removeOrphans, cascade: cascade, backup: backup, stopServices: stopServices,
-		cleanupSystem: cleanupSystem, removeDockerData: removeDockerData,
+		cleanupSystem: cleanupSystem, removeDockerData: removeDockerData, settings: settings,
 	}, repo, out, warnings)
 }
 
@@ -348,6 +351,7 @@ type uninstallExecution struct {
 	category                                                    string
 	dryRun, force, keepConfig, keepData, removeOrphans, cascade bool
 	backup, stopServices, cleanupSystem, removeDockerData       bool
+	settings                                                    config.CrossPlatformSettings
 	// cleanupConfig removes an application's managed configuration files;
 	// cleanupConfigFiles when nil.
 	cleanupConfig func(*types.AppConfig) error
@@ -466,6 +470,14 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			if removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
 				fmt.Fprintf(out, "  Would permanently delete Docker data in /var/lib/docker and /var/lib/containerd\n")
 			}
+			for _, source := range app.AptSources {
+				if source.SourceName != "" {
+					fmt.Fprintf(out, "  Would remove APT source %s (if unchanged)\n", source.SourceName)
+				}
+				if source.KeyName != "" {
+					fmt.Fprintf(out, "  Would remove APT keyring %s (if unused by other installed apps)\n", source.KeyName)
+				}
+			}
 			fmt.Fprintf(out, "  Would clear installation records for %s (including stale records if absent)\n", app.Name)
 		}
 		if removeOrphans {
@@ -513,7 +525,7 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			continue
 		}
 
-		if !installed && keepConfig && keepData {
+		if !installed && keepConfig && keepData && len(app.AptSources) == 0 {
 			fmt.Printf("  %s Not installed (skipping)\n", yellow("⚠️"))
 			skipped++
 			if err := clearUninstallRecords(repo, app.Name); err != nil {
@@ -593,6 +605,14 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 				fmt.Printf("  %s Warning: Failed to clean up system files: %v\n", yellow("⚠️"), err)
 			} else {
 				fmt.Printf("  %s Cleaned up system files\n", green("🧹"))
+			}
+		}
+
+		if len(app.AptSources) > 0 {
+			if err := cleanupAptSources(ctx, &app, repo, opts.settings, out, warnings); err != nil {
+				fmt.Fprintf(warnings, "  %s Warning: Failed to clean up APT sources: %v\n", yellow("⚠️"), err)
+				cleanupFailed = true
+				failures = append(failures, fmt.Errorf("%s: package removed; APT source cleanup failed: %w; tracking retained for retry or manual cleanup", app.Name, err))
 			}
 		}
 
@@ -917,4 +937,143 @@ if [ -d /run/systemd/system ]; then
 fi
 rm -rf -- /var/lib/docker /var/lib/containerd`})
 	return err
+}
+
+var allowedAptManagedDirs = []string{
+	"/etc/apt/sources.list.d",
+	"/etc/apt/keyrings",
+	"/usr/share/keyrings",
+}
+
+// validateAptManagedPath ensures APT source and keyring cleanup only touches
+// files inside the standard APT source and keyring directories.
+func validateAptManagedPath(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("refusing to remove empty APT path")
+	}
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("refusing to remove non-absolute APT path %q", path)
+	}
+	cleaned := filepath.Clean(path)
+	for _, dir := range allowedAptManagedDirs {
+		if strings.HasPrefix(cleaned, dir+"/") && cleaned != dir {
+			return cleaned, nil
+		}
+	}
+	return "", fmt.Errorf("refusing to remove APT path %q outside allowed directories (/etc/apt/sources.list.d/, /etc/apt/keyrings/, /usr/share/keyrings/)", path)
+}
+
+func removePrivilegedAptFile(ctx context.Context, path string) error {
+	cleaned, err := validateAptManagedPath(path)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, "sudo", "-n", "rm", "-f", "--", cleaned) //nolint:gosec // path is validated against fixed APT directories
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(output))
+		if detail != "" {
+			return fmt.Errorf("remove %s: %w (%s)", cleaned, err, detail)
+		}
+		return fmt.Errorf("remove %s: %w", cleaned, err)
+	}
+	return nil
+}
+
+// aptSourceReferencedByOtherApp reports whether another application currently
+// tracked as installed in repo declares targetPath as a key_name or source_name.
+func aptSourceReferencedByOtherApp(repo types.Repository, settings config.CrossPlatformSettings, currentAppName, targetPath string) (string, bool) {
+	if repo == nil || strings.TrimSpace(targetPath) == "" {
+		return "", false
+	}
+	target := filepath.Clean(targetPath)
+	installed, err := repo.ListApps()
+	if err != nil {
+		return "", false
+	}
+	for _, tracked := range installed {
+		if strings.EqualFold(tracked.Name, currentAppName) {
+			continue
+		}
+		resolved, err := resolveUninstallApp(repo, settings, tracked.Name)
+		if err != nil {
+			resolved = tracked
+		}
+		for _, src := range resolved.AptSources {
+			if (src.KeyName != "" && filepath.Clean(src.KeyName) == target) ||
+				(src.SourceName != "" && filepath.Clean(src.SourceName) == target) {
+				return tracked.Name, true
+			}
+		}
+	}
+	return "", false
+}
+
+// cleanupAptSources removes APT source files and keyrings that DevEx added for
+// app, preserving modified source files and shared keyrings/sources.
+func cleanupAptSources(ctx context.Context, app *types.AppConfig, repo types.Repository, settings config.CrossPlatformSettings, out, warnings io.Writer) error {
+	if len(app.AptSources) == 0 {
+		return nil
+	}
+	var errs []error
+	for _, source := range app.AptSources {
+		if source.SourceName != "" {
+			cleanedSource, err := validateAptManagedPath(source.SourceName)
+			if err != nil {
+				errs = append(errs, err)
+			} else if owner, shared := aptSourceReferencedByOtherApp(repo, settings, app.Name, cleanedSource); shared {
+				log.Info("Keeping shared APT source", "path", cleanedSource, "used_by", owner)
+			} else {
+				content, readErr := readAptManagedFile(cleanedSource)
+				switch {
+				case readErr == nil:
+					if strings.TrimSpace(string(content)) != strings.TrimSpace(source.SourceRepo) {
+						fmt.Fprintf(warnings, "  Warning: leaving APT source %s unchanged because its contents were modified\n", cleanedSource)
+					} else if err := removeAptManagedFile(ctx, cleanedSource); err != nil {
+						errs = append(errs, fmt.Errorf("failed to remove APT source %s: %w", cleanedSource, err))
+					} else {
+						fmt.Fprintf(out, "  Removed APT source %s\n", cleanedSource)
+					}
+				case errors.Is(readErr, os.ErrNotExist):
+					// Already removed; nothing to do.
+				default:
+					errs = append(errs, fmt.Errorf("failed to read APT source %s: %w", cleanedSource, readErr))
+				}
+			}
+		}
+
+		if source.KeyName != "" {
+			cleanedKey, err := validateAptManagedPath(source.KeyName)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			sharedKey := false
+			if owner, used := aptSourceReferencedByOtherApp(repo, settings, app.Name, cleanedKey); used {
+				log.Info("Keeping shared APT keyring", "path", cleanedKey, "used_by", owner)
+				sharedKey = true
+			} else if source.SourceName != "" {
+				if owner, used := aptSourceReferencedByOtherApp(repo, settings, app.Name, source.SourceName); used {
+					log.Info("Keeping APT keyring referenced via shared source", "path", cleanedKey, "used_by", owner)
+					sharedKey = true
+				}
+			}
+			if sharedKey {
+				continue
+			}
+			if _, statErr := statAptManagedFile(cleanedKey); statErr != nil {
+				if errors.Is(statErr, os.ErrNotExist) {
+					continue
+				}
+				errs = append(errs, fmt.Errorf("failed to stat APT keyring %s: %w", cleanedKey, statErr))
+				continue
+			}
+			if err := removeAptManagedFile(ctx, cleanedKey); err != nil {
+				errs = append(errs, fmt.Errorf("failed to remove APT keyring %s: %w", cleanedKey, err))
+			} else {
+				fmt.Fprintf(out, "  Removed APT keyring %s\n", cleanedKey)
+			}
+		}
+	}
+	return errors.Join(errs...)
 }

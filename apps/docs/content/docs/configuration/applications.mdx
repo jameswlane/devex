@@ -77,6 +77,20 @@ User-scoped installer scripts (`install_scope: user`) run without `sudo` so bina
 | Aider | `mise uv@latest pipx:aider-chat[python=3.12]@latest` | `mise uv@latest pipx:aider-chat[python=3.12]@latest` | `mise uv@latest pipx:aider-chat[python=3.12]@latest` | `mise upgrade` | `mise` tool (`pipx:aider-chat`) |
 | Goose | `mise aqua:aaif-goose/goose@latest` | `brew block-goose-cli` | not packaged | `mise upgrade` / `brew upgrade` | `mise` tool or Homebrew formula |
 
+## AI Code Editors
+
+The `AI Code Editors` category (`applications/ai-agents/{cursor,windsurf,zed}.yaml`) ships opt-in (`default: false`) definitions for GUI AI code editors, kept separate from `AI Coding Agents` so `--categories "AI Coding Agents"` does not pull in desktop editors. Install an editor with `devex install cursor` or install the category with `devex install --categories "AI Code Editors"`.
+
+All three editors declare `desktop_environments: [graphical]`. On headless Linux hosts (no `DISPLAY`, `WAYLAND_DISPLAY`, or `XDG_CURRENT_DESKTOP` session and no installed `.desktop` entries in `/usr/share/xsessions` or `/usr/share/wayland-sessions`), DevEx skips them with a notice instead of installing unused GUI binaries. Workstations accessed over SSH with an installed X11 or Wayland session still match.
+
+Uninstalling an APT-backed editor removes the package, the DevEx-managed APT source file under `/etc/apt/sources.list.d/` (only when its contents are unchanged), and its keyring under `/etc/apt/keyrings/` (unless another tracked application references it).
+
+| Editor | Linux | macOS | Notes | Uninstall removes |
+| --- | --- | --- | --- | --- |
+| Cursor | `apt cursor` (signed `downloads.cursor.com` repo, `amd64`/`arm64`) | `brew --cask cursor` | Official signed APT repository with pinned GPG fingerprint | `cursor` package, `/etc/apt/sources.list.d/cursor.list`, `/etc/apt/keyrings/cursor.gpg` |
+| Windsurf | `apt devin-desktop` (signed `windsurf-stable.codeiumdata.com` repo, `amd64` only) | not packaged | Renamed by the vendor to Devin Desktop; unsupported on `linux/arm64` | `devin-desktop` package, `/etc/apt/sources.list.d/windsurf.list`, `/etc/apt/keyrings/windsurf-stable.gpg` |
+| Zed | `curlpipe --user` (`https://zed.dev/install.sh`) | `brew --cask zed` | Self-updating (`devex` skips); installs `~/.local/zed.app`, `~/.local/bin/zed`, and `dev.zed.Zed.desktop` | `~/.local/zed.app`, `~/.local/bin/zed`, `~/.local/share/applications/dev.zed.Zed.desktop` |
+
 ### Homebrew formulae and Casks
 
 On macOS, `install_method: brew` installs a formula unless you select a Cask. Select GUI apps with `options: [--cask]` (or `install_command: --cask NAME`); the older `brew_cask: true` flag means the same thing. DevEx uses the selection for installation, `devex status` checks and removal. `--cask` and `--formula` are the only Homebrew options accepted.

@@ -124,4 +124,25 @@ var _ = Describe("Desktop application selection", func() {
 		Expect(view).To(ContainSubstring("↑ more"))
 		Expect(strings.Split(view, "\n")).To(HaveLen(24))
 	})
+
+	It("honors graphical desktop requirements in setup filtering", func() {
+		cursor := desktopAppForTest("Cursor", "AI Code Editors")
+		cursor.DesktopEnvironments = []string{types.DesktopEnvironmentGraphical}
+		settings := desktopSettingsForTest(cursor)
+
+		// Active GNOME desktop shows the graphical editor.
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"})).To(HaveLen(1))
+
+		// Explicit headless / none hides it.
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "none"})).To(BeEmpty())
+
+		// Unknown DE defers to the graphical desktop detector (covers Sway/SSH vs headless).
+		restoreHeadless := platform.SetGraphicalDesktopForTesting(false)
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "unknown"})).To(BeEmpty())
+		restoreHeadless()
+
+		restoreDesktop := platform.SetGraphicalDesktopForTesting(true)
+		defer restoreDesktop()
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "unknown"})).To(HaveLen(1))
+	})
 })

@@ -1,0 +1,34 @@
+name: Cursor
+description: AI-first code editor built on Visual Studio Code
+category: AI Code Editors
+default: false
+desktop_environments:
+  - graphical
+macos:
+  install_method: brew
+  install_command: cursor
+  uninstall_command: cursor
+  brew_cask: true
+  official_support: true
+linux:
+  install_method: apt
+  install_command: cursor
+  installed_binary: cursor
+  uninstall_command: cursor
+  official_support: true
+  apt_sources:
+    - key_source: https://downloads.cursor.com/keys/anysphere.asc
+      key_name: /etc/apt/keyrings/cursor.gpg
+      key_fingerprint: 380FF4BCDC34A4BD92A3565342A1772E62E492D6
+      require_dearmor: true
+      source_repo: deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/cursor.gpg] https://downloads.cursor.com/aptrepo stable main
+      source_name: /etc/apt/sources.list.d/cursor.list
+  platform_requirements:
+    - os: debian
+      dependencies:
+        - curl
+        - gnupg
+    - os: ubuntu
+      dependencies:
+        - curl
+        - gnupg

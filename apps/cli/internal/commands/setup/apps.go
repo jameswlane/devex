@@ -252,7 +252,7 @@ func isDesktopApp(app types.CrossPlatformApp) bool {
 	desktopCategories := []string{
 		"Text Editors", "IDEs", "Browsers", "Communication",
 		"Media", "Graphics", "Productivity", "Utility", "Optional Apps",
-		"Terminal Emulators",
+		"Terminal Emulators", "AI Code Editors",
 	}
 
 	for _, category := range desktopCategories {
@@ -290,10 +290,19 @@ func isCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platf
 }
 
 func isCompatibleWithDesktopEnvironment(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
-	if detectedPlatform.DesktopEnv == "unknown" || detectedPlatform.DesktopEnv == "" {
+	if detectedPlatform.OS != "linux" {
 		return true
 	}
-	if detectedPlatform.OS != "linux" {
+	if app.RequiresGraphicalDesktop() {
+		if detectedPlatform.DesktopEnv == "none" || detectedPlatform.DesktopEnv == "headless" {
+			return false
+		}
+		if detectedPlatform.DesktopEnv != "" && detectedPlatform.DesktopEnv != "unknown" {
+			return true
+		}
+		return platform.HasGraphicalDesktop()
+	}
+	if detectedPlatform.DesktopEnv == "unknown" || detectedPlatform.DesktopEnv == "" {
 		return true
 	}
 	return app.IsCompatibleWithDesktopEnvironment(detectedPlatform.DesktopEnv)

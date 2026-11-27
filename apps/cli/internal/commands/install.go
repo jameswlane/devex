@@ -183,12 +183,18 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 			}
 
 			if viper.GetBool("rollback-on-failure") && !dryRun {
-				apps, resolvedSettings, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories})
+				selection, err := agentapi.SelectApplicationsWithWarnings(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories})
 				if err != nil {
 					return err
 				}
+				for _, warning := range selection.Warnings {
+					fmt.Fprintln(cmd.OutOrStdout(), warning)
+				}
+				if len(selection.Apps) == 0 && len(selection.Warnings) > 0 {
+					return nil
+				}
 				fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
-				return runRollbackBatch(ctx, cmd.ErrOrStderr(), apps, repo, resolvedSettings, getPluginBootstrap)
+				return runRollbackBatch(ctx, cmd.ErrOrStderr(), selection.Apps, repo, selection.Settings, getPluginBootstrap)
 			}
 			return executeInstallWithOutput(ctx, args, categories, verbose, dryRun, repo, settings, cmd.OutOrStdout(), getPluginBootstrap)
 		},
@@ -253,14 +259,22 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 		return fmt.Errorf("invalid inputs: %w", err)
 	}
 
-	appsToInstall, settings, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: apps, Categories: categories})
+	selection, err := agentapi.SelectApplicationsWithWarnings(ctx, settings, agentapi.PlanRequest{Names: apps, Categories: categories})
 	if err != nil {
 		return err
 	}
+	for _, warning := range selection.Warnings {
+		fmt.Fprintln(out, warning)
+	}
+	appsToInstall := selection.Apps
+	settings = selection.Settings
 
 	// Handle dry run
 	if dryRun {
 		return previewInstallation(ctx, appsToInstall, provider, out)
+	}
+	if len(appsToInstall) == 0 && len(selection.Warnings) > 0 {
+		return nil
 	}
 	return installSelected(ctx, span, appsToInstall, repo, settings, out, provider)
 }
@@ -378,6 +392,14 @@ func executeSnapshotObserved(ctx context.Context, out, errOut io.Writer, snapsho
 	settings := snapshot.Settings
 	if err := pinExecution(snapshot); err != nil {
 		return err
+	}
+	for _, warning := range snapshot.Plan.Warnings {
+		if strings.HasPrefix(warning, "Skipped ") {
+			fmt.Fprintln(out, warning)
+		}
+	}
+	if len(snapshot.Roots) == 0 && len(snapshot.Plan.Warnings) > 0 {
+		return nil
 	}
 	// Pin the confirmed local files for every step that reads them.
 	ctx = execinputs.With(ctx, snapshot.Inputs)
