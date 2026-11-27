@@ -403,6 +403,25 @@ func (config OSConfig) IsHookDrivenCurlpipe() bool {
 		(len(config.PreInstall) > 0 || len(config.PostInstall) > 0)
 }
 
+// AppSlug is the kebab-case form of an application name, which is also how
+// catalog files are named: "Claude Code" becomes "claude-code".
+func AppSlug(name string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			if dash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			dash = false
+			b.WriteRune(r)
+			continue
+		}
+		dash = true
+	}
+	return b.String()
+}
+
 // CrossPlatformApp defines an application with OS-specific installation methods
 type CrossPlatformApp struct {
 	Name                string   `mapstructure:"name" yaml:"name"`
