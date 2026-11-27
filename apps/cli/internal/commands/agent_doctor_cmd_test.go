@@ -415,7 +415,8 @@ var _ = Describe("Agent doctor and login commands", func() {
 				LookPath: func(name string) (string, error) {
 					switch name {
 					case "ollama":
-						return "/usr/local/bin/ollama", nil
+						// The sentinel in the path makes the assertions below cover BinaryPath redaction.
+						return "/usr/local/bin/ollama-" + sentinel, nil
 					case "systemctl":
 						return "/usr/bin/systemctl", nil
 					default:
@@ -424,7 +425,7 @@ var _ = Describe("Agent doctor and login commands", func() {
 				},
 				Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
 					switch name {
-					case "/usr/local/bin/ollama":
+					case "/usr/local/bin/ollama-" + sentinel:
 						return []byte("ollama version is 0.6.2 " + sentinel + "\n"), nil
 					case "/usr/bin/systemctl":
 						return []byte("active\n"), nil
