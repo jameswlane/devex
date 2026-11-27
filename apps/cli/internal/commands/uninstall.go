@@ -221,6 +221,25 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 	return types.AppConfig{}, fmt.Errorf("application %q is not tracked by DevEx and was not found in configuration", name)
 }
 
+// canonicalUninstallName maps a kebab-case name such as claude-code to the
+// application it names: a tracked application first, then the catalog.
+func canonicalUninstallName(repo types.Repository, settings config.CrossPlatformSettings, name string) string {
+	slug := types.AppSlug(name)
+	if tracked, err := repo.ListApps(); err == nil && slug != "" {
+		for _, app := range tracked {
+			if strings.EqualFold(app.Name, name) {
+				return app.Name
+			}
+		}
+		for _, app := range tracked {
+			if types.AppSlug(app.Name) == slug {
+				return app.Name
+			}
+		}
+	}
+	return settings.CanonicalAppName(name)
+}
+
 func clearUninstallRecords(repo types.Repository, name string) error {
 	if err := repo.DeleteApp(name); err != nil {
 		return fmt.Errorf("failed to remove installation record: %w", err)
@@ -326,7 +345,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	case len(apps) > 0:
 		for _, appName := range apps {
 			for _, name := range strings.Split(appName, ",") {
-				name = strings.TrimSpace(name)
+				name = canonicalUninstallName(repo, settings, strings.TrimSpace(name))
 				app, err := resolveUninstallApp(repo, settings, name)
 				if err != nil {
 					fmt.Printf("%s %v\n", yellow("⚠️"), err)

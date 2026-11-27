@@ -295,6 +295,13 @@ var _ = Describe("Uninstall Command", func() {
 			Expect(resolved.ConfigFiles).To(Equal(definition.AllPlatforms.ConfigFiles))
 		})
 
+		It("finds a tracked app by its kebab-case name", func() {
+			Expect(mockRepo.AddApp("Claude Code")).To(Succeed())
+			Expect(commands.CanonicalUninstallName(mockRepo, settings, "claude-code")).To(Equal("Claude Code"))
+			Expect(commands.CanonicalUninstallName(mockRepo, settings, "claude code")).To(Equal("Claude Code"))
+			Expect(commands.CanonicalUninstallName(mockRepo, settings, "other-app")).To(Equal("other-app"))
+		})
+
 		It("keeps support for known catalog apps installed outside DevEx", func() {
 			definition := types.CrossPlatformApp{
 				Name: "external-app",

@@ -15,6 +15,7 @@ var (
 	RemoveFileIfExists            = removeFileIfExists
 	ValidateEnvironmentName       = validateEnvironmentName
 	ResolveUninstallApp           = resolveUninstallApp
+	CanonicalUninstallName        = canonicalUninstallName
 	StatusErrorSummary            = statusErrorSummary
 	AptSourceReferencedByOtherApp = aptSourceReferencedByOtherApp
 )

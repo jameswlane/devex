@@ -837,7 +837,24 @@ func (s *CrossPlatformSettings) GetApplicationByName(name string) (*types.AppCon
 			return &legacyApp, nil
 		}
 	}
+	slug := types.AppSlug(name)
+	for _, app := range allApps {
+		if slug != "" && types.AppSlug(app.Name) == slug {
+			legacyApp := app.ToLegacyAppConfig()
+			return &legacyApp, nil
+		}
+	}
 	return nil, fmt.Errorf("application '%s' not found", name)
+}
+
+// CanonicalAppName returns the catalog name of the application that name
+// refers to, by name or by its kebab-case form (claude-code for Claude
+// Code), or name unchanged when no catalog application matches.
+func (s *CrossPlatformSettings) CanonicalAppName(name string) string {
+	if app, err := s.GetApplicationByName(name); err == nil && app != nil {
+		return app.Name
+	}
+	return name
 }
 
 // GetApplications returns all applications as legacy AppConfig slice

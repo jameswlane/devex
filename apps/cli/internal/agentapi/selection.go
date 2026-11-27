@@ -28,6 +28,20 @@ func ResolveAppsByName(settings config.CrossPlatformSettings, requested []string
 			byName[normalizeInstallLookup(osConfig.InstallCommand)] = app
 		}
 	}
+	// Kebab-case names (claude-code) match too, after exact names.
+	for _, app := range apps {
+		slug := types.AppSlug(app.Name)
+		if slug == "" {
+			continue
+		}
+		target := byName
+		if !app.IsSupported() {
+			target = unsupported
+		}
+		if _, exists := target[slug]; !exists {
+			target[slug] = app
+		}
+	}
 
 	resolved := make([]types.CrossPlatformApp, 0, len(requested))
 	var unknown []string
@@ -35,6 +49,15 @@ func ResolveAppsByName(settings config.CrossPlatformSettings, requested []string
 	for _, name := range requested {
 		key := normalizeInstallLookup(name)
 		app, ok := byName[key]
+		if !ok {
+			if slug := types.AppSlug(name); slug != "" {
+				if app, ok = byName[slug]; !ok {
+					if _, exists := unsupported[key]; !exists {
+						key = slug
+					}
+				}
+			}
+		}
 		if !ok {
 			if candidate, exists := unsupported[key]; exists {
 				cfg := candidate.GetOSConfig()
