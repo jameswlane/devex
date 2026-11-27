@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -80,6 +81,9 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 	}
 
 	BeforeEach(func() {
+		if runtime.GOOS == "windows" {
+			Skip("APT sources and keyrings exist only on POSIX hosts")
+		}
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 

@@ -1029,7 +1029,8 @@ func anyRemainingAptSourceReferencesKey(cleanedKey string) bool {
 // recorded as created for app, preserving modified source files, unowned files,
 // and keyrings still needed by any kept or remaining source file.
 func cleanupAptSources(ctx context.Context, app *types.AppConfig, repo types.Repository, settings config.CrossPlatformSettings, out, warnings io.Writer) error {
-	if len(app.AptSources) == 0 {
+	// APT paths are POSIX paths; Windows never has APT sources to clean up.
+	if len(app.AptSources) == 0 || runtime.GOOS == "windows" {
 		return nil
 	}
 	appOwner := tui.NormalizeAptOwner(app.Name)
