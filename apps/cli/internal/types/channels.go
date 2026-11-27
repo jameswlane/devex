@@ -153,11 +153,19 @@ func (app *CrossPlatformApp) Channels() []ChannelInfo {
 	all = append(all, primary.Alternatives...)
 
 	infos := make([]ChannelInfo, 0, len(all))
+	index := map[string]int{}
 	for _, cfg := range all {
 		name := cfg.ChannelName()
 		if name == "" {
 			continue
 		}
+		// Platform variants of one channel are listed once.
+		if i, seen := index[strings.ToLower(name)]; seen {
+			infos[i].Official = infos[i].Official || cfg.OfficialSupport
+			infos[i].Available = infos[i].Available || isChannelAvailable(cfg)
+			continue
+		}
+		index[strings.ToLower(name)] = len(infos)
 		infos = append(infos, ChannelInfo{
 			Name:          name,
 			InstallMethod: cfg.InstallMethod,
@@ -233,14 +241,16 @@ func (app CrossPlatformApp) WithChannel(name string) (CrossPlatformApp, error) {
 			}
 		}
 	} else {
+		// Several entries may share a channel name when they are platform
+		// variants of one channel (for example amd64 and arm64 archives); pick
+		// the first one available on this platform.
 		for i, cfg := range all {
 			if strings.EqualFold(cfg.ChannelName(), wanted) {
 				if isChannelAvailable(cfg) {
 					matchIdx = i
-				} else {
-					knownButUnavailable = true
+					break
 				}
-				break
+				knownButUnavailable = true
 			}
 		}
 	}

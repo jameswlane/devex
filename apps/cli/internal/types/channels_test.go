@@ -20,6 +20,51 @@ var _ = Describe("Application install channels", func() {
 		}))
 	})
 
+	Context("with per-architecture variants of one channel", func() {
+		variantApp := func() types.CrossPlatformApp {
+			return types.CrossPlatformApp{
+				Name: "squad",
+				Linux: types.OSConfig{
+					InstallMethod:        "curlpipe",
+					DownloadURL:          "https://example.invalid/squad_amd64.tar.gz",
+					OfficialSupport:      true,
+					PlatformRequirements: []types.PlatformRequirement{{OS: "linux", Arch: "amd64"}},
+					Alternatives: []types.OSConfig{
+						{
+							InstallMethod:        "curlpipe",
+							DownloadURL:          "https://example.invalid/squad_arm64.tar.gz",
+							OfficialSupport:      true,
+							PlatformRequirements: []types.PlatformRequirement{{OS: "linux", Arch: "arm64"}},
+						},
+						{InstallMethod: "mise", InstallCommand: "squad@latest"},
+					},
+				},
+			}
+		}
+
+		It("lists the channel once and selects the variant for this architecture", func() {
+			DeferCleanup(types.PinCatalogArchForTesting("arm64"))
+			DeferCleanup(types.PinCatalogPlatformForTesting(platform.DetectionResult{
+				OS: "linux", Distribution: "ubuntu", DistributionLike: []string{"debian"}, Version: "24.04", Architecture: "arm64",
+			}))
+			app := variantApp()
+			Expect(app.Channels()).To(HaveLen(2))
+			Expect(app.Channels()[0]).To(And(HaveField("Name", "curlpipe"), HaveField("Available", true), HaveField("Default", true)))
+
+			fromMise, err := app.WithChannel("mise")
+			Expect(err).NotTo(HaveOccurred())
+			back, err := fromMise.WithChannel("curlpipe")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(back.GetOSConfig().DownloadURL).To(Equal("https://example.invalid/squad_arm64.tar.gz"))
+		})
+
+		It("keeps the amd64 variant on amd64", func() {
+			selected, err := variantApp().WithChannel("curlpipe")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(selected.GetOSConfig().DownloadURL).To(Equal("https://example.invalid/squad_amd64.tar.gz"))
+		})
+	})
+
 	newMultiChannelApp := func() types.CrossPlatformApp {
 		return types.CrossPlatformApp{
 			Name:        "codex",

@@ -70,6 +70,31 @@ linux:
 		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
 	})
 
+	It("accepts platform variants of one channel that each declare platform_requirements", func() {
+		path := filepath.Join(settings.GetUserConfigDir(), "applications", "development", "variants.yaml")
+		write(path, `name: variant-tool
+description: Tool with per-architecture archives
+category: Development Tools
+linux:
+  install_method: apt
+  install_command: variant-tool
+  official_support: true
+  platform_requirements:
+    - os: linux
+      arch: amd64
+  alternatives:
+    - install_method: apt
+      install_command: variant-tool-arm64
+      official_support: true
+      platform_requirements:
+        - os: linux
+          arch: arm64
+`)
+		result, err := config.ValidateConfig(context.Background(), settings, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
+	})
+
 	It("rejects a platform whose primary has official_support: false while an alternative has official_support: true", func() {
 		path := filepath.Join(settings.GetUserConfigDir(), "applications", "development", "unofficial-primary.yaml")
 		write(path, `name: bad-order

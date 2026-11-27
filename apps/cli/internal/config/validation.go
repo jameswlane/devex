@@ -125,17 +125,26 @@ func (v *ConfigValidator) validateOSChannels(osConfig types.OSConfig, platform, 
 	}
 
 	seen := map[string]string{}
+	seenConfig := map[string]types.OSConfig{}
 	if primaryName := strings.ToLower(osConfig.ChannelName()); primaryName != "" {
 		seen[primaryName] = platform
+		seenConfig[primaryName] = osConfig
 	}
 
 	for i, alt := range osConfig.Alternatives {
 		altField := fmt.Sprintf("%s.alternatives[%d]", platform, i)
 		if altName := strings.ToLower(alt.ChannelName()); altName != "" {
-			if prev, duplicate := seen[altName]; duplicate {
+			prev, duplicate := seen[altName]
+			// Entries that each declare platform_requirements are platform
+			// variants of one channel (amd64 and arm64 archives, say).
+			variant := duplicate && len(alt.PlatformRequirements) > 0 && len(seenConfig[altName].PlatformRequirements) > 0
+			switch {
+			case variant:
+			case duplicate:
 				v.addError(filename, altField+".channel", fmt.Sprintf("Duplicate channel name %q (already used by %s); add an explicit channel key to distinguish channels sharing an install_method", alt.ChannelName(), prev), nil)
-			} else {
+			default:
 				seen[altName] = altField
+				seenConfig[altName] = alt
 			}
 		}
 		if !osConfig.OfficialSupport && alt.OfficialSupport {
