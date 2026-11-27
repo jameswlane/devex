@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"time"
 
 	shipconfig "github.com/jameswlane/devex/apps/cli/config"
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
@@ -142,14 +146,37 @@ var _ = Describe("AI Agent Connectors catalog", func() {
 		Entry("amp-acp", "amp-acp", "mise", "github:tao12345666333/amp-acp@latest", "github:tao12345666333/amp-acp", []string{"mise", "Amp"}),
 	)
 
-	It("points each wrapping connector at its agent when it is missing (#721)", func() {
-		for name, binary := range map[string]string{"pi-acp": "pi", "Claude Agent ACP": "claude", "Codex ACP": "codex", "MiniMax Code ACP": "mcode", "amp-acp": "amp"} {
-			hooks := connectors[name].Linux.PostInstall
-			Expect(hooks).To(HaveLen(1), name)
-			Expect(hooks[0].Shell).To(ContainSubstring("command -v "+binary), name)
-			Expect(hooks[0].Shell).To(ContainSubstring("devex install"), name)
-		}
-	})
+	DescribeTable("points each wrapping connector at its agent only when it is missing (#721)",
+		func(name, binary, agent string) {
+			if runtime.GOOS == "windows" {
+				Skip("the hooks run under sh")
+			}
+			for platform, cfg := range map[string]types.OSConfig{"linux": connectors[name].Linux, "macos": connectors[name].MacOS} {
+				Expect(cfg.PostInstall).To(HaveLen(1), "%s %s", name, platform)
+				run := func(home string) string {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					DeferCleanup(cancel)
+					cmd := exec.CommandContext(ctx, "sh", "-c", cfg.PostInstall[0].Shell)
+					cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
+					out, err := cmd.CombinedOutput()
+					Expect(err).NotTo(HaveOccurred(), string(out))
+					return string(out)
+				}
+				missing := GinkgoT().TempDir()
+				Expect(run(missing)).To(Equal(name+" runs "+agent+", which is not installed: run 'devex install \""+agent+"\"'.\n"), platform)
+
+				present := GinkgoT().TempDir()
+				Expect(os.MkdirAll(filepath.Join(present, ".local", "share", "mise", "shims"), 0o755)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(present, ".local", "share", "mise", "shims", binary), []byte("#!/bin/sh\n"), 0o755)).To(Succeed())
+				Expect(run(present)).To(BeEmpty(), platform)
+			}
+		},
+		Entry("pi-acp", "pi-acp", "pi", "Pi"),
+		Entry("Claude Agent ACP", "Claude Agent ACP", "claude", "Claude Code"),
+		Entry("Codex ACP", "Codex ACP", "codex", "Codex CLI"),
+		Entry("MiniMax Code ACP", "MiniMax Code ACP", "mcode", "MiniMax Code"),
+		Entry("amp-acp", "amp-acp", "amp", "Amp"),
+	)
 
 	DescribeTable("plans connector upgrades and uninstalls without touching the wrapped agent or config",
 		func(name, wantUpgrade, wantUninstall string) {
