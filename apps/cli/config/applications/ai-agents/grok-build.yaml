@@ -18,7 +18,7 @@ macos:
   install_scope: user
   installed_binary: grok
   self_updating: true
-  uninstall_command: for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
+  uninstall_command: for n in grok agent; do if [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" = "$HOME/.grok/bin/$n" ]; then rm -f "$HOME/.local/bin/$n" || exit 1; fi; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" || exit 1 ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
   official_support: true
   alternatives:
     - install_method: mise
@@ -51,7 +51,7 @@ linux:
   install_scope: user
   installed_binary: grok
   self_updating: true
-  uninstall_command: for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
+  uninstall_command: for n in grok agent; do if [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" = "$HOME/.grok/bin/$n" ]; then rm -f "$HOME/.local/bin/$n" || exit 1; fi; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" || exit 1 ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
   official_support: true
   alternatives:
     - install_method: mise

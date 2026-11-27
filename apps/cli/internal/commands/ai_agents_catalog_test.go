@@ -111,6 +111,23 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Expect(target).To(Equal(filepath.Join(cursor, "agent")))
 	})
 
+	It("fails Grok Build's uninstall when one of its own links cannot be removed", func() {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			Skip("needs a non-root sh to make a directory unwritable")
+		}
+		home := GinkgoT().TempDir()
+		localBin, grokBin := filepath.Join(home, ".local", "bin"), filepath.Join(home, ".grok", "bin")
+		Expect(os.MkdirAll(localBin, 0o755)).To(Succeed())
+		Expect(os.MkdirAll(grokBin, 0o755)).To(Succeed())
+		Expect(os.Symlink(filepath.Join(grokBin, "grok"), filepath.Join(localBin, "grok"))).To(Succeed())
+		Expect(os.Chmod(localBin, 0o555)).To(Succeed())
+		DeferCleanup(os.Chmod, localBin, os.FileMode(0o755))
+
+		cmd := exec.Command("sh", "-c", agents["Grok Build"].Linux.UninstallCommand)
+		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
+		Expect(cmd.Run()).To(HaveOccurred())
+	})
+
 	It("ships and strictly validates every AI coding agent definition", func() {
 		Expect(files).To(Equal([]string{
 			"aider.yaml",
@@ -290,7 +307,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("DimCode", "DimCode", "mise", "node@24 npm:dimcode@latest", "", false, []string{"Node.js"}, nil, "npm:dimcode"),
 		Entry("Dirac", "Dirac", "mise", "node@24 npm:dirac-cli@latest", "", false, []string{"Node.js"}, nil, "npm:dirac-cli"),
 		Entry("Factory Droid", "Factory Droid", "curlpipe", "https://app.factory.ai/cli", "user", true, nil, nil, `rm -f "$HOME/.local/bin/droid"`),
-		Entry("Grok Build", "Grok Build", "curlpipe", "https://x.ai/cli/install.sh", "user", true, nil, nil, `for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
+		Entry("Grok Build", "Grok Build", "curlpipe", "https://x.ai/cli/install.sh", "user", true, nil, nil, `for n in grok agent; do if [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" = "$HOME/.grok/bin/$n" ]; then rm -f "$HOME/.local/bin/$n" || exit 1; fi; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" || exit 1 ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
 		Entry("MiniMax Code", "MiniMax Code", "mise", "node@24 npm:@minimax-ai/code@latest", "", false, []string{"Node.js"}, nil, "npm:@minimax-ai/code"),
 		Entry("Nova", "Nova", "mise", "node@24 npm:@compass-ai/nova@latest", "", false, []string{"Node.js"}, nil, "npm:@compass-ai/nova"),
 		Entry("Pi", "Pi", "mise", "node@24 npm:@earendil-works/pi-coding-agent@latest", "", false, []string{"Node.js"}, nil, "npm:@earendil-works/pi-coding-agent"),
@@ -364,7 +381,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("DimCode", "DimCode", "mise: npm:dimcode"),
 		Entry("Dirac", "Dirac", "mise: npm:dirac-cli"),
 		Entry("Factory Droid", "Factory Droid", `curlpipe: rm -f "$HOME/.local/bin/droid"`),
-		Entry("Grok Build", "Grok Build", `curlpipe: for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
+		Entry("Grok Build", "Grok Build", `curlpipe: for n in grok agent; do if [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" = "$HOME/.grok/bin/$n" ]; then rm -f "$HOME/.local/bin/$n" || exit 1; fi; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" || exit 1 ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
 		Entry("MiniMax Code", "MiniMax Code", "mise: npm:@minimax-ai/code"),
 		Entry("Nova", "Nova", "mise: npm:@compass-ai/nova"),
 		Entry("Pi", "Pi", "mise: npm:@earendil-works/pi-coding-agent"),
