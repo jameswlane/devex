@@ -224,13 +224,18 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 // canonicalUninstallName maps a kebab-case name such as claude-code to the
 // application it names: a tracked application first, then the catalog.
 func canonicalUninstallName(repo types.Repository, settings config.CrossPlatformSettings, name string) string {
-	slug := types.AppSlug(name)
-	if tracked, err := repo.ListApps(); err == nil && slug != "" {
-		for _, app := range tracked {
-			if strings.EqualFold(app.Name, name) {
-				return app.Name
-			}
+	tracked, _ := repo.ListApps()
+	for _, app := range tracked {
+		if strings.EqualFold(app.Name, name) {
+			return app.Name
 		}
+	}
+	for _, app := range settings.GetAllApps() {
+		if strings.EqualFold(strings.TrimSpace(app.Name), name) {
+			return app.Name
+		}
+	}
+	if slug := types.AppSlug(name); slug != "" {
 		for _, app := range tracked {
 			if types.AppSlug(app.Name) == slug {
 				return app.Name

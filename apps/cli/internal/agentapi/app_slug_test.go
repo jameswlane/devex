@@ -40,6 +40,17 @@ var _ = Describe("Application lookup by kebab-case name", func() {
 		Expect(names).To(Equal([]string{"Claude Code", "Codex CLI", "Node.js"}))
 	})
 
+	It("matches kebab-case only against catalog names, not install commands", func() {
+		settings.ApplicationOverrides = append(settings.ApplicationOverrides, types.CrossPlatformApp{
+			Name: "Google Chrome", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "google-chrome-stable"},
+		})
+		_, err := agentapi.ResolveAppsByName(settings, []string{"google chrome stable"})
+		Expect(err).To(MatchError(ContainSubstring("applications not found: google chrome stable")))
+		apps, err := agentapi.ResolveAppsByName(settings, []string{"google-chrome"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(apps[0].Name).To(Equal("Google Chrome"))
+	})
+
 	It("still reports names that match nothing", func() {
 		_, err := agentapi.ResolveAppsByName(settings, []string{"claude"})
 		Expect(err).To(MatchError(ContainSubstring("applications not found: claude")))
