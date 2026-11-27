@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	shipconfig "github.com/jameswlane/devex/apps/cli/config"
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
@@ -94,7 +95,9 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Expect(os.Symlink(filepath.Join(cursor, "agent"), filepath.Join(grokBin, "agent"))).To(Succeed())
 		Expect(os.Symlink(filepath.Join(cursor, "agent"), filepath.Join(localBin, "agent"))).To(Succeed())
 
-		cmd := exec.Command("sh", "-c", agents["Grok Build"].Linux.UninstallCommand)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		cmd := exec.CommandContext(ctx, "sh", "-c", agents["Grok Build"].Linux.UninstallCommand)
 		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(output))
@@ -123,7 +126,9 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Expect(os.Chmod(localBin, 0o555)).To(Succeed())
 		DeferCleanup(os.Chmod, localBin, os.FileMode(0o755))
 
-		cmd := exec.Command("sh", "-c", agents["Grok Build"].Linux.UninstallCommand)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		cmd := exec.CommandContext(ctx, "sh", "-c", agents["Grok Build"].Linux.UninstallCommand)
 		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
 		Expect(cmd.Run()).To(HaveOccurred())
 	})
