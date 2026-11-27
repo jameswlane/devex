@@ -117,6 +117,10 @@ linux:
           echo "  Ubuntu: sudo ubuntu-drivers install"
           echo "  Debian: https://wiki.debian.org/NvidiaGraphicsDrivers"
         fi
+        if [ "$has_amd_gpu" -eq 1 ] && { [ ! -d /sys/module/amdgpu ] || [ ! -e /dev/kfd ]; }; then
+          echo "AMD GPU detected without the amdgpu driver or /dev/kfd; Ollama will run on CPU until the AMD driver is set up:"
+          echo "  https://rocm.docs.amd.com/projects/install-on-linux/en/latest/"
+        fi
   uninstall_command: |
     set -eu
     SUDO=""

@@ -262,6 +262,14 @@ var _ = Describe("Local model runtimes", func() {
 		})
 	})
 
+	Describe("Model identity", func() {
+		It("treats library/<model> and <model>:latest as the same model, as ollama list reports it", func() {
+			Expect(localmodels.CanonicalModelName("library/llama3.2")).To(Equal("llama3.2:latest"))
+			Expect(localmodels.CanonicalModelName("library/qwen2.5-coder:7b")).To(Equal("qwen2.5-coder:7b"))
+			Expect(localmodels.CanonicalModelName("someone/model")).To(Equal("someone/model:latest"))
+		})
+	})
+
 	Describe("Model name validation", func() {
 		DescribeTable("accepts valid Ollama model references",
 			func(name string) {

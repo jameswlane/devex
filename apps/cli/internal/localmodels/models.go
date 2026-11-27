@@ -62,6 +62,8 @@ func ParseModelRef(name string) (namespace, model, tag string, err error) {
 
 // CanonicalModelName returns name with ":latest" appended when no tag is given.
 func CanonicalModelName(name string) string {
+	// Ollama lists library models without their "library/" namespace.
+	name = strings.TrimPrefix(name, "library/")
 	if strings.Contains(name, ":") {
 		return name
 	}

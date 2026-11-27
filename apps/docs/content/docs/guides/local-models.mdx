@@ -35,7 +35,7 @@ DevEx inspects PCI display devices (`/sys/bus/pci/devices/*`), `nvidia-smi`, and
 - **NVIDIA (CUDA)**: When an NVIDIA GPU (`0x10de`) is detected and `nvidia-smi` succeeds, Ollama uses NVIDIA CUDA. If `nvidia-smi` is missing or fails, Ollama falls back to CPU until you install drivers manually:
   - **Ubuntu**: `sudo ubuntu-drivers install` (then reboot)
   - **Debian**: Follow the [Debian NVIDIA Graphics Drivers guide](https://wiki.debian.org/NvidiaGraphicsDrivers) (then reboot)
-- **AMD (ROCm)**: On Linux `amd64`, `devex install ollama` automatically extracts Ollama's official ROCm add-on archive (`ollama-linux-amd64-rocm.tar.zst`) when an AMD display GPU (`0x1002`) is present, and adds the `ollama` user to the `render` and `video` groups when they exist. ROCm acceleration is active when both the `amdgpu` kernel module and `/dev/kfd` are available; otherwise DevEx prints a manual setup hint and Ollama runs on CPU.
+- **AMD (ROCm)**: On Linux `amd64`, `devex install ollama` automatically extracts Ollama's official ROCm add-on archive (`ollama-linux-amd64-rocm.tar.zst`) when an AMD display GPU (`0x1002`) is present, and adds the `ollama` user to the `render` and `video` groups when they exist. DevEx reports AMD ROCm as available when both the `amdgpu` kernel module and `/dev/kfd` are present; Ollama still decides at runtime whether your card is supported (see [Ollama GPU support](https://github.com/ollama/ollama/blob/main/docs/gpu.mdx)). Without them, DevEx prints a manual setup hint and Ollama runs on CPU.
 - **No discrete GPU**: Ollama runs on CPU only.
 
 Inspect your current runtime and GPU status at any time with:
