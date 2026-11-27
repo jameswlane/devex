@@ -88,7 +88,7 @@ func PrepareAptSources(ctx context.Context, app types.CrossPlatformApp, repo typ
 	si := NewStreamingInstaller(nil, repo, ctx, settings)
 	defer si.cancel()
 	if err := state.AuditStep(ctx, "apt-sources", true, func() error {
-		if err := si.addAptSources(ctx, cfg); err != nil {
+		if err := si.addAptSources(ctx, app.Name, cfg); err != nil {
 			return err
 		}
 		return si.ensureAptLists(ctx)

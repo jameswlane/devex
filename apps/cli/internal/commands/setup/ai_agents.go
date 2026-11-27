@@ -25,7 +25,7 @@ import (
 // AI coding agent catalog category names and setup group headings.
 const (
 	CategoryAICodingAgents = "AI Coding Agents"
-	CategoryAIEditors      = "AI Editors"
+	CategoryAIEditors      = "AI Code Editors"
 	CategoryLocalModels    = "Local Models"
 
 	setupAIAgentsAppsKey   = "setup.ai_agents.apps"
@@ -85,7 +85,16 @@ func isAIAgentCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatfor
 		return app.IsSupported()
 	}
 	cfg := osConfigForPlatform(app, detectedPlatform.OS)
-	return cfg.InstallMethod != "" || cfg.InstallCommand != ""
+	if cfg.InstallMethod == "" && cfg.InstallCommand == "" {
+		return false
+	}
+	// Editors are skipped on headless hosts and on architectures their
+	// repositories don't serve, as in the desktop apps step.
+	if detectedPlatform.OS == "linux" && app.RequiresGraphicalDesktop() &&
+		(!isCompatibleWithPlatform(app, detectedPlatform) || !isCompatibleWithDesktopEnvironment(app, detectedPlatform)) {
+		return false
+	}
+	return true
 }
 
 func aiAgentGroupHeading(category string) (string, int) {

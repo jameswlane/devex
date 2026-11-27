@@ -344,9 +344,7 @@ func (e *SetupExecutor) evaluateSimpleCondition(conditionStr string) bool {
 
 // buildSystemInfo creates the system info map from platform detection
 func buildSystemInfo(platform platform.DetectionResult) map[string]interface{} {
-	hasDesktop := platform.DesktopEnv != "none" &&
-		platform.DesktopEnv != "unknown" &&
-		platform.DesktopEnv != ""
+	hasDesktop := hasDesktopEnvironment(platform)
 
 	return map[string]interface{}{
 		"os":           platform.OS,

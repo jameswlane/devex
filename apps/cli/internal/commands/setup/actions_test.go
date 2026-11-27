@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
@@ -134,4 +136,30 @@ var _ = Describe("Dynamic desktop installation", func() {
 		action.Params["install_desktop_apps"] = items
 		Expect(executor.Execute(context.Background(), action, state)).To(Succeed())
 	}, Entry("comma separated", "editor, browser,editor"), Entry("string slice", []string{"editor", "browser"}), Entry("yaml list", []interface{}{"editor", "browser"}))
+
+	It("skips graphical-only apps on headless Linux in installDesktopApps and prints the skip message", func() {
+		DeferCleanup(platform.SetGraphicalDesktopForTesting(false))
+		cursor := types.CrossPlatformApp{
+			Name:                "Cursor",
+			Category:            "AI Code Editors",
+			DesktopEnvironments: []string{types.DesktopEnvironmentGraphical},
+			Linux:               types.OSConfig{InstallMethod: "apt", InstallCommand: "cursor"},
+		}
+		settings.ApplicationOverrides = append(settings.ApplicationOverrides, cursor)
+
+		var installed []string
+		var out bytes.Buffer
+		executor := NewActionExecutor(nil, settings, platform.DetectionResult{OS: "linux"}, nil)
+		executor.out = &out
+		executor.installApps = func(_ context.Context, apps []types.CrossPlatformApp, _ types.Repository, _ config.CrossPlatformSettings) error {
+			for _, app := range apps {
+				installed = append(installed, app.Name)
+			}
+			return nil
+		}
+		action.Params["install_desktop_apps"] = []string{"Cursor", "editor"}
+		Expect(executor.Execute(context.Background(), action, state)).To(Succeed())
+		Expect(installed).To(Equal([]string{"editor"}))
+		Expect(out.String()).To(ContainSubstring(agentapi.HeadlessSkipMessage("Cursor")))
+	})
 })

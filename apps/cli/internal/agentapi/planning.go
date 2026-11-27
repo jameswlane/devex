@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -70,15 +71,61 @@ type PlannedApp struct {
 	UnknownEffects bool     `json:"unknown_effects"`
 }
 
+// SelectionResult holds the applications selected for installation together
+// with the merged settings and any skip notices emitted during filtering.
+type SelectionResult struct {
+	Apps     []types.CrossPlatformApp
+	Settings config.CrossPlatformSettings
+	Warnings []string
+}
+
+// HeadlessSkipMessage formats the user-facing skip notice emitted when an
+// application requiring a graphical desktop is skipped on a headless Linux host.
+func HeadlessSkipMessage(appName string) string {
+	return fmt.Sprintf("Skipped %s: needs a graphical desktop, and none was found (no DISPLAY/WAYLAND_DISPLAY session and no installed X11/Wayland sessions)", appName)
+}
+
+func filterHeadlessApplications(apps []types.CrossPlatformApp) ([]types.CrossPlatformApp, []string) {
+	if types.CatalogOS() != "linux" || !platform.IsHeadless() {
+		return apps, nil
+	}
+	filtered := make([]types.CrossPlatformApp, 0, len(apps))
+	var warnings []string
+	for _, app := range apps {
+		if app.RequiresGraphicalDesktop() {
+			warnings = append(warnings, HeadlessSkipMessage(app.Name))
+			continue
+		}
+		filtered = append(filtered, app)
+	}
+	return filtered, warnings
+}
+
+// SelectApplicationsWithWarnings is the shared CLI install execution and
+// planning selection policy: the requested applications filtered for the
+// current desktop environment, plus the sandbox prerequisites declared by the
+// remaining applications.
+func SelectApplicationsWithWarnings(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) (SelectionResult, error) {
+	apps, s, err := SelectRequestedApplications(ctx, s, r)
+	if err != nil {
+		return SelectionResult{Settings: s}, err
+	}
+	filtered, warnings := filterHeadlessApplications(apps)
+	// A graphical sandbox prerequisite is skipped on headless hosts too.
+	expanded, prereqWarnings := filterHeadlessApplications(expandSandboxPrerequisites(filtered, s))
+	return SelectionResult{
+		Apps:     expanded,
+		Settings: s,
+		Warnings: append(warnings, prereqWarnings...),
+	}, nil
+}
+
 // SelectApplications is the shared CLI install execution and planning
 // selection policy: the requested applications plus the sandbox prerequisites
 // they declare for the current platform.
 func SelectApplications(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) ([]types.CrossPlatformApp, config.CrossPlatformSettings, error) {
-	apps, s, err := SelectRequestedApplications(ctx, s, r)
-	if err != nil {
-		return nil, s, err
-	}
-	return expandSandboxPrerequisites(apps, s), s, nil
+	result, err := SelectApplicationsWithWarnings(ctx, s, r)
+	return result.Apps, result.Settings, err
 }
 
 // SelectRequestedApplications resolves only the requested applications, for
@@ -166,9 +213,14 @@ func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.C
 // Plugin and script effects are deliberately unknown until plugins support describe.
 func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequest) (Plan, error) {
 	result := Plan{Apps: []PlannedApp{}, DependencyOrder: []string{}, Warnings: []string{}}
-	apps, s, err := SelectApplications(ctx, s, r)
+	selection, err := SelectApplicationsWithWarnings(ctx, s, r)
 	if err != nil {
 		return result, APIError(err)
+	}
+	apps := selection.Apps
+	s = selection.Settings
+	if len(selection.Warnings) > 0 {
+		result.Warnings = append(result.Warnings, selection.Warnings...)
 	}
 	if err = config.RequireValidConfig(ctx, s); err != nil {
 		return result, APIError(err)

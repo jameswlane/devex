@@ -273,27 +273,45 @@ func isDesktopApp(app types.CrossPlatformApp) bool {
 	return false
 }
 
+func hasInstallTarget(cfg types.OSConfig) bool {
+	return cfg.InstallMethod != "" && (cfg.InstallCommand != "" || cfg.DownloadURL != "" || len(cfg.Packages) > 0)
+}
+
 func isCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
-	if app.AllPlatforms.InstallCommand != "" {
-		return true
+	arch := detectedPlatform.Architecture
+	if arch == "" {
+		arch = types.CatalogArch()
+	}
+	if hasInstallTarget(app.AllPlatforms) {
+		return detectedPlatform.OS != "linux" || app.AllPlatforms.IsArchitectureSupported(arch)
 	}
 	switch detectedPlatform.OS {
 	case "linux":
-		return app.Linux.InstallCommand != ""
+		cfg := app.LinuxConfigForPlatform(detectedPlatform)
+		return hasInstallTarget(cfg) && cfg.IsArchitectureSupported(arch)
 	case "darwin":
-		return app.MacOS.InstallCommand != ""
+		return hasInstallTarget(app.MacOS)
 	case "windows":
-		return app.Windows.InstallCommand != ""
+		return hasInstallTarget(app.Windows)
 	default:
 		return false
 	}
 }
 
 func isCompatibleWithDesktopEnvironment(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
-	if detectedPlatform.DesktopEnv == "unknown" || detectedPlatform.DesktopEnv == "" {
+	if detectedPlatform.OS != "linux" {
 		return true
 	}
-	if detectedPlatform.OS != "linux" {
+	if app.RequiresGraphicalDesktop() {
+		if detectedPlatform.DesktopEnv == "none" || detectedPlatform.DesktopEnv == "headless" {
+			return false
+		}
+		if detectedPlatform.DesktopEnv != "" && detectedPlatform.DesktopEnv != "unknown" {
+			return true
+		}
+		return platform.HasGraphicalDesktop()
+	}
+	if detectedPlatform.DesktopEnv == "unknown" || detectedPlatform.DesktopEnv == "" {
 		return true
 	}
 	return app.IsCompatibleWithDesktopEnvironment(detectedPlatform.DesktopEnv)

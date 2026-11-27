@@ -191,6 +191,7 @@ var _ = Describe("Curlpipe Validation", func() {
 				"claude.ai",
 				"opencode.ai",
 				"code.kimi.com",
+				"zed.dev",
 			}
 
 			for _, expected := range expectedDomains {

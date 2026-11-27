@@ -233,7 +233,23 @@ var _ = Describe("CrossPlatformApp", func() {
 				Entry("Universal app on unknown DE", "Firefox", []string{"all"}, "unknown", true),
 				Entry("GNOME family app on Unity", "Proton VPN GNOME", []string{"gnome-family"}, "unity", true),
 				Entry("Legacy app with no restrictions", "Legacy App", []string{}, "kde", true),
+				Entry("Graphical app on GNOME", "Cursor", []string{"graphical"}, "gnome", true),
+				Entry("Graphical app on KDE", "Cursor", []string{"graphical"}, "kde", true),
+				Entry("Graphical app on Sway", "Cursor", []string{"graphical"}, "sway", true),
+				Entry("Graphical app on none", "Cursor", []string{"graphical"}, "none", false),
+				Entry("Graphical app on headless", "Cursor", []string{"graphical"}, "headless", false),
+				Entry("Graphical app on unknown", "Cursor", []string{"graphical"}, "unknown", false),
+				Entry("Graphical app on empty DE", "Cursor", []string{"graphical"}, "", false),
 			)
+		})
+	})
+
+	Describe("RequiresGraphicalDesktop", func() {
+		It("returns true only when graphical is declared", func() {
+			Expect((&CrossPlatformApp{DesktopEnvironments: []string{DesktopEnvironmentGraphical}}).RequiresGraphicalDesktop()).To(BeTrue())
+			Expect((&CrossPlatformApp{DesktopEnvironments: []string{"all"}}).RequiresGraphicalDesktop()).To(BeFalse())
+			Expect((&CrossPlatformApp{DesktopEnvironments: []string{"gnome"}}).RequiresGraphicalDesktop()).To(BeFalse())
+			Expect((&CrossPlatformApp{}).RequiresGraphicalDesktop()).To(BeFalse())
 		})
 	})
 })

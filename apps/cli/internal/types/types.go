@@ -399,6 +399,11 @@ var catalogPlatform = sync.OnceValue(platform.DetectPlatform)
 // catalogOS names the operating system whose catalog entries apply.
 var catalogOS = runtime.GOOS
 
+// CatalogOS returns the operating system used for catalog selection.
+func CatalogOS() string {
+	return catalogOS
+}
+
 // PinCatalogOSForTesting makes catalog selection use goos instead of the host
 // operating system, so specs that model one platform's entries behave the same
 // on every host. It returns a function that restores the previous value.
@@ -420,6 +425,11 @@ const ArchitecturePlaceholder = "%ARCHITECTURE%"
 
 // catalogArch names the Go architecture whose dpkg name replaces the placeholder.
 var catalogArch = runtime.GOARCH
+
+// CatalogArch returns the Go architecture used for catalog selection.
+func CatalogArch() string {
+	return catalogArch
+}
 
 // PinCatalogArchForTesting makes placeholder replacement use goarch instead of
 // the host architecture. It returns a function that restores the previous
@@ -494,7 +504,9 @@ func (app *CrossPlatformApp) selectOSConfig() OSConfig {
 		if len(app.Linux.PlatformRequirements) == 0 {
 			return app.Linux
 		}
-		return app.LinuxConfigForPlatform(catalogPlatform())
+		detected := catalogPlatform()
+		detected.Architecture = catalogArch
+		return app.LinuxConfigForPlatform(detected)
 	case "darwin":
 		return app.MacOS
 	case "windows":
@@ -573,10 +585,72 @@ func catalogArchitecture(arch string) string {
 	}
 }
 
+// DesktopEnvironmentGraphical matches any graphical desktop environment and
+// marks applications that must be skipped on headless Linux hosts.
+const DesktopEnvironmentGraphical = "graphical"
+
+// IsArchitectureSupported reports whether config allows arch. When no platform
+// requirement declares an arch constraint (or any requirement leaves arch
+// empty), the config is architecture-independent.
+func (config OSConfig) IsArchitectureSupported(arch string) bool {
+	if len(config.PlatformRequirements) == 0 || arch == "" {
+		return true
+	}
+	target := catalogArchitecture(arch)
+	for _, req := range config.PlatformRequirements {
+		if req.Arch == "" {
+			return true
+		}
+		if catalogArchitecture(req.Arch) == target {
+			return true
+		}
+	}
+	return false
+}
+
+// SupportedArchitectures returns the deduplicated normalized architectures
+// declared in PlatformRequirements, or nil when any requirement is
+// architecture-independent.
+func (config OSConfig) SupportedArchitectures() []string {
+	if len(config.PlatformRequirements) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(config.PlatformRequirements))
+	var arches []string
+	for _, req := range config.PlatformRequirements {
+		if req.Arch == "" {
+			return nil
+		}
+		arch := catalogArchitecture(req.Arch)
+		if !seen[arch] {
+			seen[arch] = true
+			arches = append(arches, arch)
+		}
+	}
+	return arches
+}
+
 // IsSupported checks if the app is supported on the current platform
 func (app *CrossPlatformApp) IsSupported() bool {
 	config := app.GetOSConfig()
-	return config.InstallMethod != ""
+	if config.InstallMethod == "" {
+		return false
+	}
+	if catalogOS == "linux" && !config.IsArchitectureSupported(catalogArch) {
+		return false
+	}
+	return true
+}
+
+// RequiresGraphicalDesktop reports whether the application declares a graphical
+// desktop requirement and should be skipped on headless Linux hosts.
+func (app *CrossPlatformApp) RequiresGraphicalDesktop() bool {
+	for _, env := range app.DesktopEnvironments {
+		if env == DesktopEnvironmentGraphical {
+			return true
+		}
+	}
+	return false
 }
 
 // IsCompatibleWithDesktopEnvironment checks if the app is compatible with the specified desktop environment
@@ -596,6 +670,9 @@ func (app *CrossPlatformApp) IsCompatibleWithDesktopEnvironment(desktopEnv strin
 			return true
 		}
 		if env == "all" {
+			return true
+		}
+		if env == DesktopEnvironmentGraphical && desktopEnv != "" && desktopEnv != "none" && desktopEnv != "headless" && desktopEnv != "unknown" {
 			return true
 		}
 	}

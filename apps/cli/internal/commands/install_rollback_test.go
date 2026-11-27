@@ -95,6 +95,55 @@ var _ = Describe("Rollback application batches", func() {
 		Expect(runs[0].Error).To(Equal("tracking failure"))
 	})
 
+	It("prepares APT sources before installing each application in a rollback batch", func() {
+		oldPrepare, oldAptSources, oldInstall := prepareApplicationInstallers, prepareAptSources, installApplication
+		oldPath := viper.Get(state.DBPathConfigKey)
+		DeferCleanup(func() {
+			prepareApplicationInstallers, prepareAptSources, installApplication = oldPrepare, oldAptSources, oldInstall
+			viper.Set(state.DBPathConfigKey, oldPath)
+		})
+		viper.Set(state.DBPathConfigKey, filepath.Join(GinkgoT().TempDir(), "state.db"))
+		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { return nil }
+
+		var events []string
+		prepareAptSources = func(_ context.Context, app types.CrossPlatformApp, _ types.Repository, _ config.CrossPlatformSettings) error {
+			events = append(events, "apt-sources:"+app.Name)
+			return nil
+		}
+		installApplication = func(_ context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+			events = append(events, "install:"+app.Name)
+			return nil
+		}
+
+		apps := []types.CrossPlatformApp{{
+			Name: "Cursor",
+			AllPlatforms: types.OSConfig{
+				InstallMethod:  "apt",
+				InstallCommand: "cursor",
+				AptSources: []types.AptSource{{
+					KeyName:    "/etc/apt/keyrings/cursor.gpg",
+					SourceName: "/etc/apt/sources.list.d/cursor.list",
+					SourceRepo: "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/cursor.gpg] https://downloads.cursor.com/aptrepo stable main",
+				}},
+			},
+		}}
+		var output bytes.Buffer
+		repo := mocks.NewMockRepository()
+		Expect(runRollbackBatch(context.Background(), &output, apps, repo, config.CrossPlatformSettings{ApplicationOverrides: apps}, nil)).To(Succeed())
+		Expect(events).To(Equal([]string{"apt-sources:Cursor", "install:Cursor"}))
+
+		// A source preparation failure aborts before installApplication runs.
+		events = nil
+		sourceErr := errors.New("prepare APT sources failed")
+		prepareAptSources = func(context.Context, types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) error {
+			events = append(events, "apt-sources:fail")
+			return sourceErr
+		}
+		err := runRollbackBatch(context.Background(), &output, apps, repo, config.CrossPlatformSettings{ApplicationOverrides: apps}, nil)
+		Expect(errors.Is(err, sourceErr)).To(BeTrue())
+		Expect(events).To(Equal([]string{"apt-sources:fail"}))
+	})
+
 })
 
 var _ = Describe("Recorded rollback JSON", func() {

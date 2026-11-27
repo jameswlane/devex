@@ -1,0 +1,30 @@
+name: Windsurf
+description: AI code editor (now Devin Desktop) with Cascade agentic workflows
+category: AI Code Editors
+default: false
+desktop_environments:
+  - graphical
+linux:
+  install_method: apt
+  install_command: devin-desktop
+  installed_binary: devin-desktop
+  uninstall_command: devin-desktop
+  official_support: true
+  apt_sources:
+    - key_source: https://windsurf-stable.codeiumdata.com/wVxQEIWkwPUEAGf3/windsurf.gpg
+      key_name: /etc/apt/keyrings/windsurf-stable.gpg
+      key_fingerprint: EE2C46CC44E1578C23135B0E9E608A1B9FD62A3F
+      require_dearmor: true
+      source_repo: deb [arch=amd64 signed-by=/etc/apt/keyrings/windsurf-stable.gpg] https://windsurf-stable.codeiumdata.com/wVxQEIWkwPUEAGf3/apt stable main
+      source_name: /etc/apt/sources.list.d/windsurf.list
+  platform_requirements:
+    - os: debian
+      arch: amd64
+      dependencies:
+        - curl
+        - gnupg
+    - os: ubuntu
+      arch: amd64
+      dependencies:
+        - curl
+        - gnupg

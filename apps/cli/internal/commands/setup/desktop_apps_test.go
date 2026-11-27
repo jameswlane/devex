@@ -124,4 +124,138 @@ var _ = Describe("Desktop application selection", func() {
 		Expect(view).To(ContainSubstring("↑ more"))
 		Expect(strings.Split(view, "\n")).To(HaveLen(24))
 	})
+
+	It("honors graphical desktop requirements in setup filtering", func() {
+		cursor := desktopAppForTest("Cursor", "Text Editors")
+		cursor.DesktopEnvironments = []string{types.DesktopEnvironmentGraphical}
+		settings := desktopSettingsForTest(cursor)
+
+		// Active GNOME desktop shows the graphical editor.
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"})).To(HaveLen(1))
+
+		// Explicit headless / none hides it.
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "none"})).To(BeEmpty())
+
+		// Unknown DE defers to the graphical desktop detector (covers Sway/SSH vs headless).
+		restoreHeadless := platform.SetGraphicalDesktopForTesting(false)
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "unknown"})).To(BeEmpty())
+		restoreHeadless()
+
+		restoreDesktop := platform.SetGraphicalDesktopForTesting(true)
+		defer restoreDesktop()
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "unknown"})).To(HaveLen(1))
+	})
+
+	It("includes curlpipe download_url editors like Zed and filters arch-restricted editors like Windsurf", func() {
+		zed := types.CrossPlatformApp{
+			Name:                "Zed",
+			Category:            "Text Editors",
+			Description:         "Zed editor",
+			DesktopEnvironments: []string{types.DesktopEnvironmentGraphical},
+			Linux: types.OSConfig{
+				InstallMethod: "curlpipe",
+				DownloadURL:   "https://zed.dev/install.sh",
+				InstallScope:  "user",
+			},
+		}
+		windsurf := types.CrossPlatformApp{
+			Name:                "Windsurf",
+			Category:            "Text Editors",
+			Description:         "Windsurf editor",
+			DesktopEnvironments: []string{types.DesktopEnvironmentGraphical},
+			Linux: types.OSConfig{
+				InstallMethod:  "apt",
+				InstallCommand: "devin-desktop",
+				PlatformRequirements: []types.PlatformRequirement{
+					{OS: "debian", Arch: "amd64"},
+					{OS: "ubuntu", Arch: "amd64"},
+				},
+			},
+		}
+		settings := desktopSettingsForTest(zed, windsurf)
+
+		amd64Apps := getAvailableDesktopApps(settings, platform.DetectionResult{
+			OS: "linux", Distribution: "ubuntu", DesktopEnv: "gnome", Architecture: "amd64",
+		})
+		Expect(amd64Apps).To(HaveLen(2))
+		Expect([]string{amd64Apps[0].Name, amd64Apps[1].Name}).To(Equal([]string{"Windsurf", "Zed"}))
+
+		arm64Apps := getAvailableDesktopApps(settings, platform.DetectionResult{
+			OS: "linux", Distribution: "ubuntu", DesktopEnv: "gnome", Architecture: "arm64",
+		})
+		Expect(arm64Apps).To(HaveLen(1))
+		Expect(arm64Apps[0].Name).To(Equal("Zed"))
+	})
+
+	It("uses HasGraphicalDesktop in NewSetupModel when Linux DesktopEnv is unknown or empty", func() {
+		cursor := desktopAppForTest("Cursor", "Text Editors")
+		cursor.DesktopEnvironments = []string{types.DesktopEnvironmentGraphical}
+		settings := desktopSettingsForTest(cursor)
+
+		restoreDesktop := platform.SetGraphicalDesktopForTesting(true)
+		for _, de := range []string{"unknown", ""} {
+			model := NewSetupModel(nil, settings, platform.DetectionResult{OS: "linux", DesktopEnv: de, Architecture: "amd64"})
+			Expect(model.system.hasDesktop).To(BeTrue(), "expected hasDesktop=true for DesktopEnv=%q", de)
+			Expect(model.system.desktopApps).To(Equal([]string{"Cursor"}))
+		}
+		restoreDesktop()
+
+		restoreHeadless := platform.SetGraphicalDesktopForTesting(false)
+		defer restoreHeadless()
+		for _, de := range []string{"unknown", ""} {
+			model := NewSetupModel(nil, settings, platform.DetectionResult{OS: "linux", DesktopEnv: de, Architecture: "amd64"})
+			Expect(model.system.hasDesktop).To(BeFalse(), "expected hasDesktop=false for DesktopEnv=%q", de)
+			Expect(model.system.desktopApps).To(BeEmpty())
+		}
+	})
+})
+
+var _ = Describe("custom setup system info", func() {
+	It("reports has_desktop for an unnamed Linux desktop only on a graphical host", func() {
+		unknown := platform.DetectionResult{OS: "linux", DesktopEnv: "unknown"}
+
+		DeferCleanup(platform.SetGraphicalDesktopForTesting(true))
+		Expect(buildSystemInfo(unknown)["has_desktop"]).To(BeTrue())
+		Expect(buildSystemInfo(platform.DetectionResult{OS: "linux", DesktopEnv: "none"})["has_desktop"]).To(BeFalse())
+
+		DeferCleanup(platform.SetGraphicalDesktopForTesting(false))
+		Expect(buildSystemInfo(unknown)["has_desktop"]).To(BeFalse())
+		Expect(buildSystemInfo(platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"})["has_desktop"]).To(BeTrue())
+	})
+})
+
+var _ = Describe("setup architecture filter", func() {
+	It("honours arch requirements on AllPlatforms configs", func() {
+		app := types.CrossPlatformApp{Name: "Arch Editor", AllPlatforms: types.OSConfig{
+			InstallMethod: "apt", InstallCommand: "arch-editor",
+			PlatformRequirements: []types.PlatformRequirement{{OS: "ubuntu", Arch: "amd64"}},
+		}}
+		Expect(isCompatibleWithPlatform(app, platform.DetectionResult{OS: "linux", Architecture: "amd64"})).To(BeTrue())
+		Expect(isCompatibleWithPlatform(app, platform.DetectionResult{OS: "linux", Architecture: "arm64"})).To(BeFalse())
+	})
+})
+
+var _ = Describe("AI editors in the AI agents setup step", func() {
+	It("lists graphical editors only on graphical hosts and supported architectures", func() {
+		cursor := types.CrossPlatformApp{Name: "Cursor", Category: CategoryAIEditors, DesktopEnvironments: []string{types.DesktopEnvironmentGraphical},
+			Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "cursor"}}
+		windsurf := types.CrossPlatformApp{Name: "Windsurf", Category: CategoryAIEditors, DesktopEnvironments: []string{types.DesktopEnvironmentGraphical},
+			Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "devin-desktop", PlatformRequirements: []types.PlatformRequirement{{OS: "ubuntu", Arch: "amd64"}}}}
+		settings := desktopSettingsForTest(cursor, windsurf)
+		names := func(dp platform.DetectionResult) []string {
+			apps := getAvailableAIAgentApps(settings, dp)
+			out := make([]string, 0, len(apps))
+			for _, app := range apps {
+				out = append(out, app.Name)
+			}
+			return out
+		}
+		gnome := platform.DetectionResult{OS: "linux", Distribution: "ubuntu", DesktopEnv: "gnome", Architecture: "amd64"}
+		Expect(names(gnome)).To(Equal([]string{"Cursor", "Windsurf"}))
+		gnome.Architecture = "arm64"
+		Expect(names(gnome)).To(Equal([]string{"Cursor"}))
+		DeferCleanup(platform.SetGraphicalDesktopForTesting(false))
+		Expect(names(platform.DetectionResult{OS: "linux", Distribution: "ubuntu", DesktopEnv: "unknown", Architecture: "amd64"})).To(BeEmpty())
+		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", Distribution: "ubuntu", DesktopEnv: "gnome", Architecture: "amd64"})).To(BeEmpty())
+	})
 })

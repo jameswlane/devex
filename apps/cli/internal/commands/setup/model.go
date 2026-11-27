@@ -244,9 +244,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 	requiredPlugins := DetectRequiredPlugins(detectedPlatform)
 
 	// Check for desktop environment
-	hasDesktop := detectedPlatform.DesktopEnv != "none" &&
-		detectedPlatform.DesktopEnv != "unknown" &&
-		detectedPlatform.DesktopEnv != ""
+	hasDesktop := hasDesktopEnvironment(detectedPlatform)
 
 	var desktopApps []string
 	var desktopAppDetails []types.CrossPlatformApp
@@ -360,3 +358,16 @@ func (m *SetupModel) HasErrors() bool {
 
 // SetContext propagates command cancellation into foreground installation work.
 func (m *SetupModel) SetContext(ctx context.Context) { m.ctx = ctx }
+
+// hasDesktopEnvironment reports whether setup should offer desktop apps: a
+// named desktop environment, or on Linux an unnamed one on a graphical host.
+func hasDesktopEnvironment(detected platform.DetectionResult) bool {
+	switch detected.DesktopEnv {
+	case "none", "headless":
+		return false
+	case "unknown", "":
+		return detected.OS == "linux" && platform.HasGraphicalDesktop()
+	default:
+		return true
+	}
+}

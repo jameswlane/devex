@@ -98,21 +98,46 @@ func isAptApp(app types.CrossPlatformApp) bool {
 	return app.GetOSConfig().InstallMethod == "apt"
 }
 
+// lstatAptFile reports whether an APT source or keyring path exists; tests replace it.
+var lstatAptFile = os.Lstat
+
+// recordAptManagedFile stores ownership under the repository lock.
+func (si *StreamingInstaller) recordAptManagedFile(path, appName string) {
+	if si.repo == nil {
+		return
+	}
+	si.repoMutex.Lock()
+	defer si.repoMutex.Unlock()
+	RecordAptManagedFile(si.repo, path, appName)
+}
+
 // addAptSources writes the app's APT sources and keys once per run. Writing a
 // source makes the package lists stale, so the next ensureAptLists updates them.
-func (si *StreamingInstaller) addAptSources(ctx context.Context, osConfig types.OSConfig) error {
+// Files that DevEx actually creates (not pre-existing matching files) are
+// recorded in the repository so uninstall only removes files DevEx owns.
+func (si *StreamingInstaller) addAptSources(ctx context.Context, appName string, osConfig types.OSConfig) error {
 	for _, source := range osConfig.AptSources {
 		if si.apt.has(si.apt.sourcesAdded, source.SourceName) {
 			continue
 		}
-		if content, err := os.ReadFile(source.SourceName); err == nil && strings.TrimSpace(string(content)) == strings.TrimSpace(source.SourceRepo) {
-			keyReady := source.KeySource == ""
-			if info, err := os.Stat(source.KeyName); err == nil && info.Mode().IsRegular() {
-				keyReady = true
-			}
-			if keyReady {
-				continue
-			}
+		// Ownership is recorded only for paths that were absent before DevEx
+		// wrote them; a pre-existing or uninspectable file stays the user's.
+		sourceMatches, sourceAbsent := false, false
+		if source.SourceName != "" {
+			content, err := os.ReadFile(source.SourceName)
+			sourceMatches = err == nil && strings.TrimSpace(string(content)) == strings.TrimSpace(source.SourceRepo)
+			_, statErr := lstatAptFile(source.SourceName)
+			sourceAbsent = errors.Is(statErr, os.ErrNotExist)
+		}
+		keyExists, keyAbsent := false, false
+		if source.KeyName != "" {
+			info, err := os.Stat(source.KeyName)
+			keyExists = err == nil && info.Mode().IsRegular()
+			_, lstatErr := lstatAptFile(source.KeyName)
+			keyAbsent = errors.Is(lstatErr, os.ErrNotExist)
+		}
+		if sourceMatches && (source.KeySource == "" || keyExists) {
+			continue
 		}
 		si.sendLog("INFO", fmt.Sprintf("Adding APT source: %s", source.SourceName))
 
@@ -125,13 +150,19 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, osConfig types.
 			if err := si.addModernGPGKey(ctx, source.KeySource, source.KeyName, source.KeyFingerprint, source.RequireDearmor); err != nil {
 				return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
 			}
+			if keyAbsent {
+				si.recordAptManagedFile(source.KeyName, appName)
+			}
 		}
 
-		if source.SourceRepo != "" {
+		if source.SourceRepo != "" && !sourceMatches {
 			addSourceCmd := fmt.Sprintf("echo '%s' | sudo -n tee %s > /dev/null",
 				source.SourceRepo, source.SourceName)
 			if err := si.executeCommandStream(ctx, addSourceCmd); err != nil {
 				return fmt.Errorf("failed to add APT source %s: %w", source.SourceName, err)
+			}
+			if sourceAbsent {
+				si.recordAptManagedFile(source.SourceName, appName)
 			}
 		}
 
@@ -246,7 +277,7 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 	// its sources would silently get the distribution's package.
 	var sourceErrs []error
 	for _, app := range toBatch {
-		if err := state.AuditTargetsStep(ctx, []string{app.Name}, "apt-sources", func() error { return si.addAptSources(ctx, app.GetOSConfig()) }); err != nil {
+		if err := state.AuditTargetsStep(ctx, []string{app.Name}, "apt-sources", func() error { return si.addAptSources(ctx, app.Name, app.GetOSConfig()) }); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -273,7 +304,7 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 	var batchApps []types.CrossPlatformApp
 	var batchPackages []string
 	for _, app := range toBatch {
-		if err := state.AuditTargetsStep(ctx, []string{app.Name}, "apt-sources", func() error { return si.addAptSources(ctx, app.GetOSConfig()) }); err != nil {
+		if err := state.AuditTargetsStep(ctx, []string{app.Name}, "apt-sources", func() error { return si.addAptSources(ctx, app.Name, app.GetOSConfig()) }); err != nil {
 			// The app's own install reports this error.
 			si.sendLog("WARN", fmt.Sprintf("Leaving %s out of the batch install: %v", app.Name, err))
 			continue

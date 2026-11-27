@@ -63,6 +63,9 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			if unmarshalErr := yaml.Unmarshal(data, &app); unmarshalErr != nil {
 				return unmarshalErr
 			}
+			if app.Category != "AI Coding Agents" {
+				return nil
+			}
 			agents[app.Name] = app
 			files = append(files, filepath.Base(path))
 			return nil

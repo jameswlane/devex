@@ -427,10 +427,100 @@ var _ = Describe("APT batching", func() {
 		Expect(os.WriteFile(source, []byte("deb https://example.test stable main\n"), 0600)).To(Succeed())
 		installer.apt.listsPath = GinkgoT().TempDir()
 		Expect(os.WriteFile(filepath.Join(installer.apt.listsPath, "mirror_Packages"), nil, 0600)).To(Succeed())
-		Expect(installer.addAptSources(context.Background(), types.OSConfig{AptSources: []types.AptSource{{SourceName: source, SourceRepo: "deb https://example.test stable main"}}})).To(Succeed())
+		Expect(installer.addAptSources(context.Background(), "example", types.OSConfig{AptSources: []types.AptSource{{SourceName: source, SourceRepo: "deb https://example.test stable main"}}})).To(Succeed())
 		Expect(installer.ensureAptLists(context.Background())).To(Succeed())
 		Expect(installer.apt.sourcesAdded).To(BeEmpty())
 		Expect(aptGetCalls("update")).To(BeEmpty())
+	})
+
+	It("records ownership only for APT managed files that DevEx actually writes", func() {
+		sdktest.NewRecorder(GinkgoT(), "true")
+		tracked := mocks.NewMockRepository()
+		installer.repo = tracked
+		installer.executor = NewMockCommandExecutor()
+
+		const (
+			managedSource = "/etc/apt/sources.list.d/devex-unit-test-editor.list"
+			managedKey    = "/etc/apt/keyrings/devex-unit-test-editor.gpg"
+			outsidePath   = "/tmp/devex-unit-test-outside.list"
+		)
+
+		// Writing a new managed source records ownership.
+		Expect(installer.addAptSources(context.Background(), "Cursor", types.OSConfig{
+			AptSources: []types.AptSource{{
+				SourceName: managedSource,
+				SourceRepo: "deb https://downloads.cursor.com/aptrepo stable main",
+			}},
+		})).To(Succeed())
+		owner, owned := AptManagedFileOwner(tracked, managedSource)
+		Expect(owned).To(BeTrue())
+		Expect(owner).To(Equal("cursor"))
+
+		// A path outside the allowed APT directories is never recorded.
+		Expect(installer.addAptSources(context.Background(), "Typora", types.OSConfig{
+			AptSources: []types.AptSource{{
+				SourceName: outsidePath,
+				SourceRepo: "deb https://typora.io/linux ./",
+			}},
+		})).To(Succeed())
+		_, owned = AptManagedFileOwner(tracked, outsidePath)
+		Expect(owned).To(BeFalse())
+
+		// RecordAptManagedFile ignores invalid paths and stores valid ones.
+		RecordAptManagedFile(tracked, managedKey, "Cursor")
+		owner, owned = AptManagedFileOwner(tracked, managedKey)
+		Expect(owned).To(BeTrue())
+		Expect(owner).To(Equal("cursor"))
+		Expect(ClearAptManagedFile(tracked, managedKey)).To(Succeed())
+		_, owned = AptManagedFileOwner(tracked, managedKey)
+		Expect(owned).To(BeFalse())
+	})
+
+	It("does not claim ownership of a pre-existing source or keyring it overwrites", func() {
+		sdktest.NewRecorder(GinkgoT(), "true")
+		tracked := mocks.NewMockRepository()
+		installer.repo = tracked
+		installer.executor = NewMockCommandExecutor()
+		const (
+			userSource = "/etc/apt/sources.list.d/devex-unit-test-user.list"
+			userKey    = "/etc/apt/keyrings/devex-unit-test-user.gpg"
+		)
+		previous := lstatAptFile
+		lstatAptFile = func(path string) (os.FileInfo, error) {
+			if path == userSource || path == userKey {
+				return os.Lstat(GinkgoT().TempDir())
+			}
+			return previous(path)
+		}
+		DeferCleanup(func() { lstatAptFile = previous })
+
+		Expect(installer.addAptSources(context.Background(), "Cursor", types.OSConfig{
+			AptSources: []types.AptSource{{
+				SourceName: userSource,
+				SourceRepo: "deb https://downloads.cursor.com/aptrepo stable main",
+			}},
+		})).To(Succeed())
+		_, owned := AptManagedFileOwner(tracked, userSource)
+		Expect(owned).To(BeFalse())
+		_, owned = AptManagedFileOwner(tracked, userKey)
+		Expect(owned).To(BeFalse())
+	})
+
+	It("does not claim ownership of a pre-existing matching source file", func() {
+		tracked := mocks.NewMockRepository()
+		installer.repo = tracked
+		existingSource := filepath.Join(GinkgoT().TempDir(), "existing.list")
+		Expect(os.WriteFile(existingSource, []byte("deb https://example.test stable main\n"), 0600)).To(Succeed())
+		Expect(installer.addAptSources(context.Background(), "Cursor", types.OSConfig{
+			AptSources: []types.AptSource{{
+				SourceName: existingSource,
+				SourceRepo: "deb https://example.test stable main",
+			}},
+		})).To(Succeed())
+		Expect(installer.apt.sourcesAdded).To(BeEmpty())
+		val, err := tracked.Get(AptManagedFileKey(existingSource))
+		Expect(err).To(HaveOccurred())
+		Expect(val).To(BeEmpty())
 	})
 	It("refreshes populated lists when cache reuse is disabled", func() {
 		old := viper.Get("apt-lists-max-age")
