@@ -279,6 +279,17 @@ var _ = Describe("Install Channels CLI", func() {
 			Expect(probed).To(BeFalse())
 		})
 
+		It("names the unresolved channel for devex status --fix --category (M4)", func() {
+			Expect(repo.AddApp("Ghostty")).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"flatpak","channel":"flatpak"}`)).To(Succeed())
+			tracked, err := listTrackedApps(repo, settings)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tracked).To(HaveLen(1))
+			Expect(tracked[0].Category).To(Equal("Terminal Emulators"))
+			Expect(tracked[0].InstallMethod).To(BeEmpty())
+			Expect(unresolvedChannelReason(repo, settings, tracked[0])).To(ContainSubstring(`"flatpak"`))
+		})
+
 		It("checks the catalog's definition when a saved one disagrees with the recorded channel (Q2/T2)", func() {
 			// The saved definition selected apt, but the receipt records snap,
 			// whose catalog package differs from the saved snap alternative.

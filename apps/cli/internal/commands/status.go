@@ -230,6 +230,9 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 	results := make([]status.AppStatus, 0, len(appsToCheck))
 	for _, app := range appsToCheck {
 		appStatus := checkAppStatus(ctx, &app, settings, verbose)
+		if reason := unresolvedChannelReason(repo, settings, app); reason != "" {
+			appStatus.Issues = []string{"Recorded install channel cannot be resolved: " + reason}
+		}
 
 		// Attempt fixes if requested
 		if fix && len(appStatus.Issues) > 0 {
@@ -285,6 +288,27 @@ func listTrackedApps(repo types.Repository, settings config.CrossPlatformSetting
 		installedApps[i] = resolveTrackedApp(repo, settings, installedApps[i])
 	}
 	return installedApps, nil
+}
+
+// unresolvedChannelReason explains why app has no install method when its
+// recorded channel cannot be resolved, or returns "" otherwise.
+func unresolvedChannelReason(repo types.Repository, settings config.CrossPlatformSettings, app types.AppConfig) string {
+	if app.InstallMethod != "" || repo == nil {
+		return ""
+	}
+	normalized := normalizeInstallLookup(app.Name)
+	for _, entry := range settings.GetAllApps() {
+		if normalizeInstallLookup(entry.Name) == normalized {
+			if _, _, err := channels.StatusDefinition(repo, entry, true, app.Name); err != nil {
+				return err.Error()
+			}
+			return ""
+		}
+	}
+	if _, _, err := channels.StatusDefinition(repo, types.CrossPlatformApp{}, false, app.Name); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // resolveTrackedApp fills in install details for an application recorded in
