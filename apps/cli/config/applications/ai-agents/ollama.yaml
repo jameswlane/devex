@@ -40,6 +40,9 @@ linux:
             exit 1
             ;;
         esac
+        for tool in curl zstd; do
+          command -v "$tool" >/dev/null 2>&1 || { echo "Ollama needs $tool to download and unpack its release archive: run 'devex install $tool' and retry." >&2; exit 1; }
+        done
         # /var/tmp, not /tmp: the archives are ~1.6 GB and /tmp is often a small tmpfs.
         tmp="$(mktemp -d /var/tmp/devex-ollama.XXXXXX)"
         trap 'rm -rf "$tmp"' EXIT

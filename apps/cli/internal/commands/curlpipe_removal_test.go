@@ -65,14 +65,16 @@ var _ = Describe("Inline curlpipe removal", func() {
 		if runtime.GOOS == "windows" {
 			Skip("curlpipe inline uninstall uses POSIX sh")
 		}
-		GinkgoT().Setenv("DEVEX_UNINSTALL_KEEP_DATA", "1") // inherited value must not leak into a full uninstall
 		marker := filepath.Join(GinkgoT().TempDir(), "keep")
 		app := types.AppConfig{BaseConfig: types.BaseConfig{Name: "example"}, InstallMethod: "curlpipe",
 			UninstallCommand: fmt.Sprintf("printf '%%s' \"${DEVEX_UNINSTALL_KEEP_DATA:-unset}\" > '%s'", marker)}
 		for _, tc := range []struct {
-			keep bool
-			want string
-		}{{true, "1"}, {false, "unset"}} {
+			keep      bool
+			inherited string
+			want      string
+		}{{true, "", "1"}, {false, "1", "unset"}} {
+			// An inherited value must neither stand in for --keep-data nor leak into a full uninstall.
+			GinkgoT().Setenv("DEVEX_UNINSTALL_KEEP_DATA", tc.inherited)
 			Expect(uninstallConfiguredApplication(context.Background(), app, nil, nil, tc.keep)).To(Succeed())
 			contents, err := os.ReadFile(marker)
 			Expect(err).NotTo(HaveOccurred())

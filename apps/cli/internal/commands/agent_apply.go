@@ -148,14 +148,14 @@ func runAgentApplyInit(cmd *cobra.Command, settings config.CrossPlatformSettings
 		// them as they are instead of re-reading one file.
 		cmd.Printf("Kept your existing agents configuration (%s); run 'devex agent diff' to review.\n", agentsPath)
 		models := settings.Agents.LocalModels
-		if dryRun {
-			if len(models) == 0 {
-				return nil
-			}
-			return runLocalModels(cmd, models, lmProbe, lmOpts, true)
+		if dryRun && len(models) == 0 {
+			return nil
 		}
 		if errs := config.ValidateAgentsConfig(settings.Agents, "agents.yaml"); len(errs) > 0 {
 			return fmt.Errorf("invalid agents configuration: %s", errs[0].Error())
+		}
+		if dryRun {
+			return runLocalModels(cmd, models, lmProbe, lmOpts, true)
 		}
 		var agentsErr error
 		if len(settings.Agents.Enabled) == 0 {

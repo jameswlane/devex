@@ -688,6 +688,16 @@ var _ = Describe("Agent apply and diff commands", func() {
 		Expect(run(true, "apply", "--init")).To(ContainSubstring("qwen2.5-coder:7b: pull (size unknown)"))
 		Expect(pulled).To(BeEmpty())
 
+		// The preview validates like the real apply: duplicates are rejected.
+		dup := NewAgentCmdFromDeps(AgentCmdDeps{
+			Settings: config.CrossPlatformSettings{HomeDir: home, Agents: config.AgentsConfig{LocalModels: []string{"llama3.2", "llama3.2:latest"}}},
+			Executor: fake, LocalModelsProbe: probe,
+		})
+		dup.SetOut(io.Discard)
+		dup.SetErr(io.Discard)
+		dup.SetArgs([]string{"apply", "--init"})
+		Expect(dup.Execute()).To(MatchError(ContainSubstring("duplicate local model")))
+
 		viper.Set("dry-run", false)
 		DeferCleanup(viper.Reset)
 		run(false, "apply", "--init")
