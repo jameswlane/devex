@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -71,6 +74,41 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			return nil
 		})).To(Succeed())
 		sort.Strings(files)
+	})
+
+	It("leaves grok and agent links the Cursor CLI owns when uninstalling Grok Build", func() {
+		if runtime.GOOS == "windows" {
+			Skip("the Linux uninstall command runs under sh")
+		}
+		home := GinkgoT().TempDir()
+		mk := func(dir string) string {
+			path := filepath.Join(home, dir)
+			Expect(os.MkdirAll(path, 0o755)).To(Succeed())
+			return path
+		}
+		localBin, grokBin, downloads, cursor := mk(".local/bin"), mk(".grok/bin"), mk(".grok/downloads"), mk(".cursor/bin")
+		Expect(os.WriteFile(filepath.Join(downloads, "grok-1.0.0"), []byte("#!/bin/sh\n"), 0o755)).To(Succeed())
+		Expect(os.Symlink("../downloads/grok-1.0.0", filepath.Join(grokBin, "grok"))).To(Succeed())
+		Expect(os.Symlink(filepath.Join(grokBin, "grok"), filepath.Join(localBin, "grok"))).To(Succeed())
+		// The Cursor CLI switched agent to its own shim.
+		Expect(os.Symlink(filepath.Join(cursor, "agent"), filepath.Join(grokBin, "agent"))).To(Succeed())
+		Expect(os.Symlink(filepath.Join(cursor, "agent"), filepath.Join(localBin, "agent"))).To(Succeed())
+
+		cmd := exec.Command("sh", "-c", agents["Grok Build"].Linux.UninstallCommand)
+		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+
+		_, err = os.Lstat(filepath.Join(localBin, "grok"))
+		Expect(os.IsNotExist(err)).To(BeTrue())
+		_, err = os.Lstat(filepath.Join(grokBin, "grok"))
+		Expect(os.IsNotExist(err)).To(BeTrue())
+		target, err := os.Readlink(filepath.Join(localBin, "agent"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(target).To(Equal(filepath.Join(cursor, "agent")))
+		target, err = os.Readlink(filepath.Join(grokBin, "agent"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(target).To(Equal(filepath.Join(cursor, "agent")))
 	})
 
 	It("ships and strictly validates every AI coding agent definition", func() {
@@ -244,15 +282,15 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Minion Code", "Minion Code", "mise", "uv@latest pipx:minion-code[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:minion-code"),
 		Entry("Mistral Vibe", "Mistral Vibe", "mise", "uv@latest pipx:mistral-vibe[python=3.14]@latest", "", false, []string{"mise"}, nil, "pipx:mistral-vibe"),
 		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, nil, "aqua:aaif-goose/goose"),
-		Entry("Auggie CLI", "Auggie CLI", "mise", "node@24 npm:@augmentcode/auggie@latest", "", true, []string{"Node.js"}, nil, "npm:@augmentcode/auggie"),
-		Entry("Bob", "Bob", "mise", "node@24 npm:@ibm/bob@latest", "", true, []string{"Node.js"}, nil, "npm:@ibm/bob"),
-		Entry("Cline", "Cline", "mise", "node@24 npm:cline@latest", "", true, []string{"Node.js"}, nil, "npm:cline"),
+		Entry("Auggie CLI", "Auggie CLI", "mise", "node@24 npm:@augmentcode/auggie@latest", "", false, []string{"Node.js"}, nil, "npm:@augmentcode/auggie"),
+		Entry("Bob", "Bob", "mise", "node@24 npm:@ibm/bob@latest", "", false, []string{"Node.js"}, nil, "npm:@ibm/bob"),
+		Entry("Cline", "Cline", "mise", "node@24 npm:cline@latest", "", false, []string{"Node.js"}, nil, "npm:cline"),
 		Entry("Codebuddy Code", "Codebuddy Code", "curlpipe", "https://www.codebuddy.cn/cli/install.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/codebuddy" && rm -rf "$HOME/.local/share/codebuddy"`),
 		Entry("DeepAgents", "DeepAgents", "mise", "uv@latest pipx:deepagents-code[python=3.14]@latest", "", false, []string{"mise"}, nil, "pipx:deepagents-code"),
 		Entry("DimCode", "DimCode", "mise", "node@24 npm:dimcode@latest", "", false, []string{"Node.js"}, nil, "npm:dimcode"),
-		Entry("Dirac", "Dirac", "mise", "node@24 npm:dirac-cli@latest", "", true, []string{"Node.js"}, nil, "npm:dirac-cli"),
+		Entry("Dirac", "Dirac", "mise", "node@24 npm:dirac-cli@latest", "", false, []string{"Node.js"}, nil, "npm:dirac-cli"),
 		Entry("Factory Droid", "Factory Droid", "curlpipe", "https://app.factory.ai/cli", "user", true, nil, nil, `rm -f "$HOME/.local/bin/droid"`),
-		Entry("Grok Build", "Grok Build", "curlpipe", "https://x.ai/cli/install.sh", "user", true, nil, nil, `rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
+		Entry("Grok Build", "Grok Build", "curlpipe", "https://x.ai/cli/install.sh", "user", true, nil, nil, `for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
 		Entry("MiniMax Code", "MiniMax Code", "mise", "node@24 npm:@minimax-ai/code@latest", "", false, []string{"Node.js"}, nil, "npm:@minimax-ai/code"),
 		Entry("Nova", "Nova", "mise", "node@24 npm:@compass-ai/nova@latest", "", false, []string{"Node.js"}, nil, "npm:@compass-ai/nova"),
 		Entry("Pi", "Pi", "mise", "node@24 npm:@earendil-works/pi-coding-agent@latest", "", false, []string{"Node.js"}, nil, "npm:@earendil-works/pi-coding-agent"),
@@ -279,13 +317,13 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("Kimi Code reruns its installer", "Kimi Code", `Plugin invocation: devex-plugin-package-manager-curlpipe "install" "--user" "https://code.kimi.com/kimi-code/install.sh"`),
 		Entry("Aider upgrades through mise", "Aider", `Plugin invocation: devex-plugin-package-manager-mise "update" "pipx:aider-chat"`),
 		Entry("Goose upgrades through mise", "Goose", `Plugin invocation: devex-plugin-package-manager-mise "update" "aqua:aaif-goose/goose"`),
-		Entry("Auggie CLI updates itself", "Auggie CLI", "Auggie CLI manages its own updates; skipped"),
-		Entry("Bob updates itself", "Bob", "Bob manages its own updates; skipped"),
-		Entry("Cline updates itself", "Cline", "Cline manages its own updates; skipped"),
+		Entry("Auggie CLI upgrades through mise", "Auggie CLI", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@augmentcode/auggie"`),
+		Entry("Bob upgrades through mise", "Bob", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@ibm/bob"`),
+		Entry("Cline upgrades through mise", "Cline", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:cline"`),
 		Entry("Codebuddy Code updates itself", "Codebuddy Code", "Codebuddy Code manages its own updates; skipped"),
 		Entry("DeepAgents upgrades through mise", "DeepAgents", `Plugin invocation: devex-plugin-package-manager-mise "update" "pipx:deepagents-code"`),
 		Entry("DimCode upgrades through mise", "DimCode", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:dimcode"`),
-		Entry("Dirac updates itself", "Dirac", "Dirac manages its own updates; skipped"),
+		Entry("Dirac upgrades through mise", "Dirac", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:dirac-cli"`),
 		Entry("Factory Droid updates itself", "Factory Droid", "Factory Droid manages its own updates; skipped"),
 		Entry("Grok Build updates itself", "Grok Build", "Grok Build manages its own updates; skipped"),
 		Entry("MiniMax Code upgrades through mise", "MiniMax Code", `Plugin invocation: devex-plugin-package-manager-mise "update" "npm:@minimax-ai/code"`),
@@ -326,7 +364,7 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("DimCode", "DimCode", "mise: npm:dimcode"),
 		Entry("Dirac", "Dirac", "mise: npm:dirac-cli"),
 		Entry("Factory Droid", "Factory Droid", `curlpipe: rm -f "$HOME/.local/bin/droid"`),
-		Entry("Grok Build", "Grok Build", `curlpipe: rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
+		Entry("Grok Build", "Grok Build", `curlpipe: for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"`),
 		Entry("MiniMax Code", "MiniMax Code", "mise: npm:@minimax-ai/code"),
 		Entry("Nova", "Nova", "mise: npm:@compass-ai/nova"),
 		Entry("Pi", "Pi", "mise: npm:@earendil-works/pi-coding-agent"),

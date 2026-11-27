@@ -21,14 +21,7 @@ macos:
   official_support: true
   dependencies:
     - mise
-windows:
-  install_method: mise
-  install_command: uv@latest pipx:deepagents-code[python=3.14]@latest
-  uninstall_command: pipx:deepagents-code
-  self_updating: false
-  official_support: true
-  dependencies:
-    - mise
+# No windows block: LangChain documents WSL for Windows users.
 linux:
   # mise's pipx backend runs uv tool install with an isolated mise-managed
   # Python 3.14 runtime (deepagents-code requires Python >=3.14,<3.15) without

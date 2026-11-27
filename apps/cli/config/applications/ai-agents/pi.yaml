@@ -12,7 +12,7 @@ desktop_environments:
 # Node is absent) rather than installing a native binary, so mise npm is primary.
 macos:
   install_method: mise
-  install_command: node@lts npm:@earendil-works/pi-coding-agent@latest
+  install_command: node@24 npm:@earendil-works/pi-coding-agent@latest
   uninstall_command: npm:@earendil-works/pi-coding-agent
   self_updating: false
   official_support: true
@@ -26,7 +26,7 @@ macos:
       official_support: false
 windows:
   install_method: mise
-  install_command: node@lts npm:@earendil-works/pi-coding-agent@latest
+  install_command: node@24 npm:@earendil-works/pi-coding-agent@latest
   uninstall_command: npm:@earendil-works/pi-coding-agent
   self_updating: false
   official_support: true

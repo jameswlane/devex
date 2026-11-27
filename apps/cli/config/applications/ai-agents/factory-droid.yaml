@@ -26,15 +26,17 @@ macos:
       self_updating: true
       official_support: true
     - install_method: mise
-      install_command: node@lts npm:droid@latest
+      install_command: node@24 npm:droid@latest
       uninstall_command: npm:droid
       self_updating: false
       official_support: true
       dependencies:
         - Node.js
 windows:
+  # Factory documents a native PowerShell installer for Windows; DevEx's curlpipe runs scripts with bash, so Windows uses the
+  # vendor's npm package through mise.
   install_method: mise
-  install_command: node@lts npm:droid@latest
+  install_command: node@24 npm:droid@latest
   uninstall_command: npm:droid
   self_updating: false
   official_support: true

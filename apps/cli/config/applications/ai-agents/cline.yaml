@@ -9,31 +9,33 @@ desktop_environments:
 # Homebrew's cline formula is deprecated; npm is the official distribution.
 macos:
   install_method: mise
-  install_command: node@lts npm:cline@latest
+  install_command: node@24 npm:cline@latest
   uninstall_command: npm:cline
-  self_updating: true
+  self_updating: false
   official_support: true
   dependencies:
     - Node.js
 windows:
   install_method: mise
-  install_command: node@lts npm:cline@latest
+  install_command: node@24 npm:cline@latest
   uninstall_command: npm:cline
-  self_updating: true
+  self_updating: false
   official_support: true
   dependencies:
     - Node.js
 linux:
   # mise installs npm:cline without sudo npm -g. Node is installed in the same
   # mise call because the npm backend needs it.
-  # Marked self_updating: Cline enables autoUpdateEnabled by default in global
+  # Not marked self_updating even though Cline enables autoUpdateEnabled by default in global
   # settings (sdk/packages/core/src/services/global-settings.ts).
+  # Its updater runs a global npm install outside mise's prefix, so the mise
+  # copy would stay stale; DevEx upgrades it through mise instead (#654).
   # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
   # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
   install_method: mise
   install_command: node@24 npm:cline@latest
   uninstall_command: npm:cline
-  self_updating: true
+  self_updating: false
   official_support: true
   dependencies:
     - Node.js

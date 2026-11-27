@@ -18,21 +18,23 @@ macos:
   install_scope: user
   installed_binary: grok
   self_updating: true
-  uninstall_command: rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
+  uninstall_command: for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
   official_support: true
   alternatives:
     - install_method: mise
-      install_command: node@lts npm:@xai-official/grok@latest
+      install_command: node@24 npm:@xai-official/grok@latest
       uninstall_command: npm:@xai-official/grok
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js
 windows:
+  # xAI documents a native PowerShell installer for Windows; DevEx's curlpipe runs scripts with bash, so Windows uses the
+  # vendor's npm package through mise.
   install_method: mise
-  install_command: node@lts npm:@xai-official/grok@latest
+  install_command: node@24 npm:@xai-official/grok@latest
   uninstall_command: npm:@xai-official/grok
-  self_updating: true
+  self_updating: false
   official_support: true
   dependencies:
     - Node.js
@@ -49,7 +51,7 @@ linux:
   install_scope: user
   installed_binary: grok
   self_updating: true
-  uninstall_command: rm -f "$HOME/.local/bin/grok" "$HOME/.local/bin/agent" "$HOME/.grok/bin/grok" "$HOME/.grok/bin/agent" "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
+  uninstall_command: for n in grok agent; do [ "$(readlink "$HOME/.local/bin/$n" 2>/dev/null || true)" != "$HOME/.grok/bin/$n" ] || rm -f "$HOME/.local/bin/$n"; case "$(readlink "$HOME/.grok/bin/$n" 2>/dev/null || true)" in ../downloads/* | "$HOME"/.grok/downloads/*) rm -f "$HOME/.grok/bin/$n" ;; esac; done; rm -f "$HOME/.config/fish/completions/grok.fish" && rm -rf "$HOME/.grok/downloads" "$HOME/.grok/completions" "$HOME/.grok/docs"
   official_support: true
   alternatives:
     - install_method: mise
@@ -57,7 +59,7 @@ linux:
       # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
       install_command: node@24 npm:@xai-official/grok@latest
       uninstall_command: npm:@xai-official/grok
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js

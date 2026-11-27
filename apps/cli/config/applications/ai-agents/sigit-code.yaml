@@ -16,7 +16,7 @@ macos:
   official_support: true
   alternatives:
     - install_method: mise
-      install_command: node@lts npm:@getsigit/sigit[allow_low_downloads=true]@latest
+      install_command: node@24 npm:@getsigit/sigit[allow_low_downloads=true]@latest
       uninstall_command: npm:@getsigit/sigit
       self_updating: false
       official_support: true
@@ -30,7 +30,7 @@ windows:
   official_support: true
   alternatives:
     - install_method: mise
-      install_command: node@lts npm:@getsigit/sigit[allow_low_downloads=true]@latest
+      install_command: node@24 npm:@getsigit/sigit[allow_low_downloads=true]@latest
       uninstall_command: npm:@getsigit/sigit
       self_updating: false
       official_support: true

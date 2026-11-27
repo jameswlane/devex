@@ -26,17 +26,17 @@ macos:
       self_updating: true
       official_support: true
     - install_method: mise
-      install_command: node@lts npm:@tencent-ai/codebuddy-code@latest
+      install_command: node@24 npm:@tencent-ai/codebuddy-code@latest
       uninstall_command: npm:@tencent-ai/codebuddy-code
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js
 windows:
   install_method: mise
-  install_command: node@lts npm:@tencent-ai/codebuddy-code@latest
+  install_command: node@24 npm:@tencent-ai/codebuddy-code@latest
   uninstall_command: npm:@tencent-ai/codebuddy-code
-  self_updating: true
+  self_updating: false
   official_support: true
   dependencies:
     - Node.js
@@ -59,7 +59,7 @@ linux:
       # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
       install_command: node@24 npm:@tencent-ai/codebuddy-code@latest
       uninstall_command: npm:@tencent-ai/codebuddy-code
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js

@@ -20,23 +20,27 @@ macos:
   uninstall_command: rm -f "$HOME/.local/bin/qwen" && rm -rf "$HOME/.local/lib/qwen-code"
   official_support: true
   alternatives:
+    # Homebrew core formula, maintained outside QwenLM; Qwen tells brew users
+    # to run `brew upgrade`, so it does not update itself.
     - install_method: brew
       install_command: qwen-code
       uninstall_command: qwen-code
-      self_updating: true
-      official_support: true
+      self_updating: false
+      official_support: false
     - install_method: mise
-      install_command: node@lts npm:@qwen-code/qwen-code@latest
+      install_command: node@24 npm:@qwen-code/qwen-code@latest
       uninstall_command: npm:@qwen-code/qwen-code
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js
 windows:
+  # QwenLM documents a native PowerShell installer for Windows; DevEx's curlpipe runs scripts with bash, so Windows uses the
+  # vendor's npm package through mise.
   install_method: mise
-  install_command: node@lts npm:@qwen-code/qwen-code@latest
+  install_command: node@24 npm:@qwen-code/qwen-code@latest
   uninstall_command: npm:@qwen-code/qwen-code
-  self_updating: true
+  self_updating: false
   official_support: true
   dependencies:
     - Node.js
@@ -60,12 +64,14 @@ linux:
       # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
       install_command: node@24 npm:@qwen-code/qwen-code@latest
       uninstall_command: npm:@qwen-code/qwen-code
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js
+    # Homebrew core formula, maintained outside QwenLM; Qwen tells brew users
+    # to run `brew upgrade`, so it does not update itself.
     - install_method: brew
       install_command: qwen-code
       uninstall_command: qwen-code
-      self_updating: true
-      official_support: true
+      self_updating: false
+      official_support: false

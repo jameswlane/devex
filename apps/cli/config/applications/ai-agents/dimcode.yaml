@@ -8,7 +8,7 @@ desktop_environments:
 # npm package: https://www.npmjs.com/package/dimcode
 macos:
   install_method: mise
-  install_command: node@lts npm:dimcode@latest
+  install_command: node@24 npm:dimcode@latest
   uninstall_command: npm:dimcode
   self_updating: false
   official_support: true
@@ -16,7 +16,7 @@ macos:
     - Node.js
 windows:
   install_method: mise
-  install_command: node@lts npm:dimcode@latest
+  install_command: node@24 npm:dimcode@latest
   uninstall_command: npm:dimcode
   self_updating: false
   official_support: true

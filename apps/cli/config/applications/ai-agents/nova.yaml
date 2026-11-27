@@ -8,7 +8,7 @@ desktop_environments:
 # Website: https://www.compassap.ai/portfolio/nova.html
 macos:
   install_method: mise
-  install_command: node@lts npm:@compass-ai/nova@latest
+  install_command: node@24 npm:@compass-ai/nova@latest
   uninstall_command: npm:@compass-ai/nova
   self_updating: false
   official_support: true
@@ -16,7 +16,7 @@ macos:
     - Node.js
 windows:
   install_method: mise
-  install_command: node@lts npm:@compass-ai/nova@latest
+  install_command: node@24 npm:@compass-ai/nova@latest
   uninstall_command: npm:@compass-ai/nova
   self_updating: false
   official_support: true

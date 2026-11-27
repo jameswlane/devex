@@ -22,17 +22,19 @@ macos:
   official_support: true
   alternatives:
     - install_method: mise
-      install_command: node@lts npm:@qoder-ai/qodercli@latest
+      install_command: node@24 npm:@qoder-ai/qodercli@latest
       uninstall_command: npm:@qoder-ai/qodercli
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js
 windows:
+  # Qoder documents a native PowerShell installer for Windows and calls npm its legacy channel; DevEx's curlpipe runs scripts with bash, so Windows uses the
+  # vendor's npm package through mise.
   install_method: mise
-  install_command: node@lts npm:@qoder-ai/qodercli@latest
+  install_command: node@24 npm:@qoder-ai/qodercli@latest
   uninstall_command: npm:@qoder-ai/qodercli
-  self_updating: true
+  self_updating: false
   official_support: true
   dependencies:
     - Node.js
@@ -57,7 +59,7 @@ linux:
       # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
       install_command: node@24 npm:@qoder-ai/qodercli@latest
       uninstall_command: npm:@qoder-ai/qodercli
-      self_updating: true
+      self_updating: false
       official_support: true
       dependencies:
         - Node.js
