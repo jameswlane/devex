@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -90,52 +91,74 @@ func (d *DebInstaller) validateFilePath(filePath string) error {
 	return nil
 }
 
-// validateURL validates URLs for downloading packages
+// validateURL validates URLs for downloading packages.
 func (d *DebInstaller) validateURL(rawURL string) error {
+	parsedURL, err := d.validateURLOrigin(rawURL)
+	if err != nil {
+		return err
+	}
+
+	// Accept direct .deb paths and explicit ?format=deb redirect endpoints
+	// (such as LM Studio's official download redirector); downloadDebFile
+	// verifies every redirect hop and the final artifact URL or content type.
+	if !strings.HasSuffix(strings.ToLower(parsedURL.Path), ".deb") &&
+		!strings.EqualFold(parsedURL.Query().Get("format"), "deb") {
+		return fmt.Errorf("URL must point to a .deb file")
+	}
+
+	return nil
+}
+
+// validateURLOrigin enforces scheme, host, length, and non-local/non-private-IP checks.
+func (d *DebInstaller) validateURLOrigin(rawURL string) (*url.URL, error) {
 	if rawURL == "" {
-		return fmt.Errorf("URL cannot be empty")
+		return nil, fmt.Errorf("URL cannot be empty")
 	}
 
 	if len(rawURL) > MaxURLLength {
-		return fmt.Errorf("URL too long (max %d characters)", MaxURLLength)
+		return nil, fmt.Errorf("URL too long (max %d characters)", MaxURLLength)
 	}
 
 	// Parse the URL
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid URL format: %w", err)
+		return nil, fmt.Errorf("invalid URL format: %w", err)
 	}
 
 	// Only allow HTTP and HTTPS
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("only HTTP and HTTPS URLs are allowed")
+		return nil, fmt.Errorf("only HTTP and HTTPS URLs are allowed")
 	}
 
 	// Validate hostname
 	if parsedURL.Host == "" {
-		return fmt.Errorf("URL must have a valid hostname")
+		return nil, fmt.Errorf("URL must have a valid hostname")
 	}
 
 	// Prevent access to localhost and private IP ranges (basic protection)
 	hostname := strings.ToLower(parsedURL.Hostname())
-	if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" {
-		return fmt.Errorf("access to localhost is not allowed")
+	if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" || strings.HasSuffix(hostname, ".localhost") {
+		return nil, fmt.Errorf("access to localhost is not allowed")
 	}
 
-	// Check for private IP ranges (simplified)
-	privateRanges := []string{"10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19."}
-	for _, privateRange := range privateRanges {
-		if strings.HasPrefix(hostname, privateRange) {
-			return fmt.Errorf("access to private IP ranges is not allowed")
+	if ip := net.ParseIP(hostname); ip != nil {
+		if ip.IsLoopback() {
+			return nil, fmt.Errorf("access to localhost is not allowed")
+		}
+		if ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return nil, fmt.Errorf("access to private IP ranges is not allowed")
 		}
 	}
 
-	// The URL should point to a .deb file
-	if !strings.HasSuffix(strings.ToLower(parsedURL.Path), ".deb") {
-		return fmt.Errorf("URL must point to a .deb file")
+	// Check for private IP ranges (simplified fallback)
+	privateRanges := []string{"10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19."}
+	for _, privateRange := range privateRanges {
+		if strings.HasPrefix(hostname, privateRange) {
+			return nil, fmt.Errorf("access to private IP ranges is not allowed")
+		}
 	}
 
-	return nil
+	return parsedURL, nil
 }
 
 // ValidateCommand validates command arguments to prevent injection

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -41,7 +42,18 @@ func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (downloa
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			if len(via) > 0 && via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
+				return fmt.Errorf("refusing redirect downgrade from https to %s", req.URL.Scheme)
+			}
+			_, err := d.validateURLOrigin(req.URL.String())
+			return err
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to download: %w", err)
@@ -52,8 +64,15 @@ func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (downloa
 		return "", fmt.Errorf("download failed with status: %s", resp.Status)
 	}
 
-	// Verify content type if available
-	contentType := resp.Header.Get("Content-Type")
+	// Verify that a redirecting URL resolved to a .deb path or an explicit Debian package content type.
+	contentType := strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])
+	finalPath := ""
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalPath = strings.ToLower(resp.Request.URL.Path)
+	}
+	if !strings.HasSuffix(finalPath, ".deb") && !d.isExplicitDebContentType(contentType) {
+		return "", fmt.Errorf("resolved download URL does not point to a .deb package")
+	}
 	if contentType != "" && !d.isValidDebContentType(contentType) {
 		d.logger.Warning("Unexpected content type: %s", contentType)
 	}
@@ -106,22 +125,24 @@ func (d *DebInstaller) cleanupTempFile(filename string) {
 	}
 }
 
+// isExplicitDebContentType checks if the content type explicitly identifies a .deb package.
+func (d *DebInstaller) isExplicitDebContentType(contentType string) bool {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "application/vnd.debian.binary-package",
+		"application/x-deb",
+		"application/x-debian-package":
+		return true
+	default:
+		return false
+	}
+}
+
 // isValidDebContentType checks if the content type indicates a .deb file
 func (d *DebInstaller) isValidDebContentType(contentType string) bool {
-	validTypes := []string{
-		"application/vnd.debian.binary-package",
-		"application/x-deb",
-		"application/x-debian-package",
-		"application/octet-stream", // Generic binary, often used for .deb files
+	if d.isExplicitDebContentType(contentType) {
+		return true
 	}
-
-	for _, validType := range validTypes {
-		if contentType == validType {
-			return true
-		}
-	}
-
-	return false
+	return strings.EqualFold(strings.TrimSpace(contentType), "application/octet-stream")
 }
 
 // isLocalFile checks if the given path refers to a local file
