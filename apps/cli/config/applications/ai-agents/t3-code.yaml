@@ -22,8 +22,11 @@ linux:
   # Unpinned official bootstrap script: https://t3.codes/install.sh downloads
   # SHA256SUMS and the matching t3-<ver>-linux-<arch>.tar.gz from GitHub
   # Releases, verifies the archive's SHA-256, unpacks into ~/.t3/runtime/versions,
-  # and writes ~/.local/bin/t3. DevEx adds a disabled localhost-bound user
-  # systemd unit (~/.local/share/systemd/user/t3code.service); enable it when ready.
+  # and writes ~/.local/bin/t3. `t3 update` keeps it current.
+  # DevEx does not write or enable a service: upstream's `t3 service install`
+  # owns the t3code.service user unit (localhost-only by default), and
+  # `t3 uninstall` removes that service, the launcher and the downloads while
+  # keeping ~/.t3/userdata and ~/.t3/service.env.
   install_method: curlpipe
   download_url: https://t3.codes/install.sh
   install_scope: user
@@ -34,44 +37,11 @@ linux:
     - scope: user
       shell: |
         set -eu
-        unit_dir="$HOME/.local/share/systemd/user"
-        unit_file="$unit_dir/t3code.service"
-        mkdir -p "$unit_dir"
-        cat <<'EOF' > "$unit_file"
-        [Unit]
-        Description=T3 Code Local Server
-        After=network-online.target
-
-        [Service]
-        Type=simple
-        EnvironmentFile=-%h/.t3/service.env
-        Environment="T3CODE_HOST=127.0.0.1"
-        Environment="T3CODE_PORT=3773"
-        ExecStart=%h/.local/bin/t3 serve
-        Restart=on-failure
-        RestartSec=3
-
-        [Install]
-        WantedBy=default.target
-        EOF
-        chmod 0644 "$unit_file"
-        if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1; then
-          echo "Installed T3 Code user service at $unit_file (bound to 127.0.0.1:3773, not enabled)."
-          echo "Enable and start it with: systemctl --user enable --now t3code.service"
-        else
-          echo "Installed T3 Code user service file at $unit_file (bound to 127.0.0.1:3773)."
-          echo "systemd user manager is unavailable here; run manually with: T3CODE_HOST=127.0.0.1 T3CODE_PORT=3773 t3 serve"
-          echo "On a systemd host, enable it with: systemctl --user enable --now t3code.service"
-        fi
+        echo "T3 Code installed to $HOME/.local/bin/t3. No background service was enabled."
+        echo "Run it in a terminal with: t3 (or 't3 serve' without a browser); it binds to localhost by default."
+        echo "To run it as a background user service (localhost only unless you run 't3 up --lan'): t3 service install"
   uninstall_command: |
     set -eu
-    if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-      systemctl --user stop t3code.service >/dev/null 2>&1 || true
-      systemctl --user disable t3code.service >/dev/null 2>&1 || true
+    if [ -x "$HOME/.local/bin/t3" ]; then
+      "$HOME/.local/bin/t3" uninstall --yes
     fi
-    rm -f "$HOME/.local/share/systemd/user/t3code.service"
-    if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-      systemctl --user daemon-reload >/dev/null 2>&1 || true
-    fi
-    rm -f "$HOME/.local/bin/t3"
-    rm -rf "$HOME/.t3/runtime"

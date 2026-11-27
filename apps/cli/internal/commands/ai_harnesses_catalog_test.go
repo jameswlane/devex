@@ -218,7 +218,7 @@ var _ = Describe("AI Agent Harnesses catalog", func() {
 			}
 		},
 		Entry("Orca", "Orca", "deb", "", true, true, nil),
-		Entry("Herdr", "Herdr", "curlpipe", "user", false, false, nil),
+		Entry("Herdr", "Herdr", "curlpipe", "user", false, true, nil),
 		Entry("T3 Code", "T3 Code", "curlpipe", "user", false, true, nil),
 		Entry("Claude Squad", "Claude Squad", "curlpipe", "", false, false, []string{"tmux", "git", "GitHub CLI"}),
 		Entry("Superset", "Superset", "deb", "", true, true, []string{"git"}),
@@ -282,14 +282,33 @@ var _ = Describe("AI Agent Harnesses catalog", func() {
 		Entry("cmux", "cmux"),
 	)
 
-	It("installs user systemd services for T3 Code and amux bound to localhost without auto-enabling, and cleans them up on uninstall", func() {
+	It("leaves the T3 Code background service to upstream's own service and uninstall commands", func() {
+		app := harnesses["T3 Code"]
+		Expect(app.Linux.PostInstall).NotTo(BeEmpty())
+		for _, hook := range app.Linux.PostInstall {
+			Expect(hook.Scope).To(Or(BeEmpty(), Equal("user")))
+			Expect(hook.Shell).NotTo(ContainSubstring("systemd/user"), "upstream `t3 service install` owns t3code.service")
+			for _, line := range strings.Split(hook.Shell, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "echo ") {
+					continue
+				}
+				Expect(trimmed).NotTo(ContainSubstring("systemctl"), "T3 Code install must not touch systemd")
+				Expect(trimmed).NotTo(ContainSubstring("t3 service install"), "T3 Code install must not enable the service")
+			}
+			Expect(hook.Shell).To(ContainSubstring("t3 service install"), "must print how to enable the service")
+		}
+		Expect(app.Linux.UninstallCommand).To(ContainSubstring(`"$HOME/.local/bin/t3" uninstall --yes`))
+		Expect(app.Linux.UninstallCommand).NotTo(ContainSubstring("rm -rf"), "t3 uninstall keeps ~/.t3/userdata and service.env")
+	})
+
+	It("installs a user systemd service for amux bound to localhost without auto-enabling, and cleans it up on uninstall", func() {
 		for _, tc := range []struct {
 			name        string
 			unitName    string
 			localhost   string
 			keepDataDir string
 		}{
-			{name: "T3 Code", unitName: "t3code.service", localhost: "127.0.0.1", keepDataDir: ".t3/userdata"},
 			{name: "amux", unitName: "amux-server.service", localhost: "127.0.0.1", keepDataDir: ".amux"},
 		} {
 			app := harnesses[tc.name]

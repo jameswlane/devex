@@ -29,7 +29,8 @@ linux:
   download_url: https://herdr.dev/install.sh
   install_scope: user
   installed_binary: herdr
-  self_updating: false
+  # `herdr update` reads the same latest.json manifest as install.sh.
+  self_updating: true
   uninstall_command: |
     set -eu
     if [ -x "$HOME/.local/bin/herdr" ]; then
