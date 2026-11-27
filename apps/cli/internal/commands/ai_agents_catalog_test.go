@@ -79,10 +79,13 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			"claude-code.yaml",
 			"codex.yaml",
 			"copilot-cli.yaml",
+			"fast-agent.yaml",
 			"gemini-cli.yaml",
 			"goose.yaml",
 			"kimi-code.yaml",
 			"lm-studio.yaml",
+			"minion-code.yaml",
+			"mistral-vibe.yaml",
 			"ollama.yaml",
 			"opencode.yaml",
 		}))
@@ -209,6 +212,9 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		Entry("OpenCode", "OpenCode", "curlpipe", "https://opencode.ai/install", "user", true, nil, nil, `rm -f "$HOME/.opencode/bin/opencode"`),
 		Entry("Kimi Code", "Kimi Code", "curlpipe", "https://code.kimi.com/kimi-code/install.sh", "user", false, nil, nil, `rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"`),
 		Entry("Aider", "Aider", "mise", "uv@latest pipx:aider-chat[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:aider-chat"),
+		Entry("fast-agent", "fast-agent", "mise", "uv@latest pipx:fast-agent-mcp[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:fast-agent-mcp"),
+		Entry("Minion Code", "Minion Code", "mise", "uv@latest pipx:minion-code[python=3.12]@latest", "", false, []string{"mise"}, nil, "pipx:minion-code"),
+		Entry("Mistral Vibe", "Mistral Vibe", "mise", "uv@latest pipx:mistral-vibe[python=3.14]@latest", "", false, []string{"mise"}, nil, "pipx:mistral-vibe"),
 		Entry("Goose", "Goose", "mise", "aqua:aaif-goose/goose@latest", "", false, []string{"mise"}, nil, "aqua:aaif-goose/goose"),
 	)
 
@@ -264,6 +270,77 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		cmd.SetArgs([]string{"upgrade", "--dry-run", "--non-interactive", "--offline", "Kimi Code"})
 		Expect(cmd.Execute()).To(MatchError(ContainSubstring("rerunning the install script needs the network")))
 	})
+
+	DescribeTable("plans dry-run uninstall and cross-platform channels for Python AI coding agents",
+		func(name, wantInstall, wantUninstall string, wantBrewAlt bool) {
+			app, ok := agents[name]
+			Expect(ok).To(BeTrue(), "expected %s in ai-agents catalog", name)
+
+			for label, cfg := range map[string]types.OSConfig{
+				"linux":   app.Linux,
+				"macos":   app.MacOS,
+				"windows": app.Windows,
+			} {
+				Expect(cfg.InstallMethod).To(Equal("mise"), "%s (%s)", name, label)
+				Expect(cfg.InstallCommand).To(Equal(wantInstall), "%s (%s)", name, label)
+				Expect(cfg.UninstallCommand).To(Equal(wantUninstall), "%s (%s)", name, label)
+				Expect(cfg.SelfUpdating).To(BeFalse(), "%s (%s)", name, label)
+				Expect(cfg.OfficialSupport).To(BeTrue(), "%s (%s)", name, label)
+				Expect(cfg.Dependencies).To(Equal([]string{"mise"}), "%s (%s)", name, label)
+
+				// Every channel within a platform block must have a unique install_method.
+				seen := map[string]bool{cfg.InstallMethod: true}
+				for _, alt := range cfg.Alternatives {
+					Expect(seen[alt.InstallMethod]).To(BeFalse(), "%s (%s) duplicate channel %q", name, label, alt.InstallMethod)
+					seen[alt.InstallMethod] = true
+				}
+			}
+
+			if wantBrewAlt {
+				for label, cfg := range map[string]types.OSConfig{"linux": app.Linux, "macos": app.MacOS} {
+					Expect(cfg.Alternatives).To(HaveLen(1), "%s (%s)", name, label)
+					Expect(cfg.Alternatives[0].InstallMethod).To(Equal("brew"), "%s (%s)", name, label)
+					Expect(cfg.Alternatives[0].OfficialSupport).To(BeFalse(), "%s (%s)", name, label)
+					Expect(cfg.Alternatives[0].InstalledBinary).To(Equal("vibe"), "%s (%s)", name, label)
+				}
+			}
+
+			// Dry-run uninstall removes only the mise pipx package and leaves user config intact.
+			repo := mocks.NewMockRepository()
+			Expect(repo.AddApp(name)).To(Succeed())
+
+			var uninstallOut bytes.Buffer
+			uninstallCmd := commands.NewRootCmd("test", repo, settings)
+			uninstallCmd.SetOut(&uninstallOut)
+			uninstallCmd.SetErr(&uninstallOut)
+			uninstallCmd.SetArgs([]string{"uninstall", "--app", name, "--dry-run"})
+			Expect(uninstallCmd.Execute()).To(Succeed())
+			Expect(uninstallOut.String()).To(ContainSubstring("Would uninstall " + name + " via mise: " + wantUninstall))
+			Expect(uninstallOut.String()).NotTo(ContainSubstring("Would remove configuration"))
+			Expect(uninstallOut.String()).NotTo(ContainSubstring("Would remove data"))
+
+			// Upgrade runs `mise upgrade` on the uninstalled tool; mise has no
+			// metadata refresh, so update reports that explicitly.
+			var upgradeOut bytes.Buffer
+			upgradeCmd := commands.NewRootCmd("test", mocks.NewMockRepository(), settings)
+			upgradeCmd.SetOut(&upgradeOut)
+			upgradeCmd.SetErr(&upgradeOut)
+			upgradeCmd.SetArgs([]string{"upgrade", name, "--dry-run"})
+			Expect(upgradeCmd.Execute()).To(Succeed(), upgradeOut.String())
+			Expect(upgradeOut.String()).To(ContainSubstring(`Plugin invocation: devex-plugin-package-manager-mise "update" "` + wantUninstall + `"`))
+
+			var updateOut bytes.Buffer
+			updateCmd := commands.NewRootCmd("test", mocks.NewMockRepository(), settings)
+			updateCmd.SetOut(&updateOut)
+			updateCmd.SetErr(&updateOut)
+			updateCmd.SetArgs([]string{"update", name, "--dry-run"})
+			Expect(updateCmd.Execute()).To(MatchError(ContainSubstring(`manager "mise" does not support safe update`)))
+		},
+		Entry("Aider", "Aider", "uv@latest pipx:aider-chat[python=3.12]@latest", "pipx:aider-chat", false),
+		Entry("fast-agent", "fast-agent", "uv@latest pipx:fast-agent-mcp[python=3.12]@latest", "pipx:fast-agent-mcp", false),
+		Entry("Minion Code", "Minion Code", "uv@latest pipx:minion-code[python=3.12]@latest", "pipx:minion-code", false),
+		Entry("Mistral Vibe", "Mistral Vibe", "uv@latest pipx:mistral-vibe[python=3.14]@latest", "pipx:mistral-vibe", true),
+	)
 
 	It("resolves Ollama with system hook-driven install, curl/zstd dependencies, and full cleanup uninstall", func() {
 		app, ok := agents["Ollama"]

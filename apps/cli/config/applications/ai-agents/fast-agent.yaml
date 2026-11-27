@@ -1,0 +1,43 @@
+name: fast-agent
+description: MCP-native AI coding agent and workflow CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://fast-agent.ai/ and https://github.com/evalstate/fast-agent
+  # PyPI package: https://pypi.org/project/fast-agent-mcp/ (requires Python >=3.12,<3.16).
+  # fast-agent-mcp installs both the `fast-agent` CLI and `fast-agent-acp` ACP
+  # entrypoint; the separate `fast-agent-acp` PyPI package is only a convenience
+  # uvx launcher that depends on `fast-agent-mcp`.
+  install_method: mise
+  install_command: uv@latest pipx:fast-agent-mcp[python=3.12]@latest
+  uninstall_command: pipx:fast-agent-mcp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+windows:
+  # Official install docs: https://fast-agent.ai/ and https://github.com/evalstate/fast-agent
+  # PyPI package: https://pypi.org/project/fast-agent-mcp/ (requires Python >=3.12,<3.16).
+  install_method: mise
+  install_command: uv@latest pipx:fast-agent-mcp[python=3.12]@latest
+  uninstall_command: pipx:fast-agent-mcp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # Official install docs: https://fast-agent.ai/ and https://github.com/evalstate/fast-agent
+  # PyPI package: https://pypi.org/project/fast-agent-mcp/ (requires Python >=3.12,<3.16).
+  # fast-agent-mcp exposes both `fast-agent` and `fast-agent-acp` executables.
+  # mise's pipx backend runs uv tool install with an isolated mise-managed
+  # Python 3.12 runtime without touching the system Python. The backend needs uv,
+  # so uv is installed in the same mise call; uninstall removes fast-agent and keeps uv.
+  install_method: mise
+  install_command: uv@latest pipx:fast-agent-mcp[python=3.12]@latest
+  uninstall_command: pipx:fast-agent-mcp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
