@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -398,14 +399,7 @@ func EnsureUserBinDirsOnPath(home string) {
 	if strings.TrimSpace(home) == "" {
 		return
 	}
-	miseData := os.Getenv("MISE_DATA_DIR")
-	if miseData == "" {
-		dataHome := os.Getenv("XDG_DATA_HOME")
-		if dataHome == "" {
-			dataHome = filepath.Join(home, ".local", "share")
-		}
-		miseData = filepath.Join(dataHome, "mise")
-	}
+	miseData := MiseDataDir(runtime.GOOS, os.Getenv, home)
 	path := os.Getenv("PATH")
 	entries := filepath.SplitList(path)
 	candidates := []string{
@@ -420,6 +414,23 @@ func EnsureUserBinDirsOnPath(home string) {
 		entries = append(entries, dir)
 	}
 	_ = os.Setenv("PATH", strings.Join(entries, string(os.PathListSeparator)))
+}
+
+// MiseDataDir resolves mise's data directory: MISE_DATA_DIR, then
+// XDG_DATA_HOME/mise, then %LOCALAPPDATA%\mise on Windows or ~/.local/share/mise.
+func MiseDataDir(goos string, getenv func(string) string, home string) string {
+	if dir := getenv("MISE_DATA_DIR"); dir != "" {
+		return dir
+	}
+	if dataHome := getenv("XDG_DATA_HOME"); dataHome != "" {
+		return filepath.Join(dataHome, "mise")
+	}
+	if goos == "windows" {
+		if localAppData := getenv("LOCALAPPDATA"); localAppData != "" {
+			return filepath.Join(localAppData, "mise")
+		}
+	}
+	return filepath.Join(home, ".local", "share", "mise")
 }
 
 // SkippedAgents returns the "skipped (<reason>): <agent>" lines tool-agents

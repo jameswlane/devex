@@ -57,6 +57,16 @@ var _ = Describe("agentapply helpers", func() {
 		Expect(filepath.SplitList(os.Getenv("PATH"))).To(Equal([]string{"/usr/bin", filepath.Join(miseData, "shims")}))
 	})
 
+	It("resolves the mise data directory per platform", func() {
+		env := func(values map[string]string) func(string) string {
+			return func(key string) string { return values[key] }
+		}
+		Expect(agentapply.MiseDataDir("windows", env(map[string]string{"LOCALAPPDATA": "/appdata"}), "/home/u")).To(Equal(filepath.Join("/appdata", "mise")))
+		Expect(agentapply.MiseDataDir("linux", env(map[string]string{"LOCALAPPDATA": "/appdata"}), "/home/u")).To(Equal(filepath.Join("/home/u", ".local", "share", "mise")))
+		Expect(agentapply.MiseDataDir("windows", env(map[string]string{"XDG_DATA_HOME": "/xdg", "LOCALAPPDATA": "/appdata"}), "/home/u")).To(Equal(filepath.Join("/xdg", "mise")))
+		Expect(agentapply.MiseDataDir("windows", env(map[string]string{"MISE_DATA_DIR": "/m", "XDG_DATA_HOME": "/xdg"}), "/home/u")).To(Equal("/m"))
+	})
+
 	It("reports the agents tool-agents skipped", func() {
 		out := "configured: codex\nskipped (not installed): claude\n"
 		Expect(agentapply.SkippedAgents(out)).To(Equal([]string{"skipped (not installed): claude"}))
