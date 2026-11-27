@@ -4,12 +4,6 @@ category: AI Code Editors
 default: false
 desktop_environments:
   - graphical
-macos:
-  install_method: brew
-  install_command: zed
-  uninstall_command: zed
-  brew_cask: true
-  official_support: true
 linux:
   # Unpinned bootstrap script: Zed does not publish an official APT repository,
   # .deb, AppImage, or checksum/signature for its Linux tarball or install.sh.

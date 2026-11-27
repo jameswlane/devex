@@ -4,13 +4,14 @@ import (
 	"context"
 	"os"
 
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 // Exported for the external commands_test package.
 var (
 	ValidateCleanupPath     = validateCleanupPath
-	ValidateAptManagedPath  = validateAptManagedPath
+	ValidateAptManagedPath  = tui.ValidateAptManagedPath
 	RemoveFileIfExists      = removeFileIfExists
 	ValidateEnvironmentName = validateEnvironmentName
 	ResolveUninstallApp     = resolveUninstallApp
@@ -57,4 +58,10 @@ func SetAptManagedFileHooksForTest(
 		statAptManagedFile = prevStatter
 		removeAptManagedFile = prevRemover
 	}
+}
+
+func SetAptSourcesDirReaderForTest(reader func(string) ([]os.DirEntry, error)) func() {
+	previous := readAptSourcesDir
+	readAptSourcesDir = reader
+	return func() { readAptSourcesDir = previous }
 }

@@ -1083,7 +1083,7 @@ func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.C
 		return nil
 	}
 
-	if err := si.addAptSources(ctx, *osConfig); err != nil {
+	if err := si.addAptSources(ctx, app.Name, *osConfig); err != nil {
 		return err
 	}
 	if err := si.ensureAptLists(ctx); err != nil {

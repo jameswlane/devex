@@ -85,11 +85,11 @@ All three editors declare `desktop_environments: [graphical]`. On headless Linux
 
 Uninstalling an APT-backed editor removes the package, the DevEx-managed APT source file under `/etc/apt/sources.list.d/` (only when its contents are unchanged), and its keyring under `/etc/apt/keyrings/` (unless another tracked application references it).
 
-| Editor | Linux | macOS | Notes | Uninstall removes |
-| --- | --- | --- | --- | --- |
-| Cursor | `apt cursor` (signed `downloads.cursor.com` repo, `amd64`/`arm64`) | `brew --cask cursor` | Official signed APT repository with pinned GPG fingerprint | `cursor` package, `/etc/apt/sources.list.d/cursor.list`, `/etc/apt/keyrings/cursor.gpg` |
-| Windsurf | `apt devin-desktop` (signed `windsurf-stable.codeiumdata.com` repo, `amd64` only) | not packaged | Renamed by the vendor to Devin Desktop; unsupported on `linux/arm64` | `devin-desktop` package, `/etc/apt/sources.list.d/windsurf.list`, `/etc/apt/keyrings/windsurf-stable.gpg` |
-| Zed | `curlpipe --user` (`https://zed.dev/install.sh`) | `brew --cask zed` | Self-updating (`devex` skips); installs `~/.local/zed.app`, `~/.local/bin/zed`, and `dev.zed.Zed.desktop` | `~/.local/zed.app`, `~/.local/bin/zed`, `~/.local/share/applications/dev.zed.Zed.desktop` |
+| Editor | Linux | Notes | Uninstall removes |
+| --- | --- | --- | --- |
+| Cursor | `apt cursor` (signed `downloads.cursor.com` repo, `amd64`/`arm64`) | Official signed APT repository with pinned GPG fingerprint; preseeds `cursor/add-cursor-repo=false` | `cursor` package, `/etc/apt/sources.list.d/cursor.list`, `/etc/apt/keyrings/cursor.gpg` (when created by DevEx) |
+| Windsurf | `apt devin-desktop` (signed `windsurf-stable.codeiumdata.com` repo, `amd64` only) | Renamed by the vendor to Devin Desktop; unsupported on `linux/arm64` | `devin-desktop` package, `/etc/apt/sources.list.d/windsurf.list`, `/etc/apt/keyrings/windsurf-stable.gpg` (when created by DevEx) |
+| Zed | `curlpipe --user` (`https://zed.dev/install.sh`) | Self-updating (`devex` skips); installs `~/.local/zed.app`, `~/.local/bin/zed`, and `dev.zed.Zed.desktop` | `~/.local/zed.app`, `~/.local/bin/zed`, `~/.local/share/applications/dev.zed.Zed.desktop` |
 
 ### Homebrew formulae and Casks
 

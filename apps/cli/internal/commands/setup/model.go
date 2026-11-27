@@ -245,8 +245,13 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 	// Check for desktop environment
 	hasDesktop := detectedPlatform.DesktopEnv != "none" &&
+		detectedPlatform.DesktopEnv != "headless" &&
 		detectedPlatform.DesktopEnv != "unknown" &&
 		detectedPlatform.DesktopEnv != ""
+	if !hasDesktop && detectedPlatform.OS == "linux" &&
+		(detectedPlatform.DesktopEnv == "unknown" || detectedPlatform.DesktopEnv == "") {
+		hasDesktop = platform.HasGraphicalDesktop()
+	}
 
 	var desktopApps []string
 	var desktopAppDetails []types.CrossPlatformApp

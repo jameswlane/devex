@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	shipconfig "github.com/jameswlane/devex/apps/cli/config"
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
@@ -97,6 +98,8 @@ var _ = Describe("AI Code Editors catalog", func() {
 			Expect(app.Linux.OfficialSupport).To(BeTrue(), "%s Linux primary must have official_support: true", name)
 			Expect(app.Linux.CleanupFiles).To(BeEmpty(), "%s must not list user data in cleanup_files", name)
 			Expect(app.Linux.ConfigFiles).To(BeEmpty(), "%s must not list user config in config_files", name)
+			Expect(app.MacOS).To(Equal(types.OSConfig{}), "%s must not declare an unverified macOS section", name)
+			Expect(app.Windows).To(Equal(types.OSConfig{}), "%s must not declare an unverified Windows section", name)
 
 			switch app.Linux.InstallMethod {
 			case "apt":
@@ -197,6 +200,30 @@ var _ = Describe("AI Code Editors catalog", func() {
 		Entry("Windsurf", "Windsurf", "apt", "devin-desktop", "devin-desktop", "", false, "devin-desktop"),
 		Entry("Zed", "Zed", "curlpipe", "https://zed.dev/install.sh", "zed", "user", true, `rm -rf "$HOME/.local/zed.app" && rm -f "$HOME/.local/bin/zed" "$HOME/.local/share/applications/dev.zed.Zed.desktop"`),
 	)
+
+	It("preseeds cursor/add-cursor-repo=false in Cursor's resolved Ubuntu pre_install hook", func() {
+		cursor, ok := editors["Cursor"]
+		Expect(ok).To(BeTrue())
+		ubuntu := platform.DetectionResult{
+			OS:               "linux",
+			Distribution:     "ubuntu",
+			DistributionLike: []string{"debian"},
+			Version:          "24.04",
+			Architecture:     "amd64",
+		}
+		resolved := cursor.LinuxConfigForPlatform(ubuntu)
+		Expect(resolved.PreInstall).NotTo(BeEmpty())
+		found := false
+		for _, hook := range resolved.PreInstall {
+			if hook.Scope == "system" &&
+				strings.Contains(hook.Shell, "cursor cursor/add-cursor-repo boolean false") &&
+				strings.Contains(hook.Shell, "debconf-set-selections") {
+				found = true
+				break
+			}
+		}
+		Expect(found).To(BeTrue(), "expected Cursor pre_install system hook to preseed cursor/add-cursor-repo=false, got: %+v", resolved.PreInstall)
+	})
 
 	It("emits deterministic JSON plan warnings and digest when editors are skipped on headless hosts", func() {
 		DeferCleanup(platform.SetGraphicalDesktopForTesting(false))

@@ -273,17 +273,29 @@ func isDesktopApp(app types.CrossPlatformApp) bool {
 	return false
 }
 
+func hasInstallTarget(cfg types.OSConfig) bool {
+	return cfg.InstallMethod != "" && (cfg.InstallCommand != "" || cfg.DownloadURL != "" || len(cfg.Packages) > 0)
+}
+
 func isCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
-	if app.AllPlatforms.InstallCommand != "" {
+	if hasInstallTarget(app.AllPlatforms) {
 		return true
 	}
 	switch detectedPlatform.OS {
 	case "linux":
-		return app.Linux.InstallCommand != ""
+		cfg := app.LinuxConfigForPlatform(detectedPlatform)
+		if !hasInstallTarget(cfg) {
+			return false
+		}
+		arch := detectedPlatform.Architecture
+		if arch == "" {
+			arch = types.CatalogArch()
+		}
+		return cfg.IsArchitectureSupported(arch)
 	case "darwin":
-		return app.MacOS.InstallCommand != ""
+		return hasInstallTarget(app.MacOS)
 	case "windows":
-		return app.Windows.InstallCommand != ""
+		return hasInstallTarget(app.Windows)
 	default:
 		return false
 	}

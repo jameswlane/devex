@@ -145,4 +145,67 @@ var _ = Describe("Desktop application selection", func() {
 		defer restoreDesktop()
 		Expect(getAvailableDesktopApps(settings, platform.DetectionResult{OS: "linux", DesktopEnv: "unknown"})).To(HaveLen(1))
 	})
+
+	It("includes curlpipe download_url editors like Zed and filters arch-restricted editors like Windsurf", func() {
+		zed := types.CrossPlatformApp{
+			Name:                "Zed",
+			Category:            "AI Code Editors",
+			Description:         "Zed editor",
+			DesktopEnvironments: []string{types.DesktopEnvironmentGraphical},
+			Linux: types.OSConfig{
+				InstallMethod: "curlpipe",
+				DownloadURL:   "https://zed.dev/install.sh",
+				InstallScope:  "user",
+			},
+		}
+		windsurf := types.CrossPlatformApp{
+			Name:                "Windsurf",
+			Category:            "AI Code Editors",
+			Description:         "Windsurf editor",
+			DesktopEnvironments: []string{types.DesktopEnvironmentGraphical},
+			Linux: types.OSConfig{
+				InstallMethod:  "apt",
+				InstallCommand: "devin-desktop",
+				PlatformRequirements: []types.PlatformRequirement{
+					{OS: "debian", Arch: "amd64"},
+					{OS: "ubuntu", Arch: "amd64"},
+				},
+			},
+		}
+		settings := desktopSettingsForTest(zed, windsurf)
+
+		amd64Apps := getAvailableDesktopApps(settings, platform.DetectionResult{
+			OS: "linux", Distribution: "ubuntu", DesktopEnv: "gnome", Architecture: "amd64",
+		})
+		Expect(amd64Apps).To(HaveLen(2))
+		Expect([]string{amd64Apps[0].Name, amd64Apps[1].Name}).To(Equal([]string{"Windsurf", "Zed"}))
+
+		arm64Apps := getAvailableDesktopApps(settings, platform.DetectionResult{
+			OS: "linux", Distribution: "ubuntu", DesktopEnv: "gnome", Architecture: "arm64",
+		})
+		Expect(arm64Apps).To(HaveLen(1))
+		Expect(arm64Apps[0].Name).To(Equal("Zed"))
+	})
+
+	It("uses HasGraphicalDesktop in NewSetupModel when Linux DesktopEnv is unknown or empty", func() {
+		cursor := desktopAppForTest("Cursor", "AI Code Editors")
+		cursor.DesktopEnvironments = []string{types.DesktopEnvironmentGraphical}
+		settings := desktopSettingsForTest(cursor)
+
+		restoreDesktop := platform.SetGraphicalDesktopForTesting(true)
+		for _, de := range []string{"unknown", ""} {
+			model := NewSetupModel(nil, settings, platform.DetectionResult{OS: "linux", DesktopEnv: de, Architecture: "amd64"})
+			Expect(model.system.hasDesktop).To(BeTrue(), "expected hasDesktop=true for DesktopEnv=%q", de)
+			Expect(model.system.desktopApps).To(Equal([]string{"Cursor"}))
+		}
+		restoreDesktop()
+
+		restoreHeadless := platform.SetGraphicalDesktopForTesting(false)
+		defer restoreHeadless()
+		for _, de := range []string{"unknown", ""} {
+			model := NewSetupModel(nil, settings, platform.DetectionResult{OS: "linux", DesktopEnv: de, Architecture: "amd64"})
+			Expect(model.system.hasDesktop).To(BeFalse(), "expected hasDesktop=false for DesktopEnv=%q", de)
+			Expect(model.system.desktopApps).To(BeEmpty())
+		}
+	})
 })

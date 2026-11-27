@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -29,6 +31,7 @@ type ActionExecutor struct {
 	platform        platform.DetectionResult
 	repo            types.Repository
 	installApps     func(context.Context, []types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) error
+	out             io.Writer
 }
 
 // NewActionExecutor creates a new action executor
@@ -232,6 +235,7 @@ func (ae *ActionExecutor) installDesktopApps(ctx context.Context, items interfac
 	for _, app := range ae.settings.GetAllApps() {
 		catalog[app.Name] = app
 	}
+	headlessLinux := (ae.platform.OS == "linux" || (ae.platform.OS == "" && types.CatalogOS() == "linux")) && platform.IsHeadless()
 	var apps []types.CrossPlatformApp
 	var failures []error
 	seen := make(map[string]bool)
@@ -244,6 +248,14 @@ func (ae *ActionExecutor) installDesktopApps(ctx context.Context, items interfac
 		app, exists := catalog[name]
 		if !exists {
 			failures = append(failures, fmt.Errorf("desktop app %q: definition not found", name))
+			continue
+		}
+		if headlessLinux && app.RequiresGraphicalDesktop() {
+			out := ae.out
+			if out == nil {
+				out = os.Stdout
+			}
+			fmt.Fprintln(out, agentapi.HeadlessSkipMessage(app.Name))
 			continue
 		}
 		apps = append(apps, app)

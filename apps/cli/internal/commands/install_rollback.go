@@ -26,7 +26,11 @@ type batchStepExecutor struct {
 }
 
 func (e batchStepExecutor) ExecuteStep(ctx context.Context, step templates.PlannedStep) (map[string]any, error) {
-	err := installApplication(ctx, e.apps[step.ID], e.settings, e.repo)
+	app := e.apps[step.ID]
+	if err := prepareAptSources(ctx, app, e.repo, e.settings); err != nil {
+		return nil, err
+	}
+	err := installApplication(ctx, app, e.settings, e.repo)
 	return nil, err
 }
 func (e batchStepExecutor) PrepareCompensation(ctx context.Context, step templates.PlannedStep) (templateexec.Compensation, error) {

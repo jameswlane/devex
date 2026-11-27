@@ -4,12 +4,6 @@ category: AI Code Editors
 default: false
 desktop_environments:
   - graphical
-macos:
-  install_method: brew
-  install_command: cursor
-  uninstall_command: cursor
-  brew_cask: true
-  official_support: true
 linux:
   install_method: apt
   install_command: cursor
@@ -23,6 +17,9 @@ linux:
       require_dearmor: true
       source_repo: deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/cursor.gpg] https://downloads.cursor.com/aptrepo stable main
       source_name: /etc/apt/sources.list.d/cursor.list
+  pre_install:
+    - scope: system
+      shell: echo "cursor cursor/add-cursor-repo boolean false" | debconf-set-selections
   platform_requirements:
     - os: debian
       dependencies:

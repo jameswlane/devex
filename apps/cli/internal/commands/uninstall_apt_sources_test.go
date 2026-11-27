@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,8 +18,18 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
+
+type stubDirEntry struct {
+	name string
+}
+
+func (e stubDirEntry) Name() string               { return e.name }
+func (e stubDirEntry) IsDir() bool                { return false }
+func (e stubDirEntry) Type() fs.FileMode          { return 0 }
+func (e stubDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
 
 var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 	const (
@@ -59,7 +71,12 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 		Expect(mockRepo.AddApp(def.Name)).To(Succeed())
 		data, err := json.Marshal(def)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(mockRepo.Set("installed-app-definition:"+filepath.Base(def.Name), string(data))).To(Succeed())
+		Expect(mockRepo.Set("installed-app-definition:"+strings.ToLower(def.Name), string(data))).To(Succeed())
+	}
+
+	recordCursorOwnership := func(sourcePath, keyPath string) {
+		tui.RecordAptManagedFile(mockRepo, sourcePath, "Cursor")
+		tui.RecordAptManagedFile(mockRepo, keyPath, "Cursor")
 	}
 
 	BeforeEach(func() {
@@ -101,17 +118,21 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 				return nil
 			},
 		))
+		DeferCleanup(commands.SetAptSourcesDirReaderForTest(func(dir string) ([]os.DirEntry, error) {
+			var entries []os.DirEntry
+			prefix := dir + "/"
+			for path := range files {
+				if strings.HasPrefix(path, prefix) {
+					entries = append(entries, stubDirEntry{name: strings.TrimPrefix(path, prefix)})
+				}
+			}
+			return entries, nil
+		}))
 	})
 
-	saveCursor := func(def types.CrossPlatformApp) {
-		Expect(mockRepo.AddApp(def.Name)).To(Succeed())
-		data, err := json.Marshal(def)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mockRepo.Set("installed-app-definition:cursor", string(data))).To(Succeed())
-	}
-
-	It("removes the APT source and keyring when content matches and no other app uses them", func() {
-		saveCursor(cursorDef(cursorSourcePath, cursorKeyPath))
+	It("removes the APT source and keyring when owned by DevEx and clears ownership records", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
 
 		var out, errOut bytes.Buffer
 		cmd := commands.NewUninstallCmd(mockRepo, settings)
@@ -124,10 +145,51 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 		Expect(out.String()).To(ContainSubstring("Removed APT source " + cursorSourcePath))
 		Expect(out.String()).To(ContainSubstring("Removed APT keyring " + cursorKeyPath))
 		Expect(errOut.String()).To(BeEmpty())
+
+		_, sourceOwned := tui.AptManagedFileOwner(mockRepo, cursorSourcePath)
+		_, keyOwned := tui.AptManagedFileOwner(mockRepo, cursorKeyPath)
+		Expect(sourceOwned).To(BeFalse())
+		Expect(keyOwned).To(BeFalse())
 	})
 
-	It("leaves the APT source with a warning when its contents were modified", func() {
-		saveCursor(cursorDef(cursorSourcePath, cursorKeyPath))
+	It("silently leaves unrecorded user-managed source and keyring files alone without warning or error", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+
+		var out, errOut bytes.Buffer
+		cmd := commands.NewUninstallCmd(mockRepo, settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
+		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
+
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(removed).To(BeEmpty())
+		Expect(out.String()).NotTo(ContainSubstring("Removed APT"))
+		Expect(errOut.String()).To(BeEmpty())
+	})
+
+	It("silently ignores catalog paths outside allowed APT directories (e.g. Typora keyring)", func() {
+		typoraDef := cursorDef("/etc/apt/sources.list.d/typora.list", "/etc/apt/trusted.gpg.d/typora.asc")
+		typoraDef.Name = "Typora"
+		saveTrackedDef(typoraDef)
+		// Attempt to record an out-of-allowlist path is a no-op.
+		tui.RecordAptManagedFile(mockRepo, "/etc/apt/trusted.gpg.d/typora.asc", "Typora")
+		_, owned := tui.AptManagedFileOwner(mockRepo, "/etc/apt/trusted.gpg.d/typora.asc")
+		Expect(owned).To(BeFalse())
+
+		var out, errOut bytes.Buffer
+		cmd := commands.NewUninstallCmd(mockRepo, settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
+		cmd.SetArgs([]string{"--app", "Typora", "--force"})
+
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(removed).To(BeEmpty())
+		Expect(errOut.String()).To(BeEmpty())
+	})
+
+	It("leaves both the modified APT source and its keyring when the source file was modified", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
 		files[cursorSourcePath] = "deb [arch=amd64 signed-by=/etc/apt/keyrings/cursor.gpg] https://custom.mirror.example/apt stable main\n"
 
 		var out, errOut bytes.Buffer
@@ -137,14 +199,58 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
 
 		Expect(cmd.Execute()).To(Succeed())
-		Expect(removed).To(Equal([]string{cursorKeyPath}))
+		Expect(removed).To(BeEmpty())
 		Expect(errOut.String()).To(ContainSubstring("Warning: leaving APT source " + cursorSourcePath))
 		Expect(out.String()).NotTo(ContainSubstring("Removed APT source"))
-		Expect(out.String()).To(ContainSubstring("Removed APT keyring " + cursorKeyPath))
+		Expect(out.String()).NotTo(ContainSubstring("Removed APT keyring"))
+	})
+
+	It("keeps the keyring when removing its APT source file fails", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
+		DeferCleanup(commands.SetAptManagedFileHooksForTest(nil, nil, func(_ context.Context, path string) error {
+			if path == cursorSourcePath {
+				return errors.New("sudo: a password is required")
+			}
+			removed = append(removed, path)
+			return nil
+		}))
+
+		var out, errOut bytes.Buffer
+		cmd := commands.NewUninstallCmd(mockRepo, settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
+		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
+
+		err := cmd.Execute()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("APT source cleanup failed"))
+		Expect(errOut.String()).To(ContainSubstring("Warning: Failed to clean up APT sources"))
+		Expect(removed).To(BeEmpty())
+		_, repoErr := mockRepo.GetApp("Cursor")
+		Expect(repoErr).NotTo(HaveOccurred())
+	})
+
+	It("keeps the keyring when another remaining source file in sources.list.d references it", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
+		files["/etc/apt/sources.list.d/cursor-extra.sources"] = "Types: deb\nURIs: https://downloads.cursor.com/aptrepo\nSigned-By: /etc/apt/keyrings/cursor.gpg\n"
+
+		var out, errOut bytes.Buffer
+		cmd := commands.NewUninstallCmd(mockRepo, settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
+		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
+
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(removed).To(Equal([]string{cursorSourcePath}))
+		Expect(out.String()).To(ContainSubstring("Removed APT source " + cursorSourcePath))
+		Expect(out.String()).NotTo(ContainSubstring("Removed APT keyring"))
 	})
 
 	It("keeps the keyring when another installed app references the same key_name", func() {
-		saveCursor(cursorDef(cursorSourcePath, cursorKeyPath))
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
 		other := types.CrossPlatformApp{
 			Name: "other-tool",
 			AllPlatforms: types.OSConfig{
@@ -173,7 +279,8 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 	})
 
 	It("keeps the keyring and source when another installed app references the same source_name", func() {
-		saveCursor(cursorDef(cursorSourcePath, cursorKeyPath))
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
 		other := types.CrossPlatformApp{
 			Name: "cursor-cli",
 			AllPlatforms: types.OSConfig{
@@ -211,52 +318,13 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 		Entry("keyrings directory itself", "/etc/apt/keyrings"),
 		Entry("sources directory itself", "/etc/apt/sources.list.d/"),
 		Entry("usr share keyrings directory itself", "/usr/share/keyrings"),
+		Entry("trusted.gpg.d legacy dir", "/etc/apt/trusted.gpg.d/typora.asc"),
 		Entry("tmp file", "/tmp/cursor.list"),
 	)
 
-	It("refuses disallowed paths during uninstall without invoking the remover", func() {
-		saveCursor(cursorDef("/etc/passwd", "/tmp/evil.gpg"))
-		files["/etc/passwd"] = cursorSourceLine
-		files["/tmp/evil.gpg"] = "data"
-
-		var out, errOut bytes.Buffer
-		cmd := commands.NewUninstallCmd(mockRepo, settings)
-		cmd.SetOut(&out)
-		cmd.SetErr(&errOut)
-		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
-
-		err := cmd.Execute()
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("outside allowed directories"))
-		Expect(errOut.String()).To(ContainSubstring("Warning: Failed to clean up APT sources"))
-		Expect(removed).To(BeEmpty())
-		// Tracking record is retained for retry on cleanup failure.
-		_, repoErr := mockRepo.GetApp("Cursor")
-		Expect(repoErr).NotTo(HaveOccurred())
-	})
-
-	It("records a failure and retains tracking when privileged removal fails", func() {
-		saveCursor(cursorDef(cursorSourcePath, cursorKeyPath))
-		DeferCleanup(commands.SetAptManagedFileHooksForTest(nil, nil, func(_ context.Context, path string) error {
-			return errors.New("sudo: a password is required")
-		}))
-
-		var out, errOut bytes.Buffer
-		cmd := commands.NewUninstallCmd(mockRepo, settings)
-		cmd.SetOut(&out)
-		cmd.SetErr(&errOut)
-		cmd.SetArgs([]string{"--app", "Cursor", "--force"})
-
-		err := cmd.Execute()
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("APT source cleanup failed"))
-		Expect(errOut.String()).To(ContainSubstring("Warning: Failed to clean up APT sources"))
-		_, repoErr := mockRepo.GetApp("Cursor")
-		Expect(repoErr).NotTo(HaveOccurred())
-	})
-
-	It("previews APT source and keyring cleanup during dry-run without touching files", func() {
-		saveCursor(cursorDef(cursorSourcePath, cursorKeyPath))
+	It("previews owned APT source and keyring cleanup during dry-run without touching files", func() {
+		saveTrackedDef(cursorDef(cursorSourcePath, cursorKeyPath))
+		recordCursorOwnership(cursorSourcePath, cursorKeyPath)
 		viper.Set("dry-run", true)
 
 		var out, errOut bytes.Buffer
