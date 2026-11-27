@@ -1,0 +1,49 @@
+# Upstream: https://kiro.dev/docs/cli/ (https://cli.kiro.dev/install)
+name: Kiro CLI
+description: Amazon's terminal AI coding agent CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://kiro.dev/docs/cli/
+  # Unpinned bootstrap script: Amazon updates https://cli.kiro.dev/install on
+  # release and publishes no checksum for the script itself. The script fetches
+  # manifest.json from prod.download.cli.kiro.dev, verifies the downloaded
+  # archive's SHA-256 with shasum/sha256sum, and installs kiro-cli. Kiro CLI
+  # auto-updates by default (disable via `kiro-cli settings app.disableAutoupdates true`
+  # or KIRO_NO_AUTO_UPDATE).
+  install_method: curlpipe
+  download_url: https://cli.kiro.dev/install
+  install_scope: user
+  installed_binary: kiro-cli
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/kiro-cli" "$HOME/.local/bin/kiro-cli-chat"
+  official_support: true
+  alternatives:
+    # Community Homebrew cask: https://formulae.brew.sh/cask/kiro-cli
+    - install_method: brew
+      install_command: kiro-cli
+      uninstall_command: kiro-cli
+      brew_cask: true
+      installed_binary: kiro-cli
+      self_updating: true
+      official_support: false
+linux:
+  # Official install docs: https://kiro.dev/docs/cli/
+  # Unpinned bootstrap script: Amazon updates https://cli.kiro.dev/install on
+  # release and publishes no checksum for the script itself. The script fetches
+  # manifest.json from prod.download.cli.kiro.dev, verifies the downloaded zip's
+  # SHA-256 with sha256sum, and installs ~/.local/bin/kiro-cli via the archive's
+  # inner install.sh. Kiro CLI auto-updates by default (disable via
+  # `kiro-cli settings app.disableAutoupdates true` or KIRO_NO_AUTO_UPDATE).
+  # Uninstall removes only the installed binaries and preserves ~/.kiro and
+  # ~/.local/share/kiro-cli config and credentials. Windows is omitted because
+  # Amazon only documents bash/WSL installation.
+  install_method: curlpipe
+  download_url: https://cli.kiro.dev/install
+  install_scope: user
+  installed_binary: kiro-cli
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/kiro-cli" "$HOME/.local/bin/kiro-cli-chat"
+  official_support: true

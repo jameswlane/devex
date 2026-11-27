@@ -1,0 +1,74 @@
+# Upstream: https://docs.devin.ai/cli (https://github.com/CognitionAI/devin-cli)
+name: Devin
+description: Cognition's terminal AI coding agent CLI with local and Devin Cloud workflows
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official npm package (CognitionAI/devin-cli README) through mise; the
+  # install script ends with the interactive `devin setup` login, which fails
+  # without a terminal (see the linux block).
+  install_method: mise
+  install_command: node@24 npm:devin@latest
+  uninstall_command: npm:devin
+  installed_binary: devin
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+  alternatives:
+    - install_method: curlpipe
+      download_url: https://cli.devin.ai/install.sh
+      install_scope: user
+      installed_binary: devin
+      self_updating: true
+      uninstall_command: rm -f "$HOME/.local/bin/devin" "$HOME/.local/share/man/man1/devin"*.1 && rm -rf "$HOME/.local/share/devin/cli/_versions"
+      official_support: true
+    # Community Homebrew cask: https://formulae.brew.sh/cask/devin-cli
+    - install_method: brew
+      install_command: devin-cli
+      uninstall_command: devin-cli
+      brew_cask: true
+      installed_binary: devin
+      self_updating: false
+      official_support: false
+windows:
+  # Official npm channel documented in CognitionAI/devin-cli README (`npm install -g devin`).
+  install_method: mise
+  install_command: node@24 npm:devin@latest
+  uninstall_command: npm:devin
+  installed_binary: devin
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Official npm package documented in CognitionAI/devin-cli README
+  # (`npm install -g devin`), installed through mise without sudo npm -g.
+  # It is the Linux primary because the vendor script below ends by running
+  # the interactive `devin setup` login, which fails without a terminal, so
+  # non-interactive installs (setup, CI) would fail with it.
+  install_method: mise
+  install_command: node@24 npm:devin@latest
+  uninstall_command: npm:devin
+  installed_binary: devin
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+  alternatives:
+    # Official install script: https://docs.devin.ai/cli. Unpinned: Cognition
+    # updates install.sh on release and publishes no checksum for the script.
+    # It verifies the bundle tarball's SHA-256 from static.devin.ai's manifest,
+    # unpacks into ~/.local/share/devin/cli/_versions, links ~/.local/bin/devin
+    # and man pages, updates itself in the background, and then runs the
+    # interactive `devin setup` login. Uninstall removes only the link, man
+    # pages and _versions, keeping credentials, sessions and config.
+    - install_method: curlpipe
+      download_url: https://cli.devin.ai/install.sh
+      install_scope: user
+      installed_binary: devin
+      self_updating: true
+      uninstall_command: rm -f "$HOME/.local/bin/devin" "$HOME/.local/share/man/man1/devin"*.1 && rm -rf "$HOME/.local/share/devin/cli/_versions"
+      official_support: true

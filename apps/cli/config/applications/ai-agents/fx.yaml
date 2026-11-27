@@ -1,0 +1,59 @@
+# Upstream: https://fx.sh/ (https://github.com/vercel-labs/fx)
+name: fx
+description: Vercel Labs' tiny native Zig coding agent CLI
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://fx.sh/ and https://github.com/vercel-labs/fx#install
+  # Unpinned bootstrap script: Vercel Labs updates setup.sh on release and
+  # publishes no checksum for the script itself. The script fetches latest.txt
+  # and fx-macos-<arch>.tar.gz over HTTPS from releases.fx.sh (no separate
+  # checksum verification in setup.sh) and installs ~/.local/bin/fx.
+  # fx checks for and applies updates in the background by default (auto_upgrade.zig).
+  install_method: curlpipe
+  download_url: https://fx.sh/setup.sh
+  install_scope: user
+  installed_binary: fx
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/fx"
+  official_support: true
+  alternatives:
+    # Community channel via mise's GitHub backend (explicitly github:vercel-labs/fx,
+    # not bare `fx`, which resolves to aqua:antonmedv/fx, the JSON viewer).
+    - install_method: mise
+      install_command: github:vercel-labs/fx@latest
+      uninstall_command: github:vercel-labs/fx
+      installed_binary: fx
+      self_updating: true
+      official_support: false
+      dependencies:
+        - mise
+linux:
+  # Official install docs: https://fx.sh/ and https://github.com/vercel-labs/fx#install
+  # Unpinned bootstrap script: Vercel Labs updates setup.sh on release and
+  # publishes no checksum for the script itself. The script fetches latest.txt
+  # and fx-linux-<arch>.tar.gz over HTTPS from releases.fx.sh (no separate
+  # checksum verification in setup.sh) and installs ~/.local/bin/fx.
+  # fx checks for and applies updates in the background by default (auto_upgrade.zig).
+  # Uninstall removes only ~/.local/bin/fx and preserves ~/.fx sessions and config.
+  # Windows is omitted: fx only ships macOS and Linux builds.
+  install_method: curlpipe
+  download_url: https://fx.sh/setup.sh
+  install_scope: user
+  installed_binary: fx
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/fx"
+  official_support: true
+  alternatives:
+    # Community channel via mise's GitHub backend (explicitly github:vercel-labs/fx,
+    # not bare `fx`, which resolves to aqua:antonmedv/fx, the JSON viewer).
+    - install_method: mise
+      install_command: github:vercel-labs/fx@latest
+      uninstall_command: github:vercel-labs/fx
+      installed_binary: fx
+      self_updating: true
+      official_support: false
+      dependencies:
+        - mise

@@ -1,0 +1,44 @@
+# Upstream: https://dev.meta.ai/docs/muse-code
+name: Muse Code
+description: Meta's terminal AI coding agent powered by Muse Spark
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://dev.meta.ai/docs/muse-code
+  # Unpinned bootstrap script: Meta updates https://dev.meta.ai/install.sh on
+  # release and publishes no checksum for the script itself. The script downloads
+  # https://api.meta.ai/muse-launcher.sh, checks bash syntax and x-content-sha256
+  # when advertised, installs ~/.local/bin/muse, and invokes the launcher to
+  # download and SHA-256-verify muse-bin-<version> into ~/.local/bin. The
+  # launcher auto-updates both itself and the binary in the background by default.
+  install_method: curlpipe
+  download_url: https://dev.meta.ai/install.sh
+  install_scope: user
+  installed_binary: muse
+  self_updating: true
+  uninstall_command: B="$HOME/.local/bin"; [ -d "$B" ] || exit 0; L="$B/.muse-update-lock"; T="$B/.muse-uninstall.$$"; i=0; while :; do rm -rf "$T"; mkdir "$T" && echo "$$" > "$T/pid" || exit 1; if mv "$T" "$L" 2>/dev/null && [ ! -e "$L/.muse-uninstall.$$" ] && [ "$(cat "$L/pid" 2>/dev/null)" = "$$" ]; then break; fi; rm -rf "$L/.muse-uninstall.$$" "$T"; i=$((i + 1)); if [ "$i" -ge "${DEVEX_LOCK_WAIT_SECONDS:-60}" ]; then echo "Muse Code is updating itself; run the uninstall again shortly (if no update is running, remove $L first)." >&2; exit 1; fi; sleep 1; done; rc=0; rm -f "$B/muse" "$B/muse-bin" "$B/muse-bin-"* "$B/.muse-launcher.previous" "$B/.muse-launcher."* "$B/.muse-version" "$B/.muse-release-info.json" "$B/.muse-update-checked-at" "$B/.muse-update-notice" "$B/.muse-update."* "$B/.muse-state" || rc=1; rm -rf "$B/.muse-updater" "$B/.muse-install-lock" || rc=1; rm -rf "$L" || rc=1; exit "$rc"
+  official_support: true
+linux:
+  # Official install docs: https://dev.meta.ai/docs/muse-code
+  # Unpinned bootstrap script: Meta updates https://dev.meta.ai/install.sh on
+  # release and publishes no checksum for the script itself. The script downloads
+  # https://api.meta.ai/muse-launcher.sh, checks bash syntax and x-content-sha256
+  # when advertised, installs ~/.local/bin/muse, and invokes the launcher to
+  # download and SHA-256-verify muse-bin-<version> into ~/.local/bin. The
+  # launcher auto-updates both itself and the binary in the background by default.
+  # Uninstall first takes the launcher's update lock by renaming a directory
+  # holding its own pid into place (so the launcher never sees it pid-less),
+  # waiting up to a minute (DEVEX_LOCK_WAIT_SECONDS) and failing so it can be
+  # retried; it always releases the lock,
+  # then removes only the launcher, binary, and updater state files under
+  # ~/.local/bin, leaving ~/.config/muse credentials and config intact. Windows
+  # is omitted because Meta only documents PowerShell install.ps1.
+  install_method: curlpipe
+  download_url: https://dev.meta.ai/install.sh
+  install_scope: user
+  installed_binary: muse
+  self_updating: true
+  uninstall_command: B="$HOME/.local/bin"; [ -d "$B" ] || exit 0; L="$B/.muse-update-lock"; T="$B/.muse-uninstall.$$"; i=0; while :; do rm -rf "$T"; mkdir "$T" && echo "$$" > "$T/pid" || exit 1; if mv "$T" "$L" 2>/dev/null && [ ! -e "$L/.muse-uninstall.$$" ] && [ "$(cat "$L/pid" 2>/dev/null)" = "$$" ]; then break; fi; rm -rf "$L/.muse-uninstall.$$" "$T"; i=$((i + 1)); if [ "$i" -ge "${DEVEX_LOCK_WAIT_SECONDS:-60}" ]; then echo "Muse Code is updating itself; run the uninstall again shortly (if no update is running, remove $L first)." >&2; exit 1; fi; sleep 1; done; rc=0; rm -f "$B/muse" "$B/muse-bin" "$B/muse-bin-"* "$B/.muse-launcher.previous" "$B/.muse-launcher."* "$B/.muse-version" "$B/.muse-release-info.json" "$B/.muse-update-checked-at" "$B/.muse-update-notice" "$B/.muse-update."* "$B/.muse-state" || rc=1; rm -rf "$B/.muse-updater" "$B/.muse-install-lock" || rc=1; rm -rf "$L" || rc=1; exit "$rc"
+  official_support: true

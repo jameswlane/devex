@@ -1,0 +1,62 @@
+# Upstream: https://github.com/vinhnx/VTCode (https://vinhnx.github.io/VTCode/)
+name: VT Code
+description: Open-source Rust terminal coding agent with sandboxed command policy
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/vinhnx/VTCode/blob/main/docs/installation/README.md
+  # Homebrew is officially documented and avoids install.sh's interactive macOS
+  # desktop-app prompt, and install.sh is not offered here because it installs the
+  # desktop app by default. The mise github backend is a community alternative.
+  install_method: brew
+  install_command: vinhnx/tap/vtcode
+  uninstall_command: vinhnx/tap/vtcode
+  brew_tap: vinhnx/tap
+  installed_binary: vtcode
+  self_updating: false
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: github:vinhnx/VTCode@latest
+      uninstall_command: github:vinhnx/VTCode
+      installed_binary: vtcode
+      self_updating: false
+      official_support: false
+      dependencies:
+        - mise
+linux:
+  # Official install docs: https://github.com/vinhnx/VTCode/blob/main/docs/installation/README.md
+  # Unpinned bootstrap script: VT Code updates scripts/install.sh on release and
+  # publishes no checksum for the script itself. The script downloads the matching
+  # GitHub release archive and its .sha256 sidecar / checksums.txt, refuses to
+  # install if SHA-256 verification fails, and installs ~/.local/bin/vtcode (man pages and
+  # completions only with --with-completions, which DevEx does not pass). Updates are explicit (`vtcode update install`),
+  # not automatic in the background, so self_updating is false.
+  # Uninstall removes only the binary, leaving ~/.vtcode
+  # intact. Windows is omitted because official docs only ship install.ps1 and note
+  # Windows release artifacts are best-effort.
+  install_method: curlpipe
+  download_url: https://raw.githubusercontent.com/vinhnx/vtcode/main/scripts/install.sh
+  install_scope: user
+  installed_binary: vtcode
+  self_updating: false
+  uninstall_command: rm -f "$HOME/.local/bin/vtcode"
+  official_support: true
+  alternatives:
+    - install_method: brew
+      install_command: vinhnx/tap/vtcode
+      uninstall_command: vinhnx/tap/vtcode
+      brew_tap: vinhnx/tap
+      installed_binary: vtcode
+      self_updating: false
+      official_support: true
+    - install_method: mise
+      install_command: github:vinhnx/VTCode@latest
+      uninstall_command: github:vinhnx/VTCode
+      installed_binary: vtcode
+      self_updating: false
+      official_support: false
+      dependencies:
+        - mise

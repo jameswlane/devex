@@ -1,0 +1,52 @@
+# Upstream: https://github.com/poolsideai/pool (https://docs.poolside.ai/cli/pool)
+name: Poolside
+description: Poolside's terminal and ACP AI coding agent CLI (pool)
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/poolsideai/pool#install and
+  # https://docs.poolside.ai/cli/pool.
+  # Installed via mise's github backend from Poolside's official GitHub Releases
+  # (verified against upstream checksums.txt), avoiding downloads.poolside.ai/pool/install.sh's
+  # interactive EULA prompt that fails in non-interactive runs, and providing
+  # user-scope installs (DevEx's release_archive requires system scope and cannot
+  # rename pool-linux-amd64 to pool). `pool` prompts when updates are available
+  # rather than self-updating silently, so self_updating is false.
+  install_method: mise
+  install_command: github:poolsideai/pool@latest
+  uninstall_command: github:poolsideai/pool
+  installed_binary: pool
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+windows:
+  # Official GitHub Releases ship pool-windows-{amd64,arm64}.tar.gz with checksums.txt.
+  install_method: mise
+  install_command: github:poolsideai/pool@latest
+  uninstall_command: github:poolsideai/pool
+  installed_binary: pool
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # Official install docs: https://github.com/poolsideai/pool#install and
+  # https://docs.poolside.ai/cli/pool.
+  # Installed via mise's github backend from Poolside's official GitHub Releases
+  # (verified against upstream checksums.txt), avoiding downloads.poolside.ai/pool/install.sh's
+  # interactive EULA prompt that fails in non-interactive runs, and providing
+  # user-scope installs (DevEx's release_archive requires system scope and cannot
+  # rename pool-linux-amd64 to pool). `pool` prompts when updates are available
+  # rather than self-updating silently, so self_updating is false. Uninstall removes
+  # only the mise tool and preserves ~/.config/poolside intact.
+  install_method: mise
+  install_command: github:poolsideai/pool@latest
+  uninstall_command: github:poolsideai/pool
+  installed_binary: pool
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise

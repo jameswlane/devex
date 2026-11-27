@@ -1,0 +1,69 @@
+# Upstream: https://ampcode.com/ (docs: https://ampcode.com/manual)
+name: Amp
+description: Amp's frontier agentic coding CLI for the terminal
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://ampcode.com/
+  # Unpinned bootstrap script: Amp updates install.sh on release and publishes
+  # no checksum for the script itself. The script fetches cli-version.txt and
+  # <platform>-amp.sha256 from static.ampcode.com and verifies the decompressed
+  # binary's SHA-256 checksum before installing to ~/.amp/bin/amp and symlinking
+  # ~/.local/bin/amp. Amp auto-updates by default (amp.updates.mode=auto).
+  install_method: curlpipe
+  download_url: https://ampcode.com/install.sh
+  install_scope: user
+  installed_binary: amp
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/amp" "$HOME/.amp/bin/amp"
+  official_support: true
+  alternatives:
+    # Official npm channel documented on ampcode.com (`npm install -g @ampcode/cli`).
+    - install_method: mise
+      install_command: node@24 npm:@ampcode/cli@latest
+      uninstall_command: npm:@ampcode/cli
+      installed_binary: amp
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  # Official npm channel documented on ampcode.com (`npm install -g @ampcode/cli`);
+  # mise installs it without a global npm prefix (DevEx has no PowerShell irm|iex plugin).
+  install_method: mise
+  install_command: node@24 npm:@ampcode/cli@latest
+  uninstall_command: npm:@ampcode/cli
+  installed_binary: amp
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Official install docs: https://ampcode.com/
+  # Unpinned bootstrap script: Amp updates install.sh on release and publishes
+  # no checksum for the script itself. The script fetches cli-version.txt and
+  # <platform>-amp.sha256 from static.ampcode.com and verifies the decompressed
+  # binary's SHA-256 checksum before installing to ~/.amp/bin/amp and symlinking
+  # ~/.local/bin/amp. Amp auto-updates by default (amp.updates.mode=auto).
+  # Uninstall removes only the binary and symlink, keeping ~/.amp and ~/.config/amp.
+  install_method: curlpipe
+  download_url: https://ampcode.com/install.sh
+  install_scope: user
+  installed_binary: amp
+  self_updating: true
+  uninstall_command: rm -f "$HOME/.local/bin/amp" "$HOME/.amp/bin/amp"
+  official_support: true
+  alternatives:
+    # Official npm channel documented on ampcode.com (`npm install -g @ampcode/cli`).
+    # Node 24, not node@lts: mise's lts is Node 26, whose Linux binaries need
+    # libatomic.so.1, which fresh Debian/Ubuntu images lack (#703).
+    - install_method: mise
+      install_command: node@24 npm:@ampcode/cli@latest
+      uninstall_command: npm:@ampcode/cli
+      installed_binary: amp
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js

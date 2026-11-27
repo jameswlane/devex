@@ -1,0 +1,47 @@
+# Upstream: https://github.com/crow-cli/crow-cli (https://crow-ai.dev)
+name: crow-cli
+description: Minimal ACP-native AI coding agent with persistent SQL session storage
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/crow-cli/crow-cli#setup (PyPI:
+  # https://pypi.org/project/crow-cli/, requires Python >=3.13).
+  # Upstream documents `uv tool install crow-cli --python 3.13` (and crow-ai.dev/install.sh
+  # is a thin wrapper around `uv tool install crow-cli`). mise's pipx backend runs
+  # uv tool install with an isolated mise-managed Python 3.13 runtime.
+  install_method: mise
+  install_command: uv@latest pipx:crow-cli[python=3.13]@latest
+  uninstall_command: pipx:crow-cli
+  installed_binary: crow-cli
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+windows:
+  # Official install docs: https://github.com/crow-cli/crow-cli#setup
+  install_method: mise
+  install_command: uv@latest pipx:crow-cli[python=3.13]@latest
+  uninstall_command: pipx:crow-cli
+  installed_binary: crow-cli
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # Official install docs: https://github.com/crow-cli/crow-cli#setup (PyPI:
+  # https://pypi.org/project/crow-cli/, requires Python >=3.13).
+  # Upstream's crow-ai.dev/install.sh is a thin wrapper that installs uv and runs
+  # `uv tool install crow-cli`. mise's pipx backend runs uv tool install with an
+  # isolated mise-managed Python 3.13 runtime without touching system Python or
+  # needing an unpinned curlpipe script. Uninstall removes crow-cli and keeps uv
+  # and ~/.agents/crow config/database intact.
+  install_method: mise
+  install_command: uv@latest pipx:crow-cli[python=3.13]@latest
+  uninstall_command: pipx:crow-cli
+  installed_binary: crow-cli
+  self_updating: false
+  official_support: true
+  dependencies:
+    - mise

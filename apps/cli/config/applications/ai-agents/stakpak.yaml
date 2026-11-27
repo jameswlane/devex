@@ -1,0 +1,60 @@
+# Upstream: https://stakpak.dev/ (https://github.com/stakpak/agent)
+name: Stakpak
+description: Open-source DevOps AI coding agent CLI written in Rust
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/stakpak/agent#installation
+  install_method: brew
+  install_command: stakpak/stakpak/stakpak
+  uninstall_command: stakpak/stakpak/stakpak
+  brew_tap: stakpak/stakpak
+  installed_binary: stakpak
+  self_updating: false
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: github:stakpak/agent@latest
+      uninstall_command: github:stakpak/agent
+      installed_binary: stakpak
+      self_updating: true
+      official_support: true
+      dependencies:
+        - mise
+windows:
+  # Official GitHub Releases ship stakpak-windows-x86_64.zip.
+  install_method: mise
+  install_command: github:stakpak/agent@latest
+  uninstall_command: github:stakpak/agent
+  installed_binary: stakpak
+  self_updating: true
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # Official install docs: https://github.com/stakpak/agent#installation
+  # Installed via mise's github backend from Stakpak's official GitHub Releases
+  # (stakpak-linux-{x86_64,aarch64}.tar.gz), avoiding stakpak.dev/install.sh
+  # (which verifies no checksum, pauses/prompts interactively, and probes
+  # /usr/local/bin) and avoiding release_archive's root-only system destination
+  # (Stakpak applies background self-updates on interactive startup, so user
+  # scope lets its own updater work and self_updating is true). Uninstall removes
+  # only the mise tool and preserves ~/.stakpak config and credentials.
+  install_method: mise
+  install_command: github:stakpak/agent@latest
+  uninstall_command: github:stakpak/agent
+  installed_binary: stakpak
+  self_updating: true
+  official_support: true
+  dependencies:
+    - mise
+  alternatives:
+    - install_method: brew
+      install_command: stakpak/stakpak/stakpak
+      uninstall_command: stakpak/stakpak/stakpak
+      brew_tap: stakpak/stakpak
+      installed_binary: stakpak
+      self_updating: false
+      official_support: true

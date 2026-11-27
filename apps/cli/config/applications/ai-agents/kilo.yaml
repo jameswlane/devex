@@ -1,0 +1,86 @@
+# Upstream: https://kilo.ai/cli (https://github.com/Kilo-Org/kilocode)
+name: Kilo
+description: Open-source terminal AI coding agent supporting 500+ models
+category: AI Coding Agents
+default: false
+desktop_environments:
+  - all
+macos:
+  # Official install docs: https://github.com/Kilo-Org/kilocode#installation
+  install_method: brew
+  install_command: Kilo-Org/tap/kilo
+  uninstall_command: Kilo-Org/tap/kilo
+  brew_tap: Kilo-Org/tap
+  installed_binary: kilo
+  self_updating: false
+  official_support: true
+  alternatives:
+    - install_method: curlpipe
+      download_url: https://kilo.ai/cli/install
+      install_scope: user
+      installed_binary: kilo
+      self_updating: false
+      uninstall_command: rm -f "$HOME/.kilo/bin/kilo" && rm -rf "$HOME/.kilo/bin/tree-sitter" && case "$(readlink "$HOME/.local/bin/kilo" 2>/dev/null || true)" in */.kilo/bin/kilo) rm -f "$HOME/.local/bin/kilo" ;; esac
+      official_support: true
+    - install_method: mise
+      install_command: node@24 npm:@kilocode/cli@latest
+      uninstall_command: npm:@kilocode/cli
+      installed_binary: kilo
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+windows:
+  # Official install docs: https://github.com/Kilo-Org/kilocode#installation (`npm install -g @kilocode/cli`).
+  # Kilo auto-updates npm/pnpm/bun installs on patch releases by default (packages/opencode/src/cli/upgrade.ts).
+  install_method: mise
+  install_command: node@24 npm:@kilocode/cli@latest
+  uninstall_command: npm:@kilocode/cli
+  installed_binary: kilo
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+linux:
+  # Official install docs: https://github.com/Kilo-Org/kilocode#installation
+  # Unpinned bootstrap script: Kilo updates https://kilo.ai/cli/install on release
+  # and publishes no checksum for the script itself. The script resolves the latest
+  # version from npm dist-tags and downloads the matching GitHub release archive
+  # (handling AVX2 baseline and musl variants) over HTTPS into ~/.kilo/bin/kilo
+  # alongside tree-sitter/ (the upstream script does not verify a separate binary
+  # checksum). Kilo only auto-updates npm/pnpm/bun installs, not curl installs
+  # (packages/opencode/src/cli/upgrade.ts), so self_updating is false here.
+  # Post-install links ~/.local/bin/kilo -> ~/.kilo/bin/kilo when free so kilo is
+  # on standard PATH; uninstall removes only those files and keeps ~/.config/kilo
+  # and ~/.local/share/kilo intact.
+  install_method: curlpipe
+  download_url: https://kilo.ai/cli/install
+  install_scope: user
+  installed_binary: kilo
+  self_updating: false
+  post_install:
+    - scope: user
+      shell: |
+        set -eu
+        mkdir -p "$HOME/.local/bin"
+        if [ -x "$HOME/.kilo/bin/kilo" ] && [ ! -e "$HOME/.local/bin/kilo" ]; then
+          ln -s "$HOME/.kilo/bin/kilo" "$HOME/.local/bin/kilo"
+        fi
+  uninstall_command: rm -f "$HOME/.kilo/bin/kilo" && rm -rf "$HOME/.kilo/bin/tree-sitter" && case "$(readlink "$HOME/.local/bin/kilo" 2>/dev/null || true)" in */.kilo/bin/kilo) rm -f "$HOME/.local/bin/kilo" ;; esac
+  official_support: true
+  alternatives:
+    - install_method: mise
+      install_command: node@24 npm:@kilocode/cli@latest
+      uninstall_command: npm:@kilocode/cli
+      installed_binary: kilo
+      self_updating: false
+      official_support: true
+      dependencies:
+        - Node.js
+    - install_method: brew
+      install_command: Kilo-Org/tap/kilo
+      uninstall_command: Kilo-Org/tap/kilo
+      brew_tap: Kilo-Org/tap
+      installed_binary: kilo
+      self_updating: false
+      official_support: true
