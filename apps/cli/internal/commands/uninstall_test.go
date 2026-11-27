@@ -297,16 +297,34 @@ var _ = Describe("Uninstall Command", func() {
 
 		It("finds a tracked app by its kebab-case name", func() {
 			Expect(mockRepo.AddApp("Claude Code")).To(Succeed())
-			Expect(commands.CanonicalUninstallName(mockRepo, settings, "claude-code")).To(Equal("Claude Code"))
-			Expect(commands.CanonicalUninstallName(mockRepo, settings, "claude code")).To(Equal("Claude Code"))
-			Expect(commands.CanonicalUninstallName(mockRepo, settings, "other-app")).To(Equal("other-app"))
+			canonical := func(name string) string {
+				resolved, err := commands.CanonicalUninstallName(mockRepo, settings, name)
+				Expect(err).NotTo(HaveOccurred())
+				return resolved
+			}
+			Expect(canonical("claude-code")).To(Equal("Claude Code"))
+			Expect(canonical("claude code")).To(Equal("Claude Code"))
+			Expect(canonical("other-app")).To(Equal("other-app"))
 		})
 
 		It("prefers an exact catalog name over a tracked kebab-case match", func() {
 			settings.Terminal.Utilities = []types.CrossPlatformApp{{Name: "Claude Code", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "claude"}}}
 			Expect(mockRepo.AddApp("Claude.Code")).To(Succeed())
-			Expect(commands.CanonicalUninstallName(mockRepo, settings, "Claude Code")).To(Equal("Claude Code"))
-			Expect(commands.CanonicalUninstallName(mockRepo, settings, "claude-code")).To(Equal("Claude.Code"))
+			canonical := func(name string) string {
+				resolved, err := commands.CanonicalUninstallName(mockRepo, settings, name)
+				Expect(err).NotTo(HaveOccurred())
+				return resolved
+			}
+			Expect(canonical("Claude Code")).To(Equal("Claude Code"))
+			Expect(canonical("claude-code")).To(Equal("Claude.Code"))
+		})
+
+		It("keeps the exact name of a saved definition whose tracking row is gone", func() {
+			settings.Terminal.Utilities = []types.CrossPlatformApp{{Name: "Claude Code", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "claude"}}}
+			Expect(mockRepo.Set("installed-app-definition:claude.code", `{"name":"Claude.Code"}`)).To(Succeed())
+			resolved, err := commands.CanonicalUninstallName(mockRepo, settings, "Claude.Code")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resolved).To(Equal("Claude.Code"))
 		})
 
 		It("keeps support for known catalog apps installed outside DevEx", func() {
