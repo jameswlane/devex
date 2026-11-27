@@ -260,6 +260,49 @@ var _ = Describe("Install Channels CLI", func() {
 		})
 	})
 
+	Describe("status with a recorded channel it cannot resolve", func() {
+		It("reports unknown with the reason and never probes, also under a category filter (M4/T1)", func() {
+			Expect(repo.AddApp("Ghostty")).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"flatpak","channel":"flatpak"}`)).To(Succeed())
+			probed := false
+			probe := func(context.Context, types.AppConfig) (bool, error) {
+				probed = true
+				return true, nil
+			}
+			for _, req := range []agentapi.StatusRequest{{Names: []string{"Ghostty"}}, {Category: "Terminal Emulators"}} {
+				results, _ := agentapi.Status(context.Background(), settings, repo, req, probe)
+				Expect(results).To(HaveLen(1))
+				Expect(results[0].Status).To(Equal("unknown"))
+				Expect(results[0].InstallMethod).To(BeEmpty())
+				Expect(results[0].Issues).To(ContainElement(ContainSubstring(`Recorded install channel cannot be resolved`)))
+			}
+			Expect(probed).To(BeFalse())
+		})
+
+		It("checks the catalog's definition when a saved one disagrees with the recorded channel (Q2/T2)", func() {
+			// The saved definition selected apt, but the receipt records snap,
+			// whose catalog package differs from the saved snap alternative.
+			saved := settings.ApplicationOverrides[1]
+			saved.Linux.Alternatives = append([]types.OSConfig(nil), saved.Linux.Alternatives...)
+			saved.Linux.Alternatives[0].InstallCommand = "ghostty-legacy --classic"
+			data, err := json.Marshal(saved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.AddApp("Ghostty")).To(Succeed())
+			Expect(repo.Set("installed-app-definition:ghostty", string(data))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"snap","channel":"snap","packages":["ghostty"]}`)).To(Succeed())
+
+			var checked types.AppConfig
+			results, err := agentapi.Status(context.Background(), settings, repo, agentapi.StatusRequest{Names: []string{"Ghostty"}}, func(_ context.Context, app types.AppConfig) (bool, error) {
+				checked = app
+				return true, nil
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+			Expect(checked.InstallMethod).To(Equal("snap"))
+			Expect(checked.InstallCommand).To(Equal("ghostty --classic"))
+		})
+	})
+
 	Describe("recorded channel precedence for update, upgrade, and uninstall", func() {
 		It("uses the recorded channel (explicit and legacy receipts) for update and upgrade despite config preferences", func() {
 			viper.Set("channel_order", []string{"snap"})

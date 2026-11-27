@@ -306,6 +306,10 @@ func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSetti
 		// status reports it as unknown rather than probe another channel.
 		var bare types.AppConfig
 		bare.Name = app.Name
+		bare.Category = app.Category
+		if bare.Category == "" && inCatalog {
+			bare.Category = catalog.Category
+		}
 		return bare
 	}
 	if found {

@@ -77,8 +77,13 @@ func Status(ctx context.Context, s config.CrossPlatformSettings, repo StatusRead
 		if definition, found, err := channels.StatusDefinition(recordReader, catalogApp, inCatalog, app.Name); err != nil {
 			// No install method: reported as unknown, never probed.
 			unresolved[app.Name] = err.Error()
+			// Keep the category for filtering; leave the install method empty.
 			var bare types.AppConfig
 			bare.Name = app.Name
+			bare.Category = app.Category
+			if bare.Category == "" && inCatalog {
+				bare.Category = catalogApp.Category
+			}
 			return bare
 		} else if found {
 			resolved := definition.ToLegacyAppConfig()
