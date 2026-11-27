@@ -24,6 +24,7 @@ var trustedDomains = []string{
 	"claude.ai",
 	"opencode.ai",
 	"code.kimi.com",
+	"zed.dev",
 }
 
 // GetTrustedDomains returns the list of trusted domains
