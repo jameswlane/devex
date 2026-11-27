@@ -137,7 +137,7 @@ func (v *ConfigValidator) validateOSChannels(osConfig types.OSConfig, platform, 
 			prev, duplicate := seen[altName]
 			// Entries that each declare platform_requirements are platform
 			// variants of one channel (amd64 and arm64 archives, say).
-			variant := duplicate && len(alt.PlatformRequirements) > 0 && len(seenConfig[altName].PlatformRequirements) > 0
+			variant := duplicate && isPlatformVariant(seenConfig[altName], alt)
 			switch {
 			case variant:
 			case duplicate:
@@ -151,6 +151,44 @@ func (v *ConfigValidator) validateOSChannels(osConfig types.OSConfig, platform, 
 			v.addError(filename, platform+".official_support", fmt.Sprintf("Primary channel %q has official_support: false while alternative %q (%s) has official_support: true; make the official channel primary", osConfig.ChannelName(), alt.ChannelName(), altField), nil)
 		}
 	}
+}
+
+// isPlatformVariant reports whether a and b are builds of one channel for
+// different architectures: the same install_method, and architecture
+// requirements on both that never overlap.
+func isPlatformVariant(a, b types.OSConfig) bool {
+	if !strings.EqualFold(strings.TrimSpace(a.InstallMethod), strings.TrimSpace(b.InstallMethod)) {
+		return false
+	}
+	archesA, archesB := requirementArches(a), requirementArches(b)
+	if len(archesA) == 0 || len(archesB) == 0 {
+		return false
+	}
+	for arch := range archesA {
+		if archesB[arch] {
+			return false
+		}
+	}
+	return true
+}
+
+// requirementArches returns the architectures a's platform_requirements name,
+// or nil when any requirement leaves the architecture open.
+func requirementArches(cfg types.OSConfig) map[string]bool {
+	arches := map[string]bool{}
+	for _, req := range cfg.PlatformRequirements {
+		arch := strings.ToLower(strings.TrimSpace(req.Arch))
+		switch arch {
+		case "":
+			return nil
+		case "x86_64":
+			arch = "amd64"
+		case "aarch64":
+			arch = "arm64"
+		}
+		arches[arch] = true
+	}
+	return arches
 }
 
 // addError adds a validation error

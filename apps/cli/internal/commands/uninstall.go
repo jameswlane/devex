@@ -243,7 +243,7 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 				if recLabel != "" {
 					switched, _, err := channels.Resolve(entry, channels.Preferences{}, recLabel)
 					if err != nil {
-						return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %s' to clear the record", entry.Name, recLabel, entry.Name)
+						return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %q' to clear the record", entry.Name, recLabel, entry.Name)
 					}
 					return switched.ToLegacyAppConfig(), nil
 				}
@@ -261,7 +261,7 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 			recLabel = strings.TrimSpace(receipt.Manager)
 		}
 		if recLabel != "" {
-			return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %s' to clear the record", name, recLabel, name)
+			return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %q' to clear the record", name, recLabel, name)
 		}
 	}
 

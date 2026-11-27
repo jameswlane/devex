@@ -95,6 +95,36 @@ linux:
 		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
 	})
 
+	DescribeTable("rejects same-name entries that are not per-architecture builds of one method",
+		func(altMethod, altArch string) {
+			path := filepath.Join(settings.GetUserConfigDir(), "applications", "development", "shadow.yaml")
+			write(path, `name: shadow-tool
+description: Tool whose entries shadow each other
+category: Development Tools
+linux:
+  install_method: apt
+  install_command: shadow-tool
+  official_support: true
+  platform_requirements:
+    - os: linux
+      arch: amd64
+  alternatives:
+    - channel: apt
+      install_method: `+altMethod+`
+      install_command: shadow-tool
+      official_support: true
+      platform_requirements:
+        - os: linux
+          arch: `+altArch+`
+`)
+			result, err := config.ValidateConfig(context.Background(), settings, true)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Diagnostics).To(ContainElement(HaveField("Message", ContainSubstring(`Duplicate channel name "apt"`))))
+		},
+		Entry("same architecture", "apt", "x86_64"),
+		Entry("different install methods", "snap", "arm64"),
+	)
+
 	It("rejects a platform whose primary has official_support: false while an alternative has official_support: true", func() {
 		path := filepath.Join(settings.GetUserConfigDir(), "applications", "development", "unofficial-primary.yaml")
 		write(path, `name: bad-order

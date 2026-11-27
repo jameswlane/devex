@@ -188,11 +188,11 @@ func prepareChannelSwitches(ctx context.Context, out io.Writer, apps []types.Cro
 	// Validate all switches before removing anything.
 	for _, plan := range plans {
 		if !plan.CanRemove {
-			return fmt.Errorf("cannot switch %s from channel %q to %q: %s; run 'devex uninstall %s' first",
+			return fmt.Errorf("cannot switch %s from channel %q to %q: %s; run 'devex uninstall --app %q' first",
 				plan.App.Name, plan.OldChannel, plan.NewChannel, plan.Reason, plan.App.Name)
 		}
 		if plan.OldConfig.InstallMethod != "curlpipe" && getUninstallInstaller(ctx, plan.OldConfig.InstallMethod) == nil {
-			return fmt.Errorf("cannot switch %s from channel %q to %q: no uninstall support for %q; run 'devex uninstall %s' first",
+			return fmt.Errorf("cannot switch %s from channel %q to %q: no uninstall support for %q; run 'devex uninstall --app %q' first",
 				plan.App.Name, plan.OldChannel, plan.NewChannel, plan.OldConfig.InstallMethod, plan.App.Name)
 		}
 	}
@@ -206,7 +206,7 @@ func prepareChannelSwitches(ctx context.Context, out io.Writer, apps []types.Cro
 				plan.App.Name, plan.OldChannel, plan.NewChannel, plan.OldChannel)
 		}
 		if err := switchUninstallOldChannel(ctx, plan.OldConfig, repo); err != nil {
-			return fmt.Errorf("cannot switch %s from channel %q to %q: uninstalling %s channel failed: %w; run 'devex uninstall %s' first",
+			return fmt.Errorf("cannot switch %s from channel %q to %q: uninstalling %s channel failed: %w; run 'devex uninstall --app %q' first",
 				plan.App.Name, plan.OldChannel, plan.NewChannel, plan.OldChannel, err, plan.App.Name)
 		}
 	}

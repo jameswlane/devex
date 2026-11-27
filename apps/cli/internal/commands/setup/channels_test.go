@@ -217,7 +217,7 @@ var _ = Describe("Setup TUI Install Channels", func() {
 		model.step = StepConfirmation
 		model.refreshInstalledApps()
 
-		expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall Ghostty' first, then install it with --channel snap`
+		expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall --app "Ghostty"' first, then install it with --channel snap`
 
 		// Error is shown in the plan and is NOT masked by "already installed, will skip".
 		confirmView := model.View()
@@ -264,7 +264,7 @@ var _ = Describe("Setup TUI Install Channels", func() {
 
 		err = RunAutomatedSetup(context.Background(), repo, settings)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring(`Kimi Code is installed through channel "curlpipe"; run 'devex uninstall Kimi Code' first, then install it with --channel mise`))
+		Expect(err.Error()).To(ContainSubstring(`Kimi Code is installed through channel "curlpipe"; run 'devex uninstall --app "Kimi Code"' first, then install it with --channel mise`))
 		Expect(installed).To(BeFalse())
 	})
 

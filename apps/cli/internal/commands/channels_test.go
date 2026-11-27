@@ -503,7 +503,7 @@ var _ = Describe("Install Channels CLI", func() {
 				},
 			})).To(Succeed())
 
-			expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall Ghostty' first, then install it with --channel snap`
+			expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall --app "Ghostty"' first, then install it with --channel snap`
 
 			// JSON dry-run refuses the switch.
 			err = runRoot("install", "Ghostty", "--channel", "snap", "--dry-run", "--format", "json", "--offline")
@@ -553,7 +553,7 @@ var _ = Describe("Install Channels CLI", func() {
 				return nil
 			}))
 
-			expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall Ghostty' first, then install it with --channel snap`
+			expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall --app "Ghostty"' first, then install it with --channel snap`
 
 			err = runRoot("install", "Ghostty", "--channel", "snap", "--rollback-on-failure", "--offline")
 			Expect(err).To(HaveOccurred())

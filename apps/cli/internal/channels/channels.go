@@ -300,7 +300,7 @@ func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) s
 // SwitchRefusalError formats the standard error returned when a path other than
 // plain `devex install` would switch an already-installed application's channel.
 func SwitchRefusalError(appName, oldChannel, newChannel string) error {
-	return fmt.Errorf("%s is installed through channel %q; run 'devex uninstall %s' first, then install it with --channel %s",
+	return fmt.Errorf("%s is installed through channel %q; run 'devex uninstall --app %q' first, then install it with --channel %s",
 		appName, oldChannel, appName, newChannel)
 }
 

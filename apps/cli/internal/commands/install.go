@@ -693,7 +693,7 @@ func previewInstallationWithRepo(ctx context.Context, apps []types.CrossPlatform
 	for _, app := range apps {
 		if switchPlan, switching := detectChannelSwitch(repo, app); switching {
 			if !switchPlan.CanRemove {
-				fmt.Fprintf(out, "Would fail switching %s from channel %s to %s: %s; run 'devex uninstall %s' first\n",
+				fmt.Fprintf(out, "Would fail switching %s from channel %s to %s: %s; run 'devex uninstall --app %q' first\n",
 					app.Name, switchPlan.OldChannel, switchPlan.NewChannel, switchPlan.Reason, app.Name)
 			} else {
 				fmt.Fprintf(out, "Would switch %s from channel %s to %s (would uninstall %s channel first, then install via %s)\n",

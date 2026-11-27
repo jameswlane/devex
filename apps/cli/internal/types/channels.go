@@ -160,9 +160,13 @@ func (app *CrossPlatformApp) Channels() []ChannelInfo {
 			continue
 		}
 		// Platform variants of one channel are listed once.
+		// Official and install method come from a variant available here.
 		if i, seen := index[strings.ToLower(name)]; seen {
-			infos[i].Official = infos[i].Official || cfg.OfficialSupport
-			infos[i].Available = infos[i].Available || isChannelAvailable(cfg)
+			if !infos[i].Available && isChannelAvailable(cfg) {
+				infos[i].Available = true
+				infos[i].Official = cfg.OfficialSupport
+				infos[i].InstallMethod = cfg.InstallMethod
+			}
 			continue
 		}
 		index[strings.ToLower(name)] = len(infos)

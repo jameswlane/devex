@@ -58,6 +58,16 @@ var _ = Describe("Application install channels", func() {
 			Expect(back.GetOSConfig().DownloadURL).To(Equal("https://example.invalid/squad_arm64.tar.gz"))
 		})
 
+		It("takes official status from the variant available on this architecture", func() {
+			DeferCleanup(types.PinCatalogArchForTesting("arm64"))
+			DeferCleanup(types.PinCatalogPlatformForTesting(platform.DetectionResult{
+				OS: "linux", Distribution: "ubuntu", DistributionLike: []string{"debian"}, Version: "24.04", Architecture: "arm64",
+			}))
+			app := variantApp()
+			app.Linux.Alternatives[0].OfficialSupport = false
+			Expect(app.Channels()[0]).To(And(HaveField("Name", "curlpipe"), HaveField("Available", true), HaveField("Official", false)))
+		})
+
 		It("keeps the amd64 variant on amd64", func() {
 			selected, err := variantApp().WithChannel("curlpipe")
 			Expect(err).NotTo(HaveOccurred())

@@ -480,7 +480,7 @@ var _ = Describe("MCP mutating tools", func() {
 			Query: func(context.Context, string, string) (bool, string, error) { return true, "1.0.0", nil },
 		})).To(Succeed())
 
-		expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall Ghostty' first, then install it with --channel snap`
+		expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall --app "Ghostty"' first, then install it with --channel snap`
 
 		// Confirmation must refuse before running Install.
 		Expect(errorText(call(session, "install_apps", map[string]any{
