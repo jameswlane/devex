@@ -14,6 +14,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
@@ -258,7 +259,17 @@ func (ae *ActionExecutor) installDesktopApps(ctx context.Context, items interfac
 			fmt.Fprintln(out, agentapi.HeadlessSkipMessage(app.Name))
 			continue
 		}
-		apps = append(apps, app)
+		// Setup keeps an installed app on its recorded channel and refuses
+		// to switch it; only `devex install` switches channels.
+		resolved, _, err := channels.ResolveForInstall(app, channels.PreferencesFromViper(), channels.InstalledChannelForApp(ae.repo, app))
+		if err == nil {
+			err = channels.CheckRefusedChannelSwitch(ae.repo, resolved)
+		}
+		if err != nil {
+			failures = append(failures, fmt.Errorf("desktop app %q: %w", name, err))
+			continue
+		}
+		apps = append(apps, resolved)
 	}
 	// Pass exactly the selected definitions as one plan: the shared installer
 	// owns skip checks, authorization, lifecycle hooks, lanes and failure aggregation.

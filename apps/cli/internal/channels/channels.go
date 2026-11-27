@@ -166,9 +166,14 @@ func ResolveForInstall(app types.CrossPlatformApp, prefs Preferences, recordedCh
 	}
 
 	if rec := strings.TrimSpace(recordedChannel); rec != "" {
-		if selected, err := app.WithChannel(rec); err == nil {
-			return selected, selected.SelectedChannel(), nil
+		selected, err := app.WithChannel(rec)
+		if err != nil {
+			// Falling back to the default here would switch channels the user
+			// never asked for.
+			return types.CrossPlatformApp{}, "", fmt.Errorf("%s is installed through channel %q, which the catalog no longer offers here; run 'devex uninstall --app %q' first, or install it with --channel <name> (available channels: %s)",
+				app.Name, rec, app.Name, types.FormatAvailableChannels(app.Channels()))
 		}
+		return selected, selected.SelectedChannel(), nil
 	}
 
 	return app, app.SelectedChannel(), nil
@@ -228,9 +233,10 @@ func resolveAllWith(
 
 // InferRecordedChannel determines the channel recorded in receipt for app.
 // Receipts with an explicit Channel return it directly. Legacy receipts without
-// a Channel match receipt.Manager to a channel's install_method (preferring an
-// available channel), returning "" when no match exists so callers fall back to
-// the default channel.
+// a Channel match receipt.Manager to a channel's install_method. When several
+// channels share that manager, the one whose package identifiers equal the
+// receipt's wins, then the platform's default selection, then the first
+// available one. It returns "" when no channel uses the manager.
 func InferRecordedChannel(receipt inventory.Receipt, app types.CrossPlatformApp) string {
 	if ch := strings.TrimSpace(receipt.Channel); ch != "" {
 		return ch
@@ -239,18 +245,60 @@ func InferRecordedChannel(receipt inventory.Receipt, app types.CrossPlatformApp)
 	if mgr == "" || mgr == "unknown" {
 		return ""
 	}
-	chs := app.Channels()
-	for _, ch := range chs {
-		if ch.Available && strings.EqualFold(ch.InstallMethod, mgr) {
-			return ch.Name
+	var available, unavailable []string
+	for _, ch := range app.Channels() {
+		if !strings.EqualFold(ch.InstallMethod, mgr) {
+			continue
+		}
+		if ch.Available {
+			available = append(available, ch.Name)
+		} else {
+			unavailable = append(unavailable, ch.Name)
 		}
 	}
-	for _, ch := range chs {
-		if strings.EqualFold(ch.InstallMethod, mgr) {
-			return ch.Name
+	candidates := available
+	if len(candidates) == 0 {
+		candidates = unavailable
+	}
+	if len(candidates) <= 1 {
+		if len(candidates) == 1 {
+			return candidates[0]
+		}
+		return ""
+	}
+	if len(receipt.Packages) > 0 {
+		for _, name := range candidates {
+			if selected, err := app.WithChannel(name); err == nil && samePackages(selected.GetOSConfig(), receipt.Packages) {
+				return name
+			}
 		}
 	}
-	return ""
+	if def := app.GetOSConfig(); strings.EqualFold(def.InstallMethod, mgr) {
+		for _, name := range candidates {
+			if strings.EqualFold(name, def.ChannelName()) {
+				return name
+			}
+		}
+	}
+	return candidates[0]
+}
+
+// samePackages reports whether cfg installs exactly the packages a receipt lists.
+func samePackages(cfg types.OSConfig, packages []string) bool {
+	request, err := types.ResolvePackageInstall(cfg.InstallMethod, cfg.InstallCommand, cfg.Packages, cfg.Options)
+	if err != nil || len(request.Packages) != len(packages) {
+		return false
+	}
+	want := make(map[string]bool, len(packages))
+	for _, pkg := range packages {
+		want[pkg] = true
+	}
+	for _, pkg := range request.Packages {
+		if !want[pkg] {
+			return false
+		}
+	}
+	return true
 }
 
 // RecordedChannelForApp reads the stored receipt for app (if any) and returns
@@ -274,6 +322,17 @@ func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) s
 		return ""
 	}
 	if receipt, ok := inventory.ReadReceipt(repo, app.Name); ok {
+		// A legacy receipt names only the manager; the saved definition says
+		// which of that manager's channels was installed.
+		if strings.TrimSpace(receipt.Channel) == "" {
+			if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
+				var saved types.CrossPlatformApp
+				if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" &&
+					strings.EqualFold(saved.GetOSConfig().InstallMethod, receipt.Manager) {
+					return saved.SelectedChannel()
+				}
+			}
+		}
 		if ch := InferRecordedChannel(receipt, app); ch != "" {
 			return ch
 		}
@@ -295,6 +354,33 @@ func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) s
 		return strings.TrimSpace(tracked.InstallMethod)
 	}
 	return ""
+}
+
+// InstalledDefinition returns app as it is installed: switched to its
+// recorded channel, or the saved installed definition when the catalog no
+// longer offers that channel. It fails, naming the recorded channel, when
+// neither describes the installation, so maintenance never acts on a channel
+// that was not installed.
+func InstalledDefinition(repo types.Repository, app types.CrossPlatformApp) (types.CrossPlatformApp, error) {
+	label := InstalledChannelForApp(repo, app)
+	if label == "" || strings.EqualFold(app.SelectedChannel(), label) {
+		return app, nil
+	}
+	if selected, err := app.WithChannel(label); err == nil {
+		return selected, nil
+	}
+	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
+		var saved types.CrossPlatformApp
+		if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
+			if strings.EqualFold(saved.SelectedChannel(), label) {
+				return saved, nil
+			}
+			if selected, err := saved.WithChannel(label); err == nil {
+				return selected, nil
+			}
+		}
+	}
+	return types.CrossPlatformApp{}, fmt.Errorf("%s is installed through channel %q, which the catalog no longer offers and no saved definition describes; run 'devex uninstall --app %q' or remove it manually", app.Name, label, app.Name)
 }
 
 // SwitchRefusalError formats the standard error returned when a path other than

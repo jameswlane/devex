@@ -298,6 +298,47 @@ var _ = Describe("Install Channels CLI", func() {
 			Expect(recorder.calls).To(Equal([]string{"package-manager-apt update"}))
 		})
 
+		It("fails maintenance for a legacy receipt whose manager the catalog no longer offers (N3)", func() {
+			recorder := &maintenanceRecorder{}
+			oldExec := maintenanceExecutor
+			DeferCleanup(func() { maintenanceExecutor = oldExec })
+			maintenanceExecutor = func(context.Context, pluginBootstrapProvider) (packageMaintenanceExecutor, error) {
+				return recorder, nil
+			}
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"flatpak","packages":["com.mitchellh.ghostty"]}`)).To(Succeed())
+
+			cmd := newPackageMaintenanceCmdWithRepo("upgrade", repo, settings, nil)
+			cmd.SetOut(&out)
+			cmd.SetErr(&errOut)
+			cmd.SetArgs([]string{"Ghostty", "--dry-run"})
+			err := cmd.Execute()
+			Expect(err).To(MatchError(ContainSubstring(`Ghostty is installed through channel "flatpak", which the catalog no longer offers`)))
+			Expect(out.String()).NotTo(ContainSubstring("package-manager-apt"))
+			Expect(recorder.calls).To(BeEmpty())
+		})
+
+		It("maintains a retired recorded channel through its saved definition (N3)", func() {
+			recorder := &maintenanceRecorder{}
+			oldExec := maintenanceExecutor
+			DeferCleanup(func() { maintenanceExecutor = oldExec })
+			maintenanceExecutor = func(context.Context, pluginBootstrapProvider) (packageMaintenanceExecutor, error) {
+				return recorder, nil
+			}
+			retired := settings.ApplicationOverrides[1]
+			retired.Linux = types.OSConfig{Channel: "retired-snap", InstallMethod: "snap", InstallCommand: "ghostty --classic", UninstallCommand: "ghostty", OfficialSupport: true}
+			data, err := json.Marshal(retired)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.Set("installed-app-definition:ghostty", string(data))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Ghostty"), `{"manager":"snap","channel":"retired-snap","packages":["ghostty"]}`)).To(Succeed())
+
+			cmd := newPackageMaintenanceCmdWithRepo("upgrade", repo, settings, nil)
+			cmd.SetOut(&out)
+			cmd.SetErr(&errOut)
+			cmd.SetArgs([]string{"Ghostty"})
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(recorder.calls).To(Equal([]string{"package-manager-snap upgrade ghostty"}))
+		})
+
 		It("uses the recorded channel for uninstall even when config prefers another channel", func() {
 			viper.Set("channel_order", []string{"snap"})
 
@@ -400,7 +441,7 @@ var _ = Describe("Install Channels CLI", func() {
 			err = prepareChannelSwitches(context.Background(), &out, []types.CrossPlatformApp{miseScript}, repo)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(`cannot switch ScriptOnly from channel "curlpipe" to "mise"`))
-			Expect(err.Error()).To(ContainSubstring(`devex uninstall ScriptOnly`))
+			Expect(err.Error()).To(ContainSubstring(`devex uninstall --app "ScriptOnly"`))
 
 			// Repo was not mutated.
 			rec, ok := inventory.ReadReceipt(repo, "ScriptOnly")

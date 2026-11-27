@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -81,30 +80,30 @@ func newPackageMaintenanceCmdWithRepo(action string, repo types.Repository, sett
 		if err := viper.BindPFlags(cmd.Flags()); err != nil {
 			return err
 		}
-		recordedLookup := func(app types.CrossPlatformApp) string {
-			if repo == nil {
-				return ""
-			}
-			if rec := channels.RecordedChannelForApp(repo, app); rec != "" {
-				return rec
-			}
-			if data, readErr := repo.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); readErr == nil && data != "" {
-				var saved types.CrossPlatformApp
-				if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
-					return saved.SelectedChannel()
-				}
-			}
-			return ""
-		}
+		// Selection keeps preferences for apps DevEx has not installed; each
+		// installed app is then replaced by its installed definition.
 		apps, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{
-			Names:           args,
-			Categories:      viper.GetStringSlice("categories"),
-			RecordedChannel: recordedLookup,
+			Names:      args,
+			Categories: viper.GetStringSlice("categories"),
 		})
 		if err != nil {
 			return err
 		}
+		var unresolved []error
+		if repo != nil {
+			installed := make([]types.CrossPlatformApp, 0, len(apps))
+			for _, app := range apps {
+				definition, defErr := channels.InstalledDefinition(repo, app)
+				if defErr != nil {
+					unresolved = append(unresolved, defErr)
+					continue
+				}
+				installed = append(installed, definition)
+			}
+			apps = installed
+		}
 		plan, skipped, failures := planPackageMaintenance(action, apps)
+		failures = append(unresolved, failures...)
 		for _, name := range skipped {
 			cmd.Printf("%s manages its own updates; skipped\n", name)
 		}

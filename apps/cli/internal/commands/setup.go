@@ -144,11 +144,11 @@ Run 'devex setup' to begin the guided installation process.`,
 					In:          cmd.InOrStdin(),
 					Out:         out,
 					InstallApps: func(ctx context.Context, names []string) error {
-						apps, selected, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: names})
+						apps, selected, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: names, Repo: repo, RefuseChannelSwitch: true})
 						if err != nil {
 							return err
 						}
-						return runPlainInstall(ctx, out, apps, repo, selected, nil)
+						return runPlainInstallObserved(ctx, out, apps, repo, selected, nil, nil, false)
 					},
 				}
 				if err := preflight.Run(ctx); err != nil {

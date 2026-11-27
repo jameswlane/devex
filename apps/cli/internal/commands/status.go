@@ -312,12 +312,14 @@ func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSetti
 	normalized := normalizeInstallLookup(app.Name)
 	for _, entry := range settings.GetAllApps() {
 		if normalizeInstallLookup(entry.Name) == normalized {
-			if rec := channels.RecordedChannelForApp(repo, entry); rec != "" {
-				if switched, _, err := channels.Resolve(entry, channels.Preferences{}, rec); err == nil {
-					resolved := switched.ToLegacyAppConfig()
-					resolved.Name = app.Name
-					return resolved
+			if repo != nil {
+				installed, err := channels.InstalledDefinition(repo, entry)
+				if err != nil {
+					// The recorded channel is not in the catalog any more:
+					// report it as unknown rather than probe the default.
+					return app
 				}
+				entry = installed
 			}
 			resolved := entry.ToLegacyAppConfig()
 			resolved.Name = app.Name

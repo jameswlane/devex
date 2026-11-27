@@ -180,6 +180,29 @@ var _ = Describe("Channel resolution", func() {
 		Expect(selected.GetOSConfig().InstallMethod).To(Equal("curlpipe"))
 	})
 
+	Describe("ResolveForInstall", func() {
+		It("keeps the recorded channel when no preference is set", func() {
+			_, ch, err := channels.ResolveForInstall(newKimi(), channels.Preferences{}, "mise")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ch).To(Equal("mise"))
+		})
+
+		It("refuses instead of switching to the default when the recorded channel is no longer offered", func() {
+			_, _, err := channels.ResolveForInstall(newKimi(), channels.Preferences{}, "retired-snap")
+			Expect(err).To(MatchError(And(
+				ContainSubstring(`Kimi Code is installed through channel "retired-snap", which the catalog no longer offers here`),
+				ContainSubstring(`devex uninstall --app "Kimi Code"`),
+				ContainSubstring("curlpipe"),
+			)))
+		})
+
+		It("lets an explicit channel replace a retired recorded channel", func() {
+			_, ch, err := channels.ResolveForInstall(newKimi(), channels.Preferences{Channel: "curlpipe"}, "retired-snap")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ch).To(Equal("curlpipe"))
+		})
+	})
+
 	Describe("Legacy receipt inference", func() {
 		It("uses receipt.Channel when present", func() {
 			app := newKimi()
@@ -194,6 +217,41 @@ var _ = Describe("Channel resolution", func() {
 			Expect(repo.Set(inventory.ReceiptKey("Kimi Code"), string(data))).To(Succeed())
 
 			Expect(channels.RecordedChannelForApp(repo, app)).To(Equal("mise"))
+		})
+
+		Context("on Rocky Linux, where Fedora's and RHEL's dnf entries both apply", func() {
+			BeforeEach(func() {
+				DeferCleanup(types.PinCatalogPlatformForTesting(platform.DetectionResult{
+					OS: "linux", Distribution: "rocky", DistributionLike: []string{"rhel", "centos", "fedora"}, Version: "9.4", Architecture: "amd64",
+				}))
+			})
+
+			newToolchain := func() types.CrossPlatformApp {
+				return types.CrossPlatformApp{
+					Name: "Build Essential",
+					Linux: types.OSConfig{
+						InstallMethod:        "apt",
+						InstallCommand:       "build-essential",
+						OfficialSupport:      true,
+						PlatformRequirements: []types.PlatformRequirement{{OS: "debian"}, {OS: "ubuntu"}},
+						Alternatives: []types.OSConfig{
+							{InstallMethod: "dnf", InstallCommand: "@development-tools gcc", OfficialSupport: true, PlatformRequirements: []types.PlatformRequirement{{OS: "fedora"}}},
+							{Channel: "dnf-rhel", InstallMethod: "dnf", InstallCommand: "@development gcc", OfficialSupport: true, PlatformRequirements: []types.PlatformRequirement{{OS: "centos", Version: "8+"}, {OS: "rhel", Version: "8+"}}},
+						},
+					},
+				}
+			}
+
+			It("infers the platform's default entry for a manager-only receipt", func() {
+				app := newToolchain()
+				Expect(app.SelectedChannel()).To(Equal("dnf-rhel"))
+				Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "dnf"}, app)).To(Equal("dnf-rhel"))
+			})
+
+			It("prefers the entry whose packages match the receipt", func() {
+				app := newToolchain()
+				Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "dnf", Packages: []string{"@development-tools", "gcc"}}, app)).To(Equal("dnf"))
+			})
 		})
 
 		It("returns empty string so callers fall back to default when legacy manager does not match any channel", func() {

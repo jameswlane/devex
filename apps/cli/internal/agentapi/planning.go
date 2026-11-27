@@ -155,7 +155,11 @@ func SelectApplicationsWithWarnings(ctx context.Context, s config.CrossPlatformS
 	}
 	filtered, headlessWarnings := filterHeadlessApplications(apps)
 	// A graphical sandbox prerequisite is skipped on headless hosts too.
-	expanded, prereqWarnings := filterHeadlessApplications(expandSandboxPrerequisites(filtered, s, planChannelPreferences(r).WithoutExplicitChannel(), r.Repo))
+	withPrerequisites, err := expandSandboxPrerequisites(filtered, s, planChannelPreferences(r).WithoutExplicitChannel(), r.Repo)
+	if err != nil {
+		return SelectionResult{Settings: s}, &Error{Category: "invalid_request", Message: err.Error(), cause: err}
+	}
+	expanded, prereqWarnings := filterHeadlessApplications(withPrerequisites)
 	if r.RefuseChannelSwitch && r.Repo != nil {
 		if switchErr := channels.CheckRefusedChannelSwitches(r.Repo, expanded); switchErr != nil {
 			return SelectionResult{Settings: s}, &Error{Category: "invalid_request", Message: switchErr.Error(), cause: switchErr}
@@ -241,15 +245,21 @@ func selectRequestedApplications(ctx context.Context, s config.CrossPlatformSett
 // catalog applications supported on this platform. The order depends only on
 // the set of selected apps' declarations, so resolving the expanded names again
 // (as MCP confirmation does) yields the same roots in the same order.
-func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings, prereqPrefs channels.Preferences, repo types.Repository) []types.CrossPlatformApp {
+func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings, prereqPrefs channels.Preferences, repo types.Repository) ([]types.CrossPlatformApp, error) {
 	if len(apps) == 0 {
-		return apps
+		return apps, nil
 	}
 	catalog := make(map[string]types.CrossPlatformApp)
 	for _, app := range settings.GetAllApps() {
 		catalog[normalizeInstallLookup(app.Name)] = app
 	}
+	// A prerequisite the user also asked for keeps the channel chosen for it.
+	selected := make(map[string]types.CrossPlatformApp, len(apps))
+	for _, app := range apps {
+		selected[normalizeInstallLookup(app.Name)] = app
+	}
 	var prerequisites []types.CrossPlatformApp
+	var failures []error
 	isPrerequisite := map[string]bool{}
 	for _, app := range apps {
 		appKey := normalizeInstallLookup(app.Name)
@@ -262,16 +272,25 @@ func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.C
 			if !ok || !prerequisite.IsSupported() {
 				continue
 			}
-			recorded := channels.InstalledChannelForApp(repo, prerequisite)
-			if selected, _, err := channels.ResolveForInstall(prerequisite, prereqPrefs, recorded); err == nil {
-				prerequisite = selected
+			if chosen, requested := selected[key]; requested {
+				prerequisite = chosen
+			} else {
+				resolved, _, err := channels.ResolveForInstall(prerequisite, prereqPrefs, channels.InstalledChannelForApp(repo, prerequisite))
+				if err != nil {
+					failures = append(failures, fmt.Errorf("sandbox prerequisite of %s: %w", app.Name, err))
+					continue
+				}
+				prerequisite = resolved
 			}
 			isPrerequisite[key] = true
 			prerequisites = append(prerequisites, prerequisite)
 		}
 	}
+	if len(failures) > 0 {
+		return nil, errors.Join(failures...)
+	}
 	if len(prerequisites) == 0 {
-		return apps
+		return apps, nil
 	}
 	expanded := append([]types.CrossPlatformApp(nil), prerequisites...)
 	emitted := map[string]bool{}
@@ -283,7 +302,7 @@ func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.C
 		emitted[key] = true
 		expanded = append(expanded, app)
 	}
-	return expanded
+	return expanded, nil
 }
 
 // PlanInstall has no installer, executor, filesystem writer, or network dependency.

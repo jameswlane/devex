@@ -117,6 +117,30 @@ var _ = Describe("Sandbox prerequisite selection expansion", func() {
 		Expect(snapshot.RootNames()).To(Equal([]string{"Bubblewrap", "socat", "Claude Code"}))
 	})
 
+	Context("with channel preferences (N4)", func() {
+		BeforeEach(func() {
+			settings.ApplicationOverrides[0].Linux.Alternatives = []types.OSConfig{
+				{InstallMethod: "mise", InstallCommand: "bubblewrap@latest", UninstallCommand: "bubblewrap"},
+			}
+		})
+
+		It("reports a bad channels: preference for an auto-added prerequisite", func() {
+			viper.Set("channels", map[string]string{"Bubblewrap": "flatpak"})
+			_, _, err := agentapi.SelectApplications(context.Background(), settings, agentapi.PlanRequest{Names: []string{"Codex CLI"}})
+			Expect(err).To(MatchError(And(ContainSubstring("sandbox prerequisite of Codex CLI"), ContainSubstring(`"flatpak"`))))
+		})
+
+		It("keeps the channel chosen for a prerequisite the user also asked for", func() {
+			apps, _, err := agentapi.SelectApplications(context.Background(), settings, agentapi.PlanRequest{
+				Names:   []string{"Bubblewrap", "Codex CLI"},
+				Channel: "mise",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(appNames(apps)).To(Equal([]string{"Bubblewrap", "Codex CLI"}))
+			Expect(apps[0].SelectedChannel()).To(Equal("mise"))
+		})
+	})
+
 	It("skips a graphical sandbox prerequisite on a headless host with a skip message", func() {
 		DeferCleanup(platform.SetGraphicalDesktopForTesting(false))
 		settings.ApplicationOverrides = append(settings.ApplicationOverrides,
