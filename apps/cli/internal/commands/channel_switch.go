@@ -35,7 +35,9 @@ func detectChannelSwitch(repo types.Repository, app types.CrossPlatformApp) (cha
 	receipt, hasReceipt := inventory.ReadReceipt(repo, app.Name)
 	var savedDef types.CrossPlatformApp
 	if data, err := repo.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); err == nil && data != "" {
-		_ = json.Unmarshal([]byte(data), &savedDef)
+		if json.Unmarshal([]byte(data), &savedDef) != nil {
+			savedDef = types.CrossPlatformApp{}
+		}
 	}
 	tracked, _ := repo.GetApp(app.Name)
 

@@ -251,9 +251,14 @@ func InferRecordedChannel(receipt inventory.Receipt, app types.CrossPlatformApp)
 // misses go to the platform's default channel, then the first available one.
 // The result does not depend on which channel app currently selects.
 func pickManagerChannel(app types.CrossPlatformApp, mgr string, packages []string) string {
-	var available, unavailable []string
+	infos := map[string]types.ChannelInfo{}
 	for _, ch := range app.Channels() {
-		if !strings.EqualFold(ch.InstallMethod, mgr) {
+		infos[strings.ToLower(ch.Name)] = ch
+	}
+	var available, unavailable []string
+	for _, name := range app.CatalogChannelOrder() {
+		ch, ok := infos[strings.ToLower(name)]
+		if !ok || !strings.EqualFold(ch.InstallMethod, mgr) {
 			continue
 		}
 		if ch.Available {
@@ -344,13 +349,21 @@ func RecordedChannelForApp(repo ReceiptGetter, app types.CrossPlatformApp) strin
 // InstalledChannelForApp returns the channel currently recorded for app in repo
 // (checking the inventory receipt first, then saved definition, then tracked
 // app record), or "" when app has no recorded install channel.
-func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) string {
+// RecordReader reads the records DevEx keeps for installed applications.
+type RecordReader interface {
+	Get(key string) (string, error)
+	GetApp(name string) (*types.AppConfig, error)
+}
+
+func InstalledChannelForApp(repo RecordReader, app types.CrossPlatformApp) string {
 	if repo == nil {
 		return ""
 	}
 	var saved types.CrossPlatformApp
 	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(app.Name)); err == nil && data != "" {
-		_ = json.Unmarshal([]byte(data), &saved)
+		if json.Unmarshal([]byte(data), &saved) != nil {
+			saved = types.CrossPlatformApp{}
+		}
 	}
 	if receipt, ok := inventory.ReadReceipt(repo, app.Name); ok {
 		if ch := strings.TrimSpace(receipt.Channel); ch != "" {
@@ -386,7 +399,7 @@ func InstalledChannelForApp(repo types.Repository, app types.CrossPlatformApp) s
 // longer offers that channel. It fails, naming the recorded channel, when
 // neither describes the installation, so maintenance never acts on a channel
 // that was not installed.
-func InstalledDefinition(repo types.Repository, app types.CrossPlatformApp) (types.CrossPlatformApp, error) {
+func InstalledDefinition(repo RecordReader, app types.CrossPlatformApp) (types.CrossPlatformApp, error) {
 	label := InstalledChannelForApp(repo, app)
 	if label == "" || strings.EqualFold(app.SelectedChannel(), label) {
 		return app, nil
@@ -406,6 +419,48 @@ func InstalledDefinition(repo types.Repository, app types.CrossPlatformApp) (typ
 		}
 	}
 	return types.CrossPlatformApp{}, fmt.Errorf("%s is installed through channel %q, which the catalog no longer offers and no saved definition describes; run 'devex uninstall --app %q' or remove it manually", app.Name, label, app.Name)
+}
+
+// StatusDefinition returns the definition status should inspect for name.
+// A saved installed definition that agrees with the recorded channel wins,
+// so a package renamed inside one channel is still checked by its installed
+// name; otherwise catalog (when inCatalog) is resolved to its installed
+// definition. found is false when DevEx has no record of the app. err is set
+// when a recorded channel cannot be resolved, and status must then report
+// the app as unknown rather than probe another channel.
+func StatusDefinition(repo RecordReader, catalog types.CrossPlatformApp, inCatalog bool, name string) (types.CrossPlatformApp, bool, error) {
+	if repo == nil {
+		return types.CrossPlatformApp{}, false, nil
+	}
+	var saved types.CrossPlatformApp
+	if data, err := repo.Get("installed-app-definition:" + normalizeAppKey(name)); err == nil && data != "" {
+		if json.Unmarshal([]byte(data), &saved) != nil {
+			saved = types.CrossPlatformApp{}
+		}
+	}
+	if saved.Name != "" {
+		label := InstalledChannelForApp(repo, saved)
+		if label == "" || strings.EqualFold(label, saved.SelectedChannel()) {
+			return saved, true, nil
+		}
+		if selected, err := saved.WithChannel(label); err == nil {
+			return selected, true, nil
+		}
+	}
+	if inCatalog {
+		if InstalledChannelForApp(repo, catalog) == "" {
+			return types.CrossPlatformApp{}, false, nil
+		}
+		installed, err := InstalledDefinition(repo, catalog)
+		if err != nil {
+			return types.CrossPlatformApp{}, true, err
+		}
+		return installed, true, nil
+	}
+	if saved.Name != "" {
+		return types.CrossPlatformApp{}, true, fmt.Errorf("%s: the saved definition does not describe its recorded channel", name)
+	}
+	return types.CrossPlatformApp{}, false, nil
 }
 
 // SwitchRefusalError formats the standard error returned when a path other than

@@ -2,7 +2,6 @@ package agentapi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -59,10 +58,7 @@ func Status(ctx context.Context, s config.CrossPlatformSettings, repo StatusRead
 			return results, &Error{Category: "unavailable", Retryable: true, Message: "cannot read tracked applications", cause: err}
 		}
 	}
-	var receiptGetter channels.ReceiptGetter
-	if getter, ok := repo.(channels.ReceiptGetter); ok {
-		receiptGetter = getter
-	}
+	recordReader, _ := repo.(channels.RecordReader)
 	catalogByName := map[string]types.CrossPlatformApp{}
 	for _, entry := range s.GetAllApps() {
 		catalogByName[normalizeInstallLookup(entry.Name)] = entry
@@ -74,27 +70,17 @@ func Status(ctx context.Context, s config.CrossPlatformSettings, repo StatusRead
 		}
 	}
 	resolveStatusApp := func(app types.AppConfig) types.AppConfig {
-		// Recorded definition or receipt always wins over configured channel
-		// preferences so status probes the channel that was actually installed.
-		if receiptGetter != nil {
-			if data, readErr := receiptGetter.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); readErr == nil && data != "" {
-				var saved types.CrossPlatformApp
-				if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
-					if rec := channels.RecordedChannelForApp(receiptGetter, saved); rec != "" {
-						if switched, _, err := channels.Resolve(saved, channels.Preferences{}, rec); err == nil {
-							saved = switched
-						}
-					}
-					return saved.ToLegacyAppConfig()
-				}
-			}
+		// The installed definition wins over configured channel preferences
+		// so status probes the channel that was actually installed.
+		catalogApp, inCatalog := catalogByName[normalizeInstallLookup(app.Name)]
+		if definition, found, err := channels.StatusDefinition(recordReader, catalogApp, inCatalog, app.Name); err != nil {
+			return app
+		} else if found {
+			resolved := definition.ToLegacyAppConfig()
+			resolved.Name = app.Name
+			return resolved
 		}
-		if catalogApp, ok := catalogByName[normalizeInstallLookup(app.Name)]; ok {
-			if rec := channels.RecordedChannelForApp(receiptGetter, catalogApp); rec != "" {
-				if switched, _, err := channels.Resolve(catalogApp, channels.Preferences{}, rec); err == nil {
-					return switched.ToLegacyAppConfig()
-				}
-			}
+		if inCatalog {
 			if app.InstallMethod == "" {
 				if chosen, _, err := channels.Resolve(catalogApp, channels.PreferencesFromViper(), ""); err == nil {
 					return chosen.ToLegacyAppConfig()

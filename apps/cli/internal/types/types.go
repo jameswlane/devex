@@ -437,6 +437,7 @@ type CrossPlatformApp struct {
 	AllPlatforms        OSConfig `mapstructure:"all_platforms" yaml:"all_platforms,omitempty"`
 	defaultChannel      string
 	selectedChannel     string
+	catalogOrder        []string
 }
 
 var catalogPlatform = sync.OnceValue(platform.DetectPlatform)

@@ -292,37 +292,29 @@ func listTrackedApps(repo types.Repository, settings config.CrossPlatformSetting
 // channel preferences so status inspects the channel that is actually installed.
 func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSettings, app types.AppConfig) types.AppConfig {
 	normalized := normalizeInstallLookup(app.Name)
+	var catalog types.CrossPlatformApp
+	inCatalog := false
 	for _, entry := range settings.GetAllApps() {
-		if normalizeInstallLookup(entry.Name) != normalized {
-			continue
+		if normalizeInstallLookup(entry.Name) == normalized {
+			catalog, inCatalog = entry, true
+			break
 		}
-		if repo != nil {
-			installed, err := channels.InstalledDefinition(repo, entry)
-			if err != nil {
-				// Neither the catalog nor the saved definition describes the
-				// recorded channel: report it as unknown, never probe another.
-				return app
-			}
-			entry = installed
-		}
-		resolved := entry.ToLegacyAppConfig()
+	}
+	definition, found, err := channels.StatusDefinition(repo, catalog, inCatalog, app.Name)
+	if err != nil {
+		// The recorded channel cannot be resolved: report it as unknown
+		// rather than probe another channel.
+		return app
+	}
+	if found {
+		resolved := definition.ToLegacyAppConfig()
 		resolved.Name = app.Name
 		return resolved
 	}
-	// Not in the catalog: the saved definition is all DevEx knows, as long as
-	// it agrees with the receipt.
-	if repo != nil {
-		if data, err := repo.Get("installed-app-definition:" + normalized); err == nil && data != "" {
-			var saved types.CrossPlatformApp
-			if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
-				if label := channels.InstalledChannelForApp(repo, saved); label == "" || strings.EqualFold(label, saved.SelectedChannel()) {
-					resolved := saved.ToLegacyAppConfig()
-					resolved.Name = app.Name
-					return resolved
-				}
-				return app
-			}
-		}
+	if inCatalog {
+		resolved := catalog.ToLegacyAppConfig()
+		resolved.Name = app.Name
+		return resolved
 	}
 	if app.InstallMethod != "" && app.InstallCommand != "" {
 		return app

@@ -130,6 +130,35 @@ func isChannelAvailable(cfg OSConfig) bool {
 	return false
 }
 
+// CatalogChannelOrder returns the channel names in catalog order (primary
+// first), unchanged by WithChannel moving the selected channel to the front.
+func (app CrossPlatformApp) CatalogChannelOrder() []string {
+	if app.catalogOrder != nil {
+		return append([]string(nil), app.catalogOrder...)
+	}
+	primary, ok := app.activePlatformBlock()
+	if !ok {
+		return nil
+	}
+	primaryOnly := primary
+	primaryOnly.Alternatives = nil
+	return channelNames(append([]OSConfig{primaryOnly}, primary.Alternatives...))
+}
+
+func channelNames(configs []OSConfig) []string {
+	names := make([]string, 0, len(configs))
+	seen := map[string]bool{}
+	for _, cfg := range configs {
+		name := cfg.ChannelName()
+		if name == "" || seen[strings.ToLower(name)] {
+			continue
+		}
+		seen[strings.ToLower(name)] = true
+		names = append(names, name)
+	}
+	return names
+}
+
 // DefaultChannel returns the channel the catalog selects for this platform
 // when no preference applies, even after WithChannel chose another one.
 func (app CrossPlatformApp) DefaultChannel() string {
@@ -291,6 +320,9 @@ func (app CrossPlatformApp) WithChannel(name string) (CrossPlatformApp, error) {
 	}
 
 	copied := app
+	if copied.catalogOrder == nil {
+		copied.catalogOrder = channelNames(all)
+	}
 	copied.setActivePlatformBlock(newPrimary)
 	copied.defaultChannel = defaultName
 	copied.selectedChannel = newPrimary.ChannelName()

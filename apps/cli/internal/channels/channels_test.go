@@ -203,6 +203,63 @@ var _ = Describe("Channel resolution", func() {
 		})
 	})
 
+	Describe("installed records", func() {
+		newMultiDnf := func() types.CrossPlatformApp {
+			return types.CrossPlatformApp{
+				Name: "Tool",
+				Linux: types.OSConfig{
+					InstallMethod: "apt", InstallCommand: "tool", OfficialSupport: true,
+					Alternatives: []types.OSConfig{
+						{Channel: "dnf-a", InstallMethod: "dnf", InstallCommand: "tool-a"},
+						{Channel: "dnf-b", InstallMethod: "dnf", InstallCommand: "tool-b"},
+					},
+				},
+			}
+		}
+
+		It("keeps catalog order for a manager-only receipt whichever channel is selected (M2)", func() {
+			for _, selectedName := range []string{"dnf-a", "dnf-b"} {
+				selected, err := newMultiDnf().WithChannel(selectedName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "dnf"}, selected)).To(Equal("dnf-a"), selectedName)
+			}
+		})
+
+		It("ignores a saved definition that does not decode (Q1)", func() {
+			repo := mocks.NewMockRepository()
+			Expect(repo.Set("installed-app-definition:tool", `{"Name":"Tool","Linux":{"InstallMethod":"dnf","InstallCommand":7}}`)).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Tool"), `{"manager":"dnf"}`)).To(Succeed())
+			Expect(channels.InstalledChannelForApp(repo, newMultiDnf())).To(Equal("dnf-a"))
+		})
+
+		It("inspects the saved definition when it agrees with the recorded channel, even after a package rename (Q2)", func() {
+			repo := mocks.NewMockRepository()
+			saved := newGit()
+			saved.Linux.InstallCommand = "old-git"
+			data, err := json.Marshal(saved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.Set("installed-app-definition:git", string(data))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("git"), `{"manager":"apt","channel":"apt","packages":["old-git"]}`)).To(Succeed())
+
+			definition, found, err := channels.StatusDefinition(repo, newGit(), true, "git")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(definition.GetOSConfig().InstallCommand).To(Equal("old-git"))
+		})
+
+		It("reports a recorded channel that neither the saved definition nor the catalog has as unresolved (M4)", func() {
+			repo := mocks.NewMockRepository()
+			data, err := json.Marshal(newGit())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.Set("installed-app-definition:git", string(data))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("git"), `{"manager":"flatpak","channel":"flatpak"}`)).To(Succeed())
+
+			_, found, err := channels.StatusDefinition(repo, newGit(), true, "git")
+			Expect(found).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring(`"flatpak"`)))
+		})
+	})
+
 	Describe("Legacy receipt inference", func() {
 		It("uses receipt.Channel when present", func() {
 			app := newKimi()
