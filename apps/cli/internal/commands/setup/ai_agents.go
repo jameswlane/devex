@@ -24,9 +24,10 @@ import (
 
 // AI coding agent catalog category names and setup group headings.
 const (
-	CategoryAICodingAgents = "AI Coding Agents"
-	CategoryAIEditors      = "AI Code Editors"
-	CategoryLocalModels    = "Local Models"
+	CategoryAICodingAgents   = "AI Coding Agents"
+	CategoryAIAgentHarnesses = "AI Agent Harnesses"
+	CategoryAIEditors        = "AI Code Editors"
+	CategoryLocalModels      = "Local Models"
 
 	setupAIAgentsAppsKey   = "setup.ai_agents.apps"
 	setupAIAgentsPresetKey = "setup.ai_agents.preset"
@@ -41,6 +42,7 @@ type aiAgentGroupSpec struct {
 // Groups with no platform-compatible apps in the catalog are hidden.
 var aiAgentGroups = []aiAgentGroupSpec{
 	{Heading: "Agent CLIs", Category: CategoryAICodingAgents},
+	{Heading: "Agent harnesses", Category: CategoryAIAgentHarnesses},
 	{Heading: "AI editors", Category: CategoryAIEditors},
 	{Heading: "Local models", Category: CategoryLocalModels},
 }

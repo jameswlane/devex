@@ -244,6 +244,7 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 
 		It("shows additional group headings only when apps exist in those categories", func() {
 			settings.ApplicationOverrides = append(settings.ApplicationOverrides,
+				types.CrossPlatformApp{Name: "Herdr", Category: CategoryAIAgentHarnesses, Linux: types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://herdr.dev/install.sh", InstallScope: "user", InstalledBinary: "herdr"}},
 				types.CrossPlatformApp{Name: "Cursor", Category: CategoryAIEditors, Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "cursor"}},
 				types.CrossPlatformApp{Name: "Ollama", Category: CategoryLocalModels, Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "ollama"}},
 			)
@@ -252,8 +253,10 @@ var _ = Describe("AI Coding Agents Setup Flow", func() {
 			model.cursor = 0
 			view := model.View()
 			Expect(view).To(ContainSubstring("Agent CLIs"))
+			Expect(view).To(ContainSubstring("Agent harnesses"))
 			Expect(view).To(ContainSubstring("AI editors"))
 			Expect(view).To(ContainSubstring("Local models"))
+			Expect(view).To(ContainSubstring("Herdr"))
 			Expect(view).To(ContainSubstring("Cursor"))
 			Expect(view).To(ContainSubstring("Ollama"))
 

@@ -1,0 +1,37 @@
+# Upstream: https://github.com/getpaseo/paseo (https://paseo.sh)
+name: Paseo
+description: Local-first background daemon and cross-device harness for orchestrating coding agents from desktop, web, and mobile
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: paseo
+  uninstall_command: paseo
+  brew_cask: true
+  self_updating: true
+  official_support: true
+windows:
+  install_method: winget
+  install_command: Paseo.Paseo
+  uninstall_command: Paseo.Paseo
+  self_updating: true
+  official_support: true
+linux:
+  # Installs the official @getpaseo/cli server daemon and CLI via mise with
+  # Node.js 24 (avoiding sudo npm -g and Node 26's libatomic.so.1 requirement).
+  # Works on headless servers and desktops across amd64/arm64.
+  install_method: mise
+  install_command: node@24 npm:@getpaseo/cli@latest
+  uninstall_command: npm:@getpaseo/cli
+  self_updating: false
+  official_support: true
+  dependencies:
+    - Node.js
+  post_install:
+    - scope: user
+      shell: |
+        set -eu
+        echo "Paseo CLI and daemon installed via mise (binds to 127.0.0.1:6767 by default; no service was enabled)."
+        echo "Start the daemon with: paseo (or 'paseo daemon start' / 'paseo daemon run')."

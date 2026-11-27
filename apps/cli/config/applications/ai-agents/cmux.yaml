@@ -1,0 +1,16 @@
+# Upstream: https://github.com/manaflow-ai/cmux (https://cmux.com)
+# macOS only: cmux is a native Swift/AppKit terminal built on libghostty with
+# no Linux or Windows desktop build.
+name: cmux
+description: Ghostty-based programmable macOS terminal with vertical tabs, notifications, and socket API for AI coding agents
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - graphical
+macos:
+  install_method: brew
+  install_command: cmux
+  uninstall_command: cmux
+  brew_cask: true
+  self_updating: true
+  official_support: true

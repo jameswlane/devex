@@ -1,0 +1,37 @@
+# Upstream: https://github.com/ParadevAI/Paradev (formerly superset-sh/superset; https://paradev.com)
+# Rebranded from Superset to Paradev; the Debian package and CLI command remain
+# `superset`. Linux desktop releases are amd64 only; Windows is not yet available.
+name: Superset
+description: Cross-platform desktop workspace (now Paradev) for running parallel coding agents in isolated Git worktrees
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - graphical
+macos:
+  install_method: brew
+  install_command: paradev
+  uninstall_command: paradev
+  brew_cask: true
+  self_updating: true
+  official_support: true
+  dependencies:
+    - git
+linux:
+  # Official .deb release (Package: superset) provides its own .desktop entry
+  # and icons; the app updates itself. Only amd64 is built.
+  install_method: deb
+  install_command: superset
+  installed_binary: /usr/bin/superset
+  uninstall_command: superset
+  download_url: https://github.com/ParadevAI/Paradev/releases/download/desktop-v2.0.12/paradev-2.0.12-amd64.deb
+  verification:
+    sha256: c768ab92e62d05bf6899348895ba6af5e5498acbfb3291e367b0b267e8756c1e
+  self_updating: true
+  official_support: true
+  dependencies:
+    - git
+  platform_requirements:
+    - os: debian
+      arch: amd64
+    - os: ubuntu
+      arch: amd64

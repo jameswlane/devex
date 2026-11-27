@@ -1,0 +1,55 @@
+# Upstream: https://github.com/stablyai/orca (https://orca.dev)
+name: Orca
+description: Cross-platform desktop IDE for orchestrating fleets of AI coding agents in parallel Git worktrees
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - graphical
+macos:
+  # Always use the tap-qualified cask; bare `orca` in Homebrew is an unrelated Plotly cask.
+  install_method: brew
+  install_command: stablyai/orca/orca
+  uninstall_command: stablyai/orca/orca
+  brew_tap: stablyai/orca
+  brew_cask: true
+  self_updating: true
+  official_support: true
+windows:
+  install_method: winget
+  install_command: StablyAI.Orca
+  uninstall_command: StablyAI.Orca
+  self_updating: true
+  official_support: true
+linux:
+  # Upstream publishes official .deb packages (package/binary name `orca-ide` to
+  # avoid colliding with GNOME Orca). The .deb
+  # provides its own .desktop entry and icons; the app updates itself.
+  install_method: deb
+  install_command: orca-ide
+  installed_binary: /usr/bin/orca-ide
+  uninstall_command: orca-ide
+  download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-ide_1.4.280_amd64.deb
+  verification:
+    sha256: 1deb6f50cb59a40bb328e0c7502fc7f36c936be6aea3934c976bab175d56c6ea
+  self_updating: true
+  official_support: true
+  platform_requirements:
+    - os: debian
+      arch: amd64
+    - os: ubuntu
+      arch: amd64
+  alternatives:
+    - install_method: deb
+      install_command: orca-ide
+      installed_binary: /usr/bin/orca-ide
+      uninstall_command: orca-ide
+      download_url: https://github.com/stablyai/orca/releases/download/v1.4.280/orca-ide_1.4.280_arm64.deb
+      verification:
+        sha256: 3849d3dedcd2835709482e8ad1025e6f44fac219e51e26ad67c4f0078003ba3c
+      self_updating: true
+      official_support: true
+      platform_requirements:
+        - os: debian
+          arch: arm64
+        - os: ubuntu
+          arch: arm64

@@ -1,0 +1,46 @@
+# Upstream: https://github.com/herdrdev/herdr (https://herdr.dev)
+name: Herdr
+description: Rust terminal multiplexer TUI and local background daemon for running persistent AI coding agent sessions
+category: AI Agent Harnesses
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: herdr
+  uninstall_command: herdr
+  official_support: true
+windows:
+  # Official README documents `mise use -g herdr`; winget only tracks preview builds.
+  install_method: mise
+  install_command: herdr@latest
+  uninstall_command: herdr
+  official_support: true
+  dependencies:
+    - mise
+linux:
+  # Unpinned official bootstrap script: herdr.dev/install.sh fetches
+  # https://herdr.dev/latest.json, verifies the SHA-256 of the downloaded
+  # release binary (linux-x86_64 or linux-aarch64), and installs it to
+  # ~/.local/bin/herdr without modifying shell rc files or starting a daemon.
+  # Herdr runs its background server on a local Unix socket on demand when
+  # invoked (`herdr`), with no network TCP listener.
+  install_method: curlpipe
+  download_url: https://herdr.dev/install.sh
+  install_scope: user
+  installed_binary: herdr
+  # `herdr update` reads the same latest.json manifest as install.sh.
+  self_updating: true
+  uninstall_command: |
+    set -eu
+    if [ -x "$HOME/.local/bin/herdr" ]; then
+      "$HOME/.local/bin/herdr" server stop >/dev/null 2>&1 || true
+    fi
+    rm -f "$HOME/.local/bin/herdr"
+  official_support: true
+  post_install:
+    - scope: user
+      shell: |
+        set -eu
+        echo "Herdr installed to $HOME/.local/bin/herdr (runs over a local Unix socket on demand)."
+        echo "Start a session with: herdr (detach with Ctrl+b q; stop with 'herdr server stop')."

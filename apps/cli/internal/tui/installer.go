@@ -122,6 +122,8 @@ var (
 		"code.kimi.com",
 		"chatgpt.com",
 		"zed.dev",
+		"herdr.dev",
+		"t3.codes",
 	}
 )
 
@@ -1042,8 +1044,9 @@ func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app typ
 	}
 	// User-scope scripts go through the curlpipe plugin, which runs them as
 	// the invoking user even when DevEx itself is elevated. Release archives
-	// keep the archive installer, as on the plain install path.
-	userScript := osConfig.InstallMethod == "curlpipe" && osConfig.InstallScope == "user" && !installers.IsReleaseArchive(osConfig.DownloadURL)
+	// keep the archive installer, as on the plain install path, and
+	// hook-driven definitions install through their own hooks.
+	userScript := osConfig.InstallMethod == "curlpipe" && osConfig.InstallScope == "user" && !installers.IsReleaseArchive(osConfig.DownloadURL) && !osConfig.IsHookDrivenCurlpipe()
 	if osConfig.InstallMethod == "deb" || osConfig.InstallMethod == "appimage" || userScript {
 		timeout := si.config.InstallationTimeout
 		if timeout <= 0 {
