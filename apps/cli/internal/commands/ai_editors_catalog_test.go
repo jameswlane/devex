@@ -310,4 +310,10 @@ var _ = Describe("AI Code Editors catalog", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("Windsurf is not supported on linux/arm64"))
 	})
+	It("supports Cursor only on the architectures its apt repo serves", func() {
+		cursor := editors["Cursor"]
+		Expect(cursor.Linux.IsArchitectureSupported("amd64")).To(BeTrue())
+		Expect(cursor.Linux.IsArchitectureSupported("arm64")).To(BeTrue())
+		Expect(cursor.Linux.IsArchitectureSupported("arm")).To(BeFalse())
+	})
 })

@@ -278,20 +278,17 @@ func hasInstallTarget(cfg types.OSConfig) bool {
 }
 
 func isCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
+	arch := detectedPlatform.Architecture
+	if arch == "" {
+		arch = types.CatalogArch()
+	}
 	if hasInstallTarget(app.AllPlatforms) {
-		return true
+		return detectedPlatform.OS != "linux" || app.AllPlatforms.IsArchitectureSupported(arch)
 	}
 	switch detectedPlatform.OS {
 	case "linux":
 		cfg := app.LinuxConfigForPlatform(detectedPlatform)
-		if !hasInstallTarget(cfg) {
-			return false
-		}
-		arch := detectedPlatform.Architecture
-		if arch == "" {
-			arch = types.CatalogArch()
-		}
-		return cfg.IsArchitectureSupported(arch)
+		return hasInstallTarget(cfg) && cfg.IsArchitectureSupported(arch)
 	case "darwin":
 		return hasInstallTarget(app.MacOS)
 	case "windows":

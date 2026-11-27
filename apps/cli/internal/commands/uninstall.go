@@ -971,7 +971,8 @@ func aptSourceReferencedByOtherApp(repo types.Repository, settings config.CrossP
 	target := filepath.Clean(targetPath)
 	installed, err := repo.ListApps()
 	if err != nil {
-		return "", false
+		// Without the installed list a shared use can't be ruled out; keep the file.
+		return "an installed application (lookup failed)", true
 	}
 	for _, tracked := range installed {
 		if strings.EqualFold(tracked.Name, currentAppName) {

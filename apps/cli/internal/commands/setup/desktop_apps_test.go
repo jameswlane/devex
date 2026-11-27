@@ -223,3 +223,14 @@ var _ = Describe("custom setup system info", func() {
 		Expect(buildSystemInfo(platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"})["has_desktop"]).To(BeTrue())
 	})
 })
+
+var _ = Describe("setup architecture filter", func() {
+	It("honours arch requirements on AllPlatforms configs", func() {
+		app := types.CrossPlatformApp{Name: "Arch Editor", AllPlatforms: types.OSConfig{
+			InstallMethod: "apt", InstallCommand: "arch-editor",
+			PlatformRequirements: []types.PlatformRequirement{{OS: "ubuntu", Arch: "amd64"}},
+		}}
+		Expect(isCompatibleWithPlatform(app, platform.DetectionResult{OS: "linux", Architecture: "amd64"})).To(BeTrue())
+		Expect(isCompatibleWithPlatform(app, platform.DetectionResult{OS: "linux", Architecture: "arm64"})).To(BeFalse())
+	})
+})

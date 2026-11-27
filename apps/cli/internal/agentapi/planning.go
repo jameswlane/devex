@@ -111,10 +111,12 @@ func SelectApplicationsWithWarnings(ctx context.Context, s config.CrossPlatformS
 		return SelectionResult{Settings: s}, err
 	}
 	filtered, warnings := filterHeadlessApplications(apps)
+	// A graphical sandbox prerequisite is skipped on headless hosts too.
+	expanded, prereqWarnings := filterHeadlessApplications(expandSandboxPrerequisites(filtered, s))
 	return SelectionResult{
-		Apps:     expandSandboxPrerequisites(filtered, s),
+		Apps:     expanded,
 		Settings: s,
-		Warnings: warnings,
+		Warnings: append(warnings, prereqWarnings...),
 	}, nil
 }
 

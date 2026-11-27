@@ -387,3 +387,17 @@ var _ = Describe("Uninstall APT source and keyring cleanup", func() {
 		Expect(out.String()).To(ContainSubstring("Would remove APT keyring " + cursorKeyPath))
 	})
 })
+
+type failingListRepo struct{ *mocks.MockRepository }
+
+func (failingListRepo) ListApps() ([]types.AppConfig, error) {
+	return nil, errors.New("database locked")
+}
+
+var _ = Describe("APT shared-file discovery", func() {
+	It("treats a failed installed-app lookup as shared, so the file is kept", func() {
+		owner, shared := commands.AptSourceReferencedByOtherApp(failingListRepo{mocks.NewMockRepository()}, config.CrossPlatformSettings{}, "Cursor", "/etc/apt/keyrings/cursor.gpg")
+		Expect(shared).To(BeTrue())
+		Expect(owner).To(ContainSubstring("lookup failed"))
+	})
+})

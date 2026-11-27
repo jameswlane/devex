@@ -22,10 +22,22 @@ linux:
       shell: echo "cursor cursor/add-cursor-repo boolean false" | debconf-set-selections
   platform_requirements:
     - os: debian
+      arch: amd64
+      dependencies:
+        - curl
+        - gnupg
+    - os: debian
+      arch: arm64
       dependencies:
         - curl
         - gnupg
     - os: ubuntu
+      arch: amd64
+      dependencies:
+        - curl
+        - gnupg
+    - os: ubuntu
+      arch: arm64
       dependencies:
         - curl
         - gnupg

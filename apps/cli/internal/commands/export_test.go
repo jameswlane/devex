@@ -10,12 +10,13 @@ import (
 
 // Exported for the external commands_test package.
 var (
-	ValidateCleanupPath     = validateCleanupPath
-	ValidateAptManagedPath  = tui.ValidateAptManagedPath
-	RemoveFileIfExists      = removeFileIfExists
-	ValidateEnvironmentName = validateEnvironmentName
-	ResolveUninstallApp     = resolveUninstallApp
-	StatusErrorSummary      = statusErrorSummary
+	ValidateCleanupPath           = validateCleanupPath
+	ValidateAptManagedPath        = tui.ValidateAptManagedPath
+	RemoveFileIfExists            = removeFileIfExists
+	ValidateEnvironmentName       = validateEnvironmentName
+	ResolveUninstallApp           = resolveUninstallApp
+	StatusErrorSummary            = statusErrorSummary
+	AptSourceReferencedByOtherApp = aptSourceReferencedByOtherApp
 )
 
 func SetUninstallInstallerForTest(getter func(context.Context, string) types.BaseInstaller) func() {

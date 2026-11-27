@@ -6,6 +6,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -114,6 +115,24 @@ var _ = Describe("Sandbox prerequisite selection expansion", func() {
 		}, agentapi.ExecutionPolicy{}, agentapi.ExecutionTrust{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(snapshot.RootNames()).To(Equal([]string{"Bubblewrap", "socat", "Claude Code"}))
+	})
+
+	It("skips a graphical sandbox prerequisite on a headless host with a skip message", func() {
+		DeferCleanup(platform.SetGraphicalDesktopForTesting(false))
+		settings.ApplicationOverrides = append(settings.ApplicationOverrides,
+			types.CrossPlatformApp{
+				Name: "GUI Helper", Category: "Dependency", DesktopEnvironments: []string{"graphical"},
+				Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "gui-helper", UninstallCommand: "gui-helper"},
+			},
+			types.CrossPlatformApp{
+				Name: "Terminal Agent", Category: "AI Coding Agents",
+				Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "terminal-agent", UninstallCommand: "terminal-agent", SandboxPrerequisites: []string{"GUI Helper"}},
+			},
+		)
+		result, err := agentapi.SelectApplicationsWithWarnings(context.Background(), settings, agentapi.PlanRequest{Names: []string{"Terminal Agent"}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(appNames(result.Apps)).To(Equal([]string{"Terminal Agent"}))
+		Expect(result.Warnings).To(Equal([]string{agentapi.HeadlessSkipMessage("GUI Helper")}))
 	})
 
 	It("deduplicates prerequisites when the user also selected Bubblewrap", func() {
