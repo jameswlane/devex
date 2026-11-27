@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
@@ -94,6 +95,7 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 	for i, alternative := range osConfig.Alternatives {
 		v.validateOSConfig(alternative, fmt.Sprintf("%s.alternatives[%d]", platform, i), filename)
 	}
+	v.validateOSChannels(osConfig, platform, filename)
 	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
 		if _, err := types.ResolvePackageInstall(osConfig.InstallMethod, osConfig.InstallCommand, osConfig.Packages, osConfig.Options); err != nil {
 			v.addError(filename, platform+".packages", err.Error(), err)
@@ -109,6 +111,36 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 
 	if osConfig.InstallCommand == "" && len(osConfig.Packages) == 0 && !osConfig.IsHookDrivenCurlpipe() && ((osConfig.InstallMethod != "curlpipe" && osConfig.InstallMethod != "appimage") || osConfig.DownloadURL == "") {
 		v.addError(filename, platform+".install_command", "Install command is required", nil)
+	}
+}
+
+// validateOSChannels enforces unique channel names within one platform block
+// and ensures a non-official primary is never paired with an official alternative.
+func (v *ConfigValidator) validateOSChannels(osConfig types.OSConfig, platform, filename string) {
+	if strings.EqualFold(strings.TrimSpace(osConfig.Channel), types.ChannelOfficial) {
+		v.addError(filename, platform+".channel", fmt.Sprintf("Channel name %q is reserved", types.ChannelOfficial), nil)
+	}
+	if len(osConfig.Alternatives) == 0 {
+		return
+	}
+
+	seen := map[string]string{}
+	if primaryName := strings.ToLower(osConfig.ChannelName()); primaryName != "" {
+		seen[primaryName] = platform
+	}
+
+	for i, alt := range osConfig.Alternatives {
+		altField := fmt.Sprintf("%s.alternatives[%d]", platform, i)
+		if altName := strings.ToLower(alt.ChannelName()); altName != "" {
+			if prev, duplicate := seen[altName]; duplicate {
+				v.addError(filename, altField+".channel", fmt.Sprintf("Duplicate channel name %q (already used by %s); add an explicit channel key to distinguish channels sharing an install_method", alt.ChannelName(), prev), nil)
+			} else {
+				seen[altName] = altField
+			}
+		}
+		if !osConfig.OfficialSupport && alt.OfficialSupport {
+			v.addError(filename, platform+".official_support", fmt.Sprintf("Primary channel %q has official_support: false while alternative %q (%s) has official_support: true; make the official channel primary", osConfig.ChannelName(), alt.ChannelName(), altField), nil)
+		}
 	}
 }
 

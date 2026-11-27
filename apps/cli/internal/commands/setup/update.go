@@ -59,6 +59,29 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.refreshInstalledApps()
 			}
 
+		case "c":
+			switch m.step {
+			case StepDesktopApps:
+				apps := m.desktopAppEntries()
+				if m.cursor >= 0 && m.cursor < len(apps) {
+					m.cycleAppChannel(apps[m.cursor])
+				}
+			case StepAIAgents:
+				apps := m.aiAgentEntries()
+				if m.cursor >= 0 && m.cursor < len(apps) {
+					m.cycleAppChannel(apps[m.cursor])
+				}
+			case StepConfirmation:
+				if !m.selections.skipDefaultApps {
+					apps := m.getDefaultApps()
+					if m.cursor >= 0 && m.cursor < len(apps) {
+						if m.cycleAppChannel(apps[m.cursor]) {
+							m.refreshInstalledApps()
+						}
+					}
+				}
+			}
+
 		case "p":
 			return m.prevStep()
 		}

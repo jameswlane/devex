@@ -26,7 +26,7 @@ func (m *SetupModel) renderInstallPlan() string {
 		if group == planDefault && !m.selections.skipDefaultApps {
 			items = make([]planItem, 0, len(m.getDefaultApps()))
 			for _, app := range m.getDefaultApps() {
-				items = append(items, planItem{app: app, group: planDefault})
+				items = append(items, planItem{app: m.appWithSelectedChannel(app), group: planDefault})
 			}
 		}
 
@@ -51,6 +51,9 @@ func (m *SetupModel) renderInstallPlan() string {
 			if excluded {
 				lines = append(lines, line+noteStyle.Render(" — skipped"))
 				continue
+			}
+			if tag := formatSetupChannelTag(item.app); tag != "" {
+				line += " " + noteStyle.Render(tag)
 			}
 			if item.reason != "" {
 				line += noteStyle.Render(" (for " + item.reason + ")")
@@ -158,6 +161,6 @@ func (m *SetupModel) renderInstallPlan() string {
 	if m.selections.skipDefaultApps {
 		toggle = "include"
 	}
-	fmt.Fprintf(&b, "Use ↑/↓ to navigate, Space to skip/include the highlighted default, Enter to start installation, 'd' to %s all default tools, 'p' to go back, or 'q' to quit.", toggle)
+	fmt.Fprintf(&b, "Use ↑/↓ to navigate, Space to skip/include the highlighted default, 'c' to switch channel, Enter to start installation, 'd' to %s all default tools, 'p' to go back, or 'q' to quit.", toggle)
 	return b.String()
 }

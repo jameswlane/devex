@@ -58,6 +58,7 @@ type UISelections struct {
 	selectedApps        map[int]bool
 	selectedDesktopApps map[string]bool
 	selectedAIAgents    map[string]bool
+	selectedChannels    map[string]string
 	aiAgentPreset       string
 	selectedTheme       int
 	ohMyZsh             ohMyZshSelection
@@ -310,6 +311,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 			selectedApps:        make(map[int]bool),
 			selectedDesktopApps: make(map[string]bool),
 			selectedAIAgents:    selectedAIAgents,
+			selectedChannels:    make(map[string]string),
 			aiAgentPreset:       aiAgentPreset,
 			selectedTheme:       0,
 			ohMyZsh:             configuredOhMyZsh(false),

@@ -251,7 +251,10 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 	prereqApps := make(map[string]types.CrossPlatformApp)
 	prereqRequesters := make(map[string][]string)
 
+	resolvedSelected := make([]types.CrossPlatformApp, 0, len(selected))
 	for _, app := range selected {
+		app = m.appWithSelectedChannel(app)
+		resolvedSelected = append(resolvedSelected, app)
 		cfg := osConfigForPlatform(app, m.system.detectedPlatform.OS)
 		if cfg.InstallMethod == "mise" {
 			miseRequesters = append(miseRequesters, app.Name)
@@ -268,7 +271,7 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 			}
 			if _, seen := prereqApps[key]; !seen {
 				prereqOrder = append(prereqOrder, key)
-				prereqApps[key] = prereqApp
+				prereqApps[key] = m.appWithSelectedChannel(prereqApp)
 			}
 			prereqRequesters[key] = append(prereqRequesters[key], app.Name)
 		}
@@ -294,8 +297,8 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 		existingNames[key] = true
 	}
 
-	selectedItems := make([]planItem, 0, len(selected))
-	for _, app := range selected {
+	selectedItems := make([]planItem, 0, len(resolvedSelected))
+	for _, app := range resolvedSelected {
 		key := strings.ToLower(strings.TrimSpace(app.Name))
 		if existingNames[key] {
 			continue

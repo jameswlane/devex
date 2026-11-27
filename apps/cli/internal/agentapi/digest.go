@@ -91,6 +91,9 @@ func ResolveExecution(ctx context.Context, s config.CrossPlatformSettings, r Pla
 	for _, app := range merged.GetAllApps() {
 		byName[normalizeInstallLookup(app.Name)] = app
 	}
+	for _, app := range roots {
+		byName[normalizeInstallLookup(app.Name)] = app
+	}
 	definitions := make([]types.CrossPlatformApp, 0, len(plan.DependencyOrder))
 	for _, name := range plan.DependencyOrder {
 		definitions = append(definitions, byName[normalizeInstallLookup(name)])

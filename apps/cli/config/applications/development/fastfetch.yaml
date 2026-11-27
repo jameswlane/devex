@@ -44,7 +44,8 @@ linux:
   post_install:
     - shell: export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r
   alternatives:
-    - install_method: deb
+    - channel: deb-arm64
+      install_method: deb
       install_command: fastfetch
       uninstall_command: fastfetch
       download_url: https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-aarch64.deb

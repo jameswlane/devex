@@ -22,6 +22,7 @@ func ReceiptKey(name string) string {
 // reported it right after the install.
 type Receipt struct {
 	Manager     string    `json:"manager"`
+	Channel     string    `json:"channel,omitempty"`
 	Packages    []string  `json:"packages"`
 	Version     string    `json:"version,omitempty"`
 	InstalledAt time.Time `json:"installed_at"`
@@ -63,7 +64,7 @@ func Record(ctx context.Context, repo Writer, app types.CrossPlatformApp, option
 		return err
 	}
 	receipt := Receipt{
-		Manager: item.Manager, Packages: item.Packages, InstalledAt: options.Now().UTC(),
+		Manager: item.Manager, Channel: config.ChannelName(), Packages: item.Packages, InstalledAt: options.Now().UTC(),
 		MachineID: machineID(options.MachineIDPath), ManagedBy: "devex",
 	}
 	if item.State == StateInstalled {
@@ -79,7 +80,16 @@ func Record(ctx context.Context, repo Writer, app types.CrossPlatformApp, option
 	return nil
 }
 
-func readReceipt(repo Reader, name string) (Receipt, bool) {
+// ReceiptGetter is the minimal datastore interface ReadReceipt needs.
+type ReceiptGetter interface {
+	Get(key string) (string, error)
+}
+
+// ReadReceipt reads and decodes the install receipt recorded for name.
+func ReadReceipt(repo ReceiptGetter, name string) (Receipt, bool) {
+	if repo == nil {
+		return Receipt{}, false
+	}
 	data, err := repo.Get(ReceiptKey(name))
 	if err != nil || data == "" {
 		return Receipt{}, false
@@ -89,6 +99,10 @@ func readReceipt(repo Reader, name string) (Receipt, bool) {
 		return Receipt{}, false
 	}
 	return receipt, true
+}
+
+func readReceipt(repo Reader, name string) (Receipt, bool) {
+	return ReadReceipt(repo, name)
 }
 
 // compareReceipt fills the recorded fields of an item and reports drift

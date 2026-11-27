@@ -60,6 +60,9 @@ func runRollbackBatch(ctx context.Context, out io.Writer, apps []types.CrossPlat
 	if err := prepareApplicationInstallers(ctx, provider); err != nil {
 		return err
 	}
+	if err := prepareChannelSwitches(ctx, out, apps, repo); err != nil {
+		return err
+	}
 	store, err := openTemplateStateStore()
 	if err != nil {
 		return err
@@ -68,10 +71,8 @@ func runRollbackBatch(ctx context.Context, out io.Writer, apps []types.CrossPlat
 	plan := templates.ExecutionPlan{ID: fmt.Sprintf("app-batch-%d", time.Now().UnixNano()), TemplateID: "app-batch", Action: templates.LifecycleInstall}
 	executor := batchStepExecutor{apps: make(map[string]types.CrossPlatformApp), repo: repo, settings: settings}
 	for i, app := range apps {
-		cfg, err := settings.GetApplicationByName(app.Name)
-		if err != nil {
-			return err
-		}
+		legacy := app.ToLegacyAppConfig()
+		cfg := &legacy
 		id := fmt.Sprintf("app-%d", i)
 		executor.apps[id] = app
 		plan.Steps = append(plan.Steps, templates.PlannedStep{ID: id, Type: templates.StepTypeApp, App: cfg, DisplayName: app.Name, Request: templates.ExecutionRequest{Plugin: "package-manager-" + cfg.InstallMethod, Command: "install", Args: strings.Fields(cfg.InstallCommand)}})

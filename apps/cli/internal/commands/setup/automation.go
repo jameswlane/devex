@@ -85,6 +85,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 			},
 			selectedApps:     make(map[int]bool), // No desktop apps for automated setup
 			selectedAIAgents: selectedAIAgents,
+			selectedChannels: make(map[string]string),
 			aiAgentPreset:    aiAgentPreset,
 			selectedTheme:    0,
 			ohMyZsh:          configuredOhMyZsh(viper.GetBool("setup.oh_my_zsh.enabled")),

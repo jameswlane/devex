@@ -234,6 +234,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	cmd.Flags().String("shell", "", "Shell for automated setup (bash, zsh, fish); config key: setup.shell; defaults to the current shell")
 	cmd.Flags().StringSlice("ai-agents", nil, "Optional AI coding agents to install (repeatable or comma-separated); config key: setup.ai_agents.apps")
 	cmd.Flags().String("ai-agents-preset", "", "Permission preset for selected AI coding agents (balanced or strict); config key: setup.ai_agents.preset")
+	cmd.Flags().String("channel", "", "Install channel to use for applications (for example official, mise, brew); env: DEVEX_CHANNEL")
 	cmd.Flags().StringP("config", "c", "", "Path to custom setup configuration file (YAML)")
 	cmd.Flags().StringSlice("windows-prerequisites", nil, "On Windows, fix these prerequisites without asking: developer-mode, long-paths, powershell, windows-terminal or all; config key: setup.windows.prerequisites")
 
@@ -246,6 +247,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	_ = viper.BindPFlag("setup.shell", cmd.Flags().Lookup("shell"))
 	_ = viper.BindPFlag("setup.ai_agents.apps", cmd.Flags().Lookup("ai-agents"))
 	_ = viper.BindPFlag("setup.ai_agents.preset", cmd.Flags().Lookup("ai-agents-preset"))
+	_ = viper.BindPFlag("channel", cmd.Flags().Lookup("channel"))
 	_ = viper.BindPFlag("config", cmd.Flags().Lookup("config"))
 	_ = viper.BindPFlag("setup.windows.prerequisites", cmd.Flags().Lookup("windows-prerequisites"))
 

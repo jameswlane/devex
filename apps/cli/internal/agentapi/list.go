@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -46,17 +47,36 @@ func GetInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 		allApps = append(allApps, app)
 	}
 
-	// Convert to InstalledApp format with method detection
+	// Convert to InstalledApp format with method and recorded-channel detection
 	for _, app := range allApps {
 		if installedAppsCache[app.Name] {
-			// Determine installation method
-			method := DetectInstallationMethod(app)
+			resolved := app
+			if data, err := repo.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); err == nil && data != "" {
+				var saved types.CrossPlatformApp
+				if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
+					resolved = saved
+				}
+			}
+			recorded := channels.RecordedChannelForApp(repo, resolved)
+			if recorded != "" {
+				if switched, _, err := channels.Resolve(resolved, channels.Preferences{}, recorded); err == nil {
+					resolved = switched
+				}
+			}
+			// Determine installation method and channel
+			method := DetectInstallationMethod(resolved)
+			selectedCh := resolved.SelectedChannel()
+			if selectedCh == "" {
+				selectedCh = recorded
+			}
 
 			installedApp := InstalledApp{
 				Name:        app.Name,
 				Description: app.Description,
 				Category:    app.Category,
 				Method:      method,
+				Channel:     selectedCh,
+				Channels:    availablePlanChannels(resolved),
 				Status:      "Installed",
 			}
 			installedApps = append(installedApps, installedApp)
@@ -75,6 +95,8 @@ func GetAvailableApps(repo types.Repository, settings config.CrossPlatformSettin
 
 	availableApps := make([]AvailableApp, 0, len(allApps))
 
+	prefs := channels.PreferencesFromViper()
+
 	for _, app := range allApps {
 		// Applications without a method for this platform are not available here.
 		if !app.IsSupported() {
@@ -85,14 +107,24 @@ func GetAvailableApps(repo types.Repository, settings config.CrossPlatformSettin
 			continue
 		}
 
-		platforms := GetSupportedPlatforms(app)
+		resolved := app
+		selectedCh := app.SelectedChannel()
+		if chosen, ch, err := channels.Resolve(app, prefs, ""); err == nil {
+			resolved = chosen
+			selectedCh = ch
+		} else if chosen, ch, err := channels.Resolve(app, prefs.WithoutExplicitChannel(), ""); err == nil {
+			resolved = chosen
+			selectedCh = ch
+		}
+
+		platforms := GetSupportedPlatforms(resolved)
 		platformStr := strings.Join(platforms, ", ")
 		if platformStr == "" {
 			platformStr = "Universal"
 		}
 
 		// Determine preferred installation method
-		method := GetPreferredInstallationMethod(app)
+		method := GetPreferredInstallationMethod(resolved)
 
 		availableApp := AvailableApp{
 			Name:        app.Name,
@@ -100,6 +132,8 @@ func GetAvailableApps(repo types.Repository, settings config.CrossPlatformSettin
 			Category:    app.Category,
 			Platform:    platformStr,
 			Method:      method,
+			Channel:     selectedCh,
+			Channels:    availablePlanChannels(resolved),
 			Recommended: app.Default, // Use Default field instead of Recommended
 		}
 		availableApps = append(availableApps, availableApp)

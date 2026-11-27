@@ -64,7 +64,8 @@ linux:
           version: 2+
     # CentOS/RHEL comps name the "Development Tools" group "development", not Fedora's "development-tools".
     # Alma and Rocky reach this entry through ID_LIKE="rhel centos fedora".
-    - install_method: dnf
+    - channel: dnf-rhel
+      install_method: dnf
       install_command: '@development pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel'
       uninstall_command: '@development pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel'
       official_support: true

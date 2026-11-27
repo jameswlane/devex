@@ -3,6 +3,14 @@
 		{
 			"name": "base",
 			"method": "apt",
+			"channel": "apt",
+			"channels": [
+				{
+					"name": "apt",
+					"official": false,
+					"default": true
+				}
+			],
 			"plugin": "package-manager-apt",
 			"dependencies": [],
 			"effects": ["package_install"],
@@ -12,6 +20,14 @@
 		{
 			"name": "app",
 			"method": "apt",
+			"channel": "apt",
+			"channels": [
+				{
+					"name": "apt",
+					"official": false,
+					"default": true
+				}
+			],
 			"plugin": "package-manager-apt",
 			"dependencies": ["base"],
 			"effects": ["package_install"],

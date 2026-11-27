@@ -16,7 +16,8 @@ linux:
       official_support: true
       platform_requirements:
         - os: fedora
-    - install_method: dnf
+    - channel: dnf-rhel
+      install_method: dnf
       install_command: btop
       uninstall_command: btop
       official_support: true
@@ -39,7 +40,8 @@ linux:
       official_support: true
       post_install:
         - shell: snap connect btop:removable-media
-    - install_method: snap
+    - channel: snap-desktop
+      install_method: snap
       install_command: btop-desktop
       uninstall_command: btop-desktop
       official_support: true

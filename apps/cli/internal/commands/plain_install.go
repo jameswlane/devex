@@ -121,6 +121,11 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 	if len(apps) > 0 {
 		bootstrapErr = prepareApplicationInstallers(ctx, provider)
 	}
+	if bootstrapErr == nil && ctx.Err() == nil && len(apps) > 0 {
+		if switchErr := prepareChannelSwitches(ctx, out, apps, repo); switchErr != nil {
+			return switchErr
+		}
+	}
 	var batch tui.PackageBatch
 	if bootstrapErr == nil && ctx.Err() == nil && len(apps) > 0 {
 		var batchErr error

@@ -35,7 +35,7 @@ func (m *SetupModel) installPlan() []planItem {
 			if m.selections.excludedDefaults[app.Name] {
 				continue
 			}
-			plan = append(plan, planItem{app: app, group: planDefault})
+			plan = append(plan, planItem{app: m.appWithSelectedChannel(app), group: planDefault})
 		}
 	}
 
@@ -60,7 +60,7 @@ func (m *SetupModel) installPlan() []planItem {
 	if m.system.hasDesktop {
 		for _, name := range m.getSelectedDesktopApps() {
 			if app := m.getDesktopAppByName(name); app != nil {
-				plan = append(plan, planItem{app: *app, group: planSelected})
+				plan = append(plan, planItem{app: m.appWithSelectedChannel(*app), group: planSelected})
 			}
 		}
 	}

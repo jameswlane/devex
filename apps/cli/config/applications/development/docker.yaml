@@ -80,7 +80,8 @@ linux:
             dnf install -y ca-certificates curl
             curl -fsSL https://download.docker.com/linux/fedora/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo
       post_install: *linux_post_install
-    - install_method: dnf
+    - channel: dnf-rhel
+      install_method: dnf
       install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       installed_binary: docker
       uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin

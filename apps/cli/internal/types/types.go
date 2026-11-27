@@ -28,6 +28,7 @@ type AppConfig struct {
 	Options            []string                 `mapstructure:"options" yaml:"options,omitempty"`
 	BaseConfig         `yaml:",inline" mapstructure:",squash"`
 	Default            bool               `mapstructure:"default" yaml:"default"`
+	Channel            string             `mapstructure:"channel" yaml:"channel,omitempty"`
 	InstallMethod      string             `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand     string             `mapstructure:"install_command" yaml:"install_command"`
 	InstallScope       string             `mapstructure:"install_scope" yaml:"install_scope,omitempty"`
@@ -364,6 +365,7 @@ type OSConfig struct {
 	Verification         sdk.ArtifactVerification `mapstructure:"verification" yaml:"verification,omitempty"`
 	Packages             []string                 `mapstructure:"packages" yaml:"packages,omitempty"`
 	Options              []string                 `mapstructure:"options" yaml:"options,omitempty"`
+	Channel              string                   `mapstructure:"channel" yaml:"channel,omitempty"`
 	InstallMethod        string                   `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand       string                   `mapstructure:"install_command" yaml:"install_command"`
 	InstallScope         string                   `mapstructure:"install_scope" yaml:"install_scope,omitempty"`
@@ -433,6 +435,8 @@ type CrossPlatformApp struct {
 	MacOS               OSConfig `mapstructure:"macos" yaml:"macos,omitempty"`
 	Windows             OSConfig `mapstructure:"windows" yaml:"windows,omitempty"`
 	AllPlatforms        OSConfig `mapstructure:"all_platforms" yaml:"all_platforms,omitempty"`
+	defaultChannel      string
+	selectedChannel     string
 }
 
 var catalogPlatform = sync.OnceValue(platform.DetectPlatform)
@@ -542,12 +546,10 @@ func (app *CrossPlatformApp) selectOSConfig() OSConfig {
 	// Return OS-specific config
 	switch catalogOS {
 	case "linux":
-		if len(app.Linux.PlatformRequirements) == 0 {
+		if app.selectedChannel != "" || len(app.Linux.PlatformRequirements) == 0 {
 			return app.Linux
 		}
-		detected := catalogPlatform()
-		detected.Architecture = catalogArch
-		return app.LinuxConfigForPlatform(detected)
+		return app.LinuxConfigForPlatform(currentCatalogPlatform())
 	case "darwin":
 		return app.MacOS
 	case "windows":
@@ -803,6 +805,7 @@ func (app *CrossPlatformApp) ToLegacyAppConfig() AppConfig {
 			Category:    app.Category,
 		},
 		Default:            app.Default,
+		Channel:            osConfig.ChannelName(),
 		InstallMethod:      osConfig.InstallMethod,
 		InstallCommand:     osConfig.InstallCommand,
 		InstallScope:       osConfig.InstallScope,

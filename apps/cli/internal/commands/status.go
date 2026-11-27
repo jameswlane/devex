@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -191,7 +192,7 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 
 				// Try to get from database first
 				if installedApp, err := repo.GetApp(name); err == nil && installedApp != nil {
-					appsToCheck = append(appsToCheck, resolveTrackedApp(settings, *installedApp))
+					appsToCheck = append(appsToCheck, resolveTrackedApp(repo, settings, *installedApp))
 				} else {
 					// Try to get from configuration
 					if app, err := settings.GetApplicationByName(name); err == nil {
@@ -281,18 +282,47 @@ func listTrackedApps(repo types.Repository, settings config.CrossPlatformSetting
 		return nil, fmt.Errorf("failed to list installed apps: %w", err)
 	}
 	for i := range installedApps {
-		installedApps[i] = resolveTrackedApp(settings, installedApps[i])
+		installedApps[i] = resolveTrackedApp(repo, settings, installedApps[i])
 	}
 	return installedApps, nil
 }
 
 // resolveTrackedApp fills in install details for an application recorded in
-// the database. The database only stores application names, so the install
-// method, command, and category come from the matching configuration entry.
-// Applications no longer in the configuration are returned unchanged.
-func resolveTrackedApp(settings config.CrossPlatformSettings, app types.AppConfig) types.AppConfig {
+// the database. A saved definition or install receipt wins over configured
+// channel preferences so status inspects the channel that is actually installed.
+func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSettings, app types.AppConfig) types.AppConfig {
+	if repo != nil {
+		if data, err := repo.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); err == nil && data != "" {
+			var saved types.CrossPlatformApp
+			if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
+				if rec := channels.RecordedChannelForApp(repo, saved); rec != "" {
+					if switched, _, err := channels.Resolve(saved, channels.Preferences{}, rec); err == nil {
+						saved = switched
+					}
+				}
+				resolved := saved.ToLegacyAppConfig()
+				resolved.Name = app.Name
+				return resolved
+			}
+		}
+	}
 	if app.InstallMethod != "" && app.InstallCommand != "" {
 		return app
+	}
+	normalized := normalizeInstallLookup(app.Name)
+	for _, entry := range settings.GetAllApps() {
+		if normalizeInstallLookup(entry.Name) == normalized {
+			if rec := channels.RecordedChannelForApp(repo, entry); rec != "" {
+				if switched, _, err := channels.Resolve(entry, channels.Preferences{}, rec); err == nil {
+					resolved := switched.ToLegacyAppConfig()
+					resolved.Name = app.Name
+					return resolved
+				}
+			}
+			resolved := entry.ToLegacyAppConfig()
+			resolved.Name = app.Name
+			return resolved
+		}
 	}
 	configured, err := settings.GetApplicationByName(app.Name)
 	if err != nil || configured == nil {

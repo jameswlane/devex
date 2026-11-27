@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -31,12 +33,22 @@ type packageMaintenanceOperation struct {
 
 // NewUpdateCmd refreshes repository metadata without upgrading applications.
 func NewUpdateCmd(settings config.CrossPlatformSettings) *cobra.Command {
-	return newPackageMaintenanceCmd("update", settings, nil)
+	return newPackageMaintenanceCmdWithRepo("update", nil, settings, nil)
+}
+
+// NewUpdateCmdWithRepo creates an update command that follows recorded install channels.
+func NewUpdateCmdWithRepo(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	return newPackageMaintenanceCmdWithRepo("update", repo, settings, nil)
 }
 
 // NewUpgradeCmd upgrades only packages belonging to the selected applications.
 func NewUpgradeCmd(settings config.CrossPlatformSettings) *cobra.Command {
-	return newPackageMaintenanceCmd("upgrade", settings, nil)
+	return newPackageMaintenanceCmdWithRepo("upgrade", nil, settings, nil)
+}
+
+// NewUpgradeCmdWithRepo creates an upgrade command that follows recorded install channels.
+func NewUpgradeCmdWithRepo(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	return newPackageMaintenanceCmdWithRepo("upgrade", repo, settings, nil)
 }
 
 var maintenanceExecutor = func(ctx context.Context, provider pluginBootstrapProvider) (packageMaintenanceExecutor, error) {
@@ -56,6 +68,10 @@ var maintenanceExecutor = func(ctx context.Context, provider pluginBootstrapProv
 }
 
 func newPackageMaintenanceCmd(action string, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) *cobra.Command {
+	return newPackageMaintenanceCmdWithRepo(action, nil, settings, provider)
+}
+
+func newPackageMaintenanceCmdWithRepo(action string, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) *cobra.Command {
 	cmd := &cobra.Command{
 		Annotations: map[string]string{catalogAnnotation: catalogRequired},
 		Use:         action + " [apps...]", Short: "Refresh package metadata for configured applications",
@@ -75,7 +91,26 @@ func newPackageMaintenanceCmd(action string, settings config.CrossPlatformSettin
 		if err := viper.BindPFlags(cmd.Flags()); err != nil {
 			return err
 		}
-		apps, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+		recordedLookup := func(app types.CrossPlatformApp) string {
+			if repo == nil {
+				return ""
+			}
+			if rec := channels.RecordedChannelForApp(repo, app); rec != "" {
+				return rec
+			}
+			if data, readErr := repo.Get("installed-app-definition:" + normalizeInstallLookup(app.Name)); readErr == nil && data != "" {
+				var saved types.CrossPlatformApp
+				if json.Unmarshal([]byte(data), &saved) == nil && saved.Name != "" {
+					return saved.SelectedChannel()
+				}
+			}
+			return ""
+		}
+		apps, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{
+			Names:           args,
+			Categories:      viper.GetStringSlice("categories"),
+			RecordedChannel: recordedLookup,
+		})
 		if err != nil {
 			return err
 		}

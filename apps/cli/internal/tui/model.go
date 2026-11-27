@@ -552,11 +552,18 @@ func (m *Model) renderLeftPane(width int) string {
 				return leftStyle.Render(content.String())
 			}
 
-			// Installation method with icon
+			// Installation method / channel with icon
 			methodIcon := getMethodIcon(appDetails.InstallMethod)
+			channelLabel := appDetails.Channel
+			if channelLabel == "" {
+				channelLabel = appDetails.InstallMethod
+			}
+			if appDetails.OfficialSupport {
+				channelLabel += " (official)"
+			}
 			if !addLine(lipgloss.NewStyle().
 				Foreground(lipgloss.Color("246")).
-				Render(fmt.Sprintf("Method: %s %s", methodIcon, appDetails.InstallMethod))) {
+				Render(fmt.Sprintf("Channel: %s %s", methodIcon, channelLabel))) {
 				return leftStyle.Render(content.String())
 			}
 
@@ -651,6 +658,7 @@ func (m *Model) getAppDetails(app types.CrossPlatformApp) AppDisplayInfo {
 		Name:            app.Name,
 		Description:     app.Description,
 		Category:        app.Category,
+		Channel:         osConfig.ChannelName(),
 		InstallMethod:   osConfig.InstallMethod,
 		OfficialSupport: osConfig.OfficialSupport,
 		Dependencies:    osConfig.Dependencies,
@@ -666,6 +674,7 @@ type AppDisplayInfo struct {
 	Name            string
 	Description     string
 	Category        string
+	Channel         string
 	InstallMethod   string
 	OfficialSupport bool
 	Dependencies    []string

@@ -14,7 +14,7 @@ linux:
   install_method: apt
   install_command: ghostty
   uninstall_command: ghostty
-  official_support: false
+  official_support: true
   # Ubuntu packages Ghostty from 26.04; other distros use their alternative
   # below, and an unmatched distro falls back to this entry.
   platform_requirements:

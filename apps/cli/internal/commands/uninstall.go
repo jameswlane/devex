@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -199,6 +200,11 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 		if definition.Name == "" {
 			return types.AppConfig{}, fmt.Errorf("invalid installed definition for %s: application name is empty", name)
 		}
+		if rec := channels.RecordedChannelForApp(repo, definition); rec != "" && !strings.EqualFold(definition.SelectedChannel(), rec) {
+			if switched, _, err := channels.Resolve(definition, channels.Preferences{}, rec); err == nil {
+				definition = switched
+			}
+		}
 		return definition.ToLegacyAppConfig(), nil
 	}
 
@@ -208,6 +214,23 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 	}
 	if installedApp != nil && installedApp.InstallMethod != "" {
 		return *installedApp, nil
+	}
+
+	// Look up the full CrossPlatformApp in the catalog so recorded receipts
+	// (including legacy manager-only receipts) win over channel preferences.
+	normalized := normalizeInstallLookup(name)
+	for _, entry := range settings.GetAllApps() {
+		if normalizeInstallLookup(entry.Name) == normalized || normalizeInstallLookup(entry.GetOSConfig().InstallCommand) == normalized {
+			if rec := channels.RecordedChannelForApp(repo, entry); rec != "" {
+				if switched, _, err := channels.Resolve(entry, channels.Preferences{}, rec); err == nil {
+					return switched.ToLegacyAppConfig(), nil
+				}
+			}
+			if chosen, _, err := channels.Resolve(entry, channels.PreferencesFromViper(), ""); err == nil {
+				return chosen.ToLegacyAppConfig(), nil
+			}
+			return entry.ToLegacyAppConfig(), nil
+		}
 	}
 
 	catalogApp, catalogErr := settings.GetApplicationByName(name)
