@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -156,6 +157,9 @@ var _ = Describe("Node runtime dependencies on Linux (#703)", func() {
 	})
 
 	It("ignores an x32 libatomic, which is 32-bit x86-64 (#738)", func() {
+		if strconv.IntSize != 64 {
+			Skip("the ELF class check applies to 64-bit builds")
+		}
 		path := filepath.Join(libDir, "x32", "libatomic.so.1")
 		writeELF(path, elf.EM_X86_64)
 		raw, err := os.ReadFile(path)
