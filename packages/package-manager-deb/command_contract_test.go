@@ -182,15 +182,36 @@ var _ = Describe("DEB command contracts", func() {
 			Expect(recorder.Calls("dpkg-deb")).To(BeEmpty())
 		})
 	}
-	It("installs missing dependencies with non-interactive elevated apt-get", func() {
+	It("resolves missing dependency groups with non-interactive elevated apt-get satisfy", func() {
 		recorder.Script("dpkg-deb", []string{"-f", file, "Depends"}, sdktest.Response{Stdout: "libexample (>= 1)\n"})
 		Expect(plugin.Execute("install", []string{file})).To(Succeed())
 		Expect(recorder.Calls("dpkg-query")).To(Equal([]sdktest.Call{{Args: []string{"-W", "-f=${Status}", "libexample"}}}))
 		Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{
 			{Args: []string{"update"}, ElevationRequested: true},
-			{Args: []string{"install", "-y", "libexample"}, ElevationRequested: true},
+			{Args: []string{"satisfy", "-y", "libexample (>= 1)"}, ElevationRequested: true},
 		}))
 		Expect(recorder.Calls("dpkg")).To(Equal([]sdktest.Call{{Args: []string{"-i", file}, ElevationRequested: true}}))
+	})
+	It("falls back to installing first alternatives by name when apt-get satisfy fails", func() {
+		// apt before 2.0 has no satisfy; a virtual name such as libasound2 has no candidate.
+		recorder.Script("dpkg-deb", []string{"-f", file, "Depends"}, sdktest.Response{Stdout: "libexample (>= 1) | libother, libexample (>= 2)\n"})
+		recorder.Script("apt-get", []string{"satisfy", "-y", "libexample (>= 1) | libother", "libexample (>= 2)"}, sdktest.Response{ExitCode: 100})
+		recorder.Fallback("dpkg-query", sdktest.Response{ExitCode: 1})
+		Expect(plugin.Execute("install", []string{file})).To(Succeed())
+		Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{
+			{Args: []string{"update"}, ElevationRequested: true},
+			{Args: []string{"satisfy", "-y", "libexample (>= 1) | libother", "libexample (>= 2)"}, ElevationRequested: true},
+			{Args: []string{"install", "-y", "libexample"}, ElevationRequested: true},
+		}))
+	})
+	It("installs by name when a dependency expression is not plain enough to hand to apt", func() {
+		recorder.Script("dpkg-deb", []string{"-f", file, "Depends"}, sdktest.Response{Stdout: "libexample [amd64], libgood\n"})
+		recorder.Fallback("dpkg-query", sdktest.Response{ExitCode: 1})
+		Expect(plugin.Execute("install", []string{file})).To(Succeed())
+		Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{
+			{Args: []string{"update"}, ElevationRequested: true},
+			{Args: []string{"install", "-y", "libexample", "libgood"}, ElevationRequested: true},
+		}))
 	})
 	Context("dependency alternatives", func() {
 		DescribeTable("checks normalized alternatives and installs only missing groups",
@@ -214,9 +235,8 @@ var _ = Describe("DEB command contracts", func() {
 					Expect(installs[0]).To(Equal(sdktest.Call{Args: []string{"update"}, ElevationRequested: true}))
 					Expect(installs[1].ElevationRequested).To(BeTrue())
 					Expect(installs[1].Args).To(HaveLen(2 + len(missing)))
-					Expect(installs[1].Args[:2]).To(Equal([]string{"install", "-y"}))
-					// handleInstall deduplicates groups in a map, so operand order is unspecified.
-					Expect(installs[1].Args[2:]).To(ConsistOf(missing))
+					Expect(installs[1].Args[:2]).To(Equal([]string{"satisfy", "-y"}))
+					Expect(installs[1].Args[2:]).To(Equal(missing))
 				} else {
 					Expect(installs).To(BeEmpty())
 				}
@@ -224,14 +244,14 @@ var _ = Describe("DEB command contracts", func() {
 				Expect(recorder.Calls("dpkg")).To(Equal([]sdktest.Call{{Args: []string{"-i", file}, ElevationRequested: true}}))
 			},
 			Entry("uses an installed second alternative", "a | b", []string{"b"}, []string{"a", "b"}, nil),
-			Entry("installs the first versioned alternative when none is installed", "a (>= 1) | b", nil, []string{"a", "b"}, []string{"a"}),
+			Entry("hands apt the whole group when no alternative is installed", "a (>= 1) | b", nil, []string{"a", "b"}, []string{"a (>= 1) | b"}),
 			Entry("normalizes version constraints on later alternatives", "a (>= 1) | b (<< 3)", []string{"b"}, []string{"a", "b"}, nil),
 			Entry("stops at the first installed alternative", "a | b | c", []string{"a"}, []string{"a"}, nil),
 			Entry("checks every alternative before selecting the first", "a|b|c", []string{"c"}, []string{"a", "b", "c"}, nil),
-			Entry("checks comma-separated groups independently and trims whitespace", " a\t(>= 1) | b , c | d , e \n", []string{"b"}, []string{"a", "b", "c", "d", "e"}, []string{"c", "e"}),
-			Entry("strips :any before querying and installing", "python3:any", nil, []string{"python3"}, []string{"python3"}),
+			Entry("checks comma-separated groups independently and trims whitespace", " a\t(>= 1) | b , c | d , e \n", []string{"b"}, []string{"a", "b", "c", "d", "e"}, []string{"c | d", "e"}),
+			Entry("strips :any before querying and keeps it for apt", "python3:any", nil, []string{"python3"}, []string{"python3:any"}),
 			Entry("accepts an installed unqualified package for :any", "python3:any", []string{"python3"}, []string{"python3"}, nil),
-			Entry("strips :native and explicit architecture qualifiers", "python3:native (>= 3) | python3:amd64", nil, []string{"python3", "python3"}, []string{"python3"}),
+			Entry("strips :native and explicit architecture qualifiers before querying", "python3:native (>= 3) | python3:amd64", nil, []string{"python3", "python3"}, []string{"python3:native (>= 3) | python3:amd64"}),
 			Entry("skips empty fields without issuing empty queries", " , | , \n", nil, nil, nil),
 		)
 
@@ -346,6 +366,7 @@ var _ = Describe("DEB command contracts", func() {
 			recorder.Script("dpkg-deb", depends(), sdktest.Response{Stdout: "libexample\n"})
 			recorder.Script("dpkg-query", queryLib, sdktest.Response{ExitCode: 1})
 			recorder.Script("apt-get", []string{"update"}, sdktest.Response{ExitCode: 100})
+			recorder.Script("apt-get", []string{"satisfy", "-y", "libexample"}, sdktest.Response{ExitCode: 100})
 			recorder.Script("apt-get", []string{"install", "-y", "libexample"}, sdktest.Response{ExitCode: 100})
 			output := sdktest.CaptureStdout(GinkgoT(), func() {
 				Expect(plugin.Execute("install", []string{file})).To(Succeed())
@@ -357,12 +378,14 @@ var _ = Describe("DEB command contracts", func() {
 		It("returns dpkg -i failure after failed dependency installation", func() {
 			recorder.Script("dpkg-deb", depends(), sdktest.Response{Stdout: "libexample\n"})
 			recorder.Script("dpkg-query", queryLib, sdktest.Response{ExitCode: 1})
+			recorder.Script("apt-get", []string{"satisfy", "-y", "libexample"}, sdktest.Response{ExitCode: 100})
 			recorder.Script("apt-get", []string{"install", "-y", "libexample"}, sdktest.Response{ExitCode: 100})
 			recorder.Script("dpkg", []string{"-i", file}, sdktest.Response{ExitCode: 1})
 			err := plugin.Execute("install", []string{file})
 			Expect(err).To(MatchError("failed to install " + file + ": exit status 1"))
 			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{
 				{Args: []string{"update"}, ElevationRequested: true},
+				{Args: []string{"satisfy", "-y", "libexample"}, ElevationRequested: true},
 				{Args: []string{"install", "-y", "libexample"}, ElevationRequested: true},
 				{Args: []string{"install", "-f", "-y"}, ElevationRequested: true},
 			}))
