@@ -48,4 +48,33 @@ var _ = Describe("Plain repeat installation", func() {
 			Expect(output.String()).To(ContainSubstring("installed jq"))
 		}
 	}, Entry("installed", true, false), Entry("stale tracking", false, false), Entry("query failure", false, true))
+
+	DescribeTable("asks the native manager about tracked applications", func(method string, cfg types.OSConfig, query string) {
+		oldInstaller := nativeInstaller
+		DeferCleanup(func() { nativeInstaller = oldInstaller })
+		probe := &queryRecorder{}
+		nativeInstaller = func(_ context.Context, requested string) types.BaseInstaller {
+			Expect(requested).To(Equal(method))
+			return probe
+		}
+		cfg.InstallMethod = method
+		present, err := nativeApplicationInstalled(context.Background(), types.CrossPlatformApp{Name: "jq", AllPlatforms: cfg})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(present).To(BeTrue())
+		Expect(probe.queries).To(Equal([]string{query}))
+	},
+		Entry("apt", "apt", types.OSConfig{InstallCommand: "jq"}, "jq"),
+		Entry("dnf", "dnf", types.OSConfig{InstallCommand: "jq"}, "jq"),
+		Entry("pacman", "pacman", types.OSConfig{InstallCommand: "jq"}, "jq"),
+		Entry("pacman with structured packages", "pacman", types.OSConfig{Packages: []string{"jq", "yq"}}, "pacman install 'jq' 'yq'"),
+	)
 })
+
+type queryRecorder struct{ queries []string }
+
+func (r *queryRecorder) Install(string, types.Repository) error   { return nil }
+func (r *queryRecorder) Uninstall(string, types.Repository) error { return nil }
+func (r *queryRecorder) IsInstalled(command string) (bool, error) {
+	r.queries = append(r.queries, command)
+	return true, nil
+}

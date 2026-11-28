@@ -17,7 +17,7 @@ This runs the Ginkgo unit test suites recursively. Use `task test:short` to skip
 
 ## End-to-end tests
 
-The Ginkgo v2 end-to-end suite lives in `test/e2e`. It exercises the real CLI in a disposable Ubuntu, Debian, Fedora, CentOS Stream or openSUSE container with an empty home directory, including setup, plugin downloads and registry checksums, desktop-specific plugin selection, and optional package installation and removal. The suite refuses to run outside its sandbox because it changes `$HOME` and destructive specs use sudo.
+The Ginkgo v2 end-to-end suite lives in `test/e2e`. It exercises the real CLI in a disposable Ubuntu, Debian, Fedora, CentOS Stream, openSUSE or Arch Linux container with an empty home directory, including setup, plugin downloads and registry checksums, desktop-specific plugin selection, and optional package installation and removal. The suite refuses to run outside its sandbox because it changes `$HOME` and destructive specs use sudo.
 
 ### Run with Docker
 
@@ -28,6 +28,7 @@ task e2e:docker DISTRO=fedora-44
 task e2e:docker DISTRO=centos-stream-9
 task e2e:docker DISTRO=opensuse-tumbleweed
 task e2e:docker DISTRO=opensuse-leap-16.0
+task e2e:docker DISTRO=arch
 ```
 
 The runner builds the CLI and test binary, creates the sandbox, and executes the suite with verbose Ginkgo output and a JUnit report. CI enables destructive specs because every container is throwaway; local runs skip them unless explicitly enabled.
@@ -146,6 +147,34 @@ The template list comes from `devex template list`, so a new template gets a job
 ## Roadmap
 
 Later end-to-end testing phases will add Arch and Fedora desktop virtual machines.
+
+### Arch Linux lifecycle coverage
+
+Arch Linux is a rolling release with no version numbers, so the maintained
+target is current Arch: `test/e2e/docker/Dockerfile.arch` starts from the
+official [`archlinux:base`](https://hub.docker.com/_/archlinux) image, which
+upstream rebuilds weekly, and runs a full `pacman -Syu` while installing the
+sandbox tools, so every run tests the current repositories. Its distro key is
+`arch`: the image's `VERSION_ID` is a build snapshot, not a release. Manjaro, EndeavourOS
+and other Arch derivatives are not tested, and neither is the AUR (`yay`). The
+older `docker/Dockerfile.{arch,manjaro}` fixtures are separate from this
+runner.
+
+Source CLI runs rebuild `package-manager-pacman` from this checkout. The
+lifecycle installs jq with `pacman -S --needed`, verifies `pacman -Q jq` and
+`jq --version`, checks CLI status, repeats the install and asserts
+`skipped jq (already installed)` without new plugin downloads, then uninstalls
+and verifies that `pacman -Q jq` reports the package as not found.
+
+```bash
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=arch
+# Narrow to the pacman lifecycle while debugging:
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=arch -- --ginkgo.label-filter=pm:pacman
+```
+
+The CI `distro` input accepts `arch`, and `all` includes it. Logs, command
+transcripts and `junit.xml` are uploaded as the `cli-e2e-arch-<desktop>`
+artifact.
 
 ### Fedora and EL lifecycle coverage
 

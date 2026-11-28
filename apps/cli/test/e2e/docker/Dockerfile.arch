@@ -1,0 +1,31 @@
+# Disposable Arch Linux lifecycle sandbox; see apps/cli/TESTING.md.
+# Arch is a rolling release: archlinux:base is the official image, rebuilt
+# weekly, and the full upgrade below brings it to the current repositories.
+FROM archlinux:base
+
+# Track current repositories; jq must stay absent until the lifecycle test.
+# Upgrade and install in one transaction, as Arch does not support partial upgrades.
+RUN pacman -Syu --noconfirm --needed ca-certificates curl git gzip procps-ng sudo tar unzip xz \
+    && pacman -Scc --noconfirm \
+    && ! pacman -Q jq
+
+# The home is created by hand rather than with -m so /etc/skel is not copied.
+RUN useradd --no-create-home --home-dir /home/tester --shell /bin/bash --uid 1000 tester \
+    && install -d -o tester -g tester -m 0755 /home/tester \
+    && echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester \
+    && chmod 0440 /etc/sudoers.d/tester \
+    && install -d -o tester -g tester -m 0755 /artifacts
+
+COPY devex /usr/local/bin/devex
+COPY e2e.test /opt/devex-e2e/e2e.test
+COPY testdata /opt/devex-e2e/testdata
+
+ENV DEVEX_E2E_SANDBOX=1 \
+    LANG=C.UTF-8
+
+# hadolint ignore=DL3066
+USER tester
+WORKDIR /home/tester
+
+# Extra arguments to `docker run` (for example --ginkgo.focus=...) are appended.
+ENTRYPOINT ["/opt/devex-e2e/e2e.test", "--ginkgo.v", "--ginkgo.junit-report=/artifacts/junit.xml"]

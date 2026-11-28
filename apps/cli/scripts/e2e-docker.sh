@@ -10,7 +10,7 @@
 #
 # Environment:
 #   DISTRO                  ubuntu-24.04 (default) | debian-12 | fedora-44 | centos-stream-9
-#                           | opensuse-tumbleweed | opensuse-leap-16.0
+#                           | opensuse-tumbleweed | opensuse-leap-16.0 | arch
 #   CONTAINER_ENGINE        docker | podman (default: whichever is found first)
 #   E2E_DRY_RUN=1           print the engine commands instead of running them
 #   E2E_DEVEX_BINARY        prebuilt linux devex binary to test instead of building one
@@ -136,6 +136,7 @@ build_binaries() {
 		case "$DISTRO" in
 		fedora-* | centos-stream-*) methods=(dnf rpm) ;;
 		opensuse-*) methods=(zypper) ;;
+		arch) methods=(pacman) ;;
 		esac
 		local method
 		for method in "${methods[@]}"; do

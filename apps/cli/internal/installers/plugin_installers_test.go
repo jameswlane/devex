@@ -61,6 +61,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		},
 		Entry("apt probe", "apt", "is-installed"),
 		Entry("dnf probe", "dnf", "is-installed"),
+		Entry("pacman probe", "pacman", "is-installed"),
 		Entry("yum probe", "yum", "is-installed"),
 		Entry("flatpak probe", "flatpak", "is-installed"),
 		Entry("pip probe", "pip", "is-installed"),
@@ -83,6 +84,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("apt", "apt"),
 		Entry("deb", "deb"),
 		Entry("dnf", "dnf"),
+		Entry("pacman", "pacman"),
 		Entry("yum", "yum"),
 		Entry("flatpak", "flatpak"),
 		Entry("mise", "mise"),
@@ -185,14 +187,14 @@ var _ = Describe("Plugin installation discovery", func() {
 			Expect(installed).To(BeTrue())
 			Expect(executor.args).To(BeNil())
 		},
-		Entry("pacman plugin", "pacman"),
+		Entry("apk plugin", "apk"),
 	)
 
 	It("allows removal when a list-only plugin's list operation would fail offline", func() {
 		executor := &recordingPluginExecutor{
 			err: errors.New("offline metadata failure"),
 		}
-		installer := &PluginBasedInstaller{method: "pacman", pluginBootstrap: executor, ctx: context.Background()}
+		installer := &PluginBasedInstaller{method: "apk", pluginBootstrap: executor, ctx: context.Background()}
 
 		// IsInstalled skips probe and treats package as present
 		installed, err := installer.IsInstalled("git")
@@ -204,7 +206,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		executor.err = nil
 		err = installer.Uninstall("sudo remove -y git", nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(executor.name).To(Equal("package-manager-pacman"))
+		Expect(executor.name).To(Equal("package-manager-apk"))
 		Expect(executor.args).To(Equal([]string{"remove", "git"}))
 	})
 })
