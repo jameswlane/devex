@@ -90,16 +90,23 @@ func (s *hookSandbox) rewrite(script string) string {
 	for _, prefix := range []string{"/opt/", "/usr/local/bin/", "/usr/share/applications/", "/var/lib/devex", "/etc/os-release"} {
 		script = strings.ReplaceAll(script, prefix, s.root+prefix)
 	}
-	// Every absolute path left must be inside the sandbox root.
-	for _, m := range absolutePath.FindAllStringSubmatch(script, -1) {
-		if !strings.HasPrefix(m[1], s.root) && m[1] != "/dev/null" {
+	// Every absolute path left must be inside the sandbox root. URLs are
+	// not paths, so drop them before scanning.
+	for _, m := range absolutePath.FindAllStringSubmatch(urlPattern.ReplaceAllString(script, ""), -1) {
+		if !strings.HasPrefix(m[1], s.root+"/") && m[1] != "/dev/null" {
 			Fail("hook path " + m[1] + " is not rewritten under the sandbox root")
 		}
 	}
 	return script
 }
 
-var absolutePath = regexp.MustCompile(`(?:^|[\s"'=(])(/[A-Za-z0-9._%-][A-Za-z0-9._%/-]*)`)
+// A path starts at a slash that does not continue a word or a variable
+// expansion: after whitespace, quotes, =, (, redirects or separators,
+// including doubled slashes such as //tmp.
+var (
+	absolutePath = regexp.MustCompile(`(?:^|[^A-Za-z0-9._~$}/-])(/[^\s"';|&<>()]*)`)
+	urlPattern   = regexp.MustCompile(`[a-z]+://[^\s"']*`)
+)
 
 func (s *hookSandbox) run(script string) (string, error) {
 	cmd := exec.CommandContext(context.Background(), "bash", "-c", s.rewrite(script))
@@ -270,16 +277,33 @@ var _ = Describe("AI Code Editors catalog hooks", func() {
 		})
 
 		It("makes uninstall wait for an install holding the lock", func() {
-			Expect(os.MkdirAll(sandbox.path("var/lib/devex"), 0o700)).To(Succeed())
-			lock := sandbox.path("var/lib/devex/antigravity-ide.lock")
-			holder := exec.CommandContext(context.Background(), "flock", lock, "sleep", "2")
-			Expect(holder.Start()).To(Succeed())
-			DeferCleanup(func() { _ = holder.Wait() })
-			Eventually(lock).Should(BeAnExistingFile())
-			start := time.Now()
-			out, err := sandbox.run(uninstall)
+			sum := sandbox.writeAntigravityTarball()
+			out, err := sandbox.run(withFixtureSum(install, sum))
 			Expect(err).NotTo(HaveOccurred(), out)
-			Expect(time.Since(start)).To(BeNumerically(">=", time.Second), "uninstall must wait for the lock")
+
+			lock := sandbox.path("var/lib/devex/antigravity-ide.lock")
+			ready := sandbox.path("lock-held")
+			release := sandbox.path("lock-release")
+			holder := exec.CommandContext(context.Background(), "flock", lock, "sh", "-c",
+				`touch "$0"; while [ ! -e "$1" ]; do sleep 0.05; done`, ready, release)
+			Expect(holder.Start()).To(Succeed())
+			DeferCleanup(func() {
+				_ = os.WriteFile(release, nil, 0o600)
+				_ = holder.Wait()
+			})
+			Eventually(ready).Should(BeAnExistingFile(), "the holder signals only once it holds the lock")
+
+			done := make(chan error, 1)
+			go func() {
+				_, runErr := sandbox.run(uninstall)
+				done <- runErr
+			}()
+			Consistently(done, 500*time.Millisecond).ShouldNot(Receive(), "uninstall must wait for the lock")
+			Expect(sandbox.path("opt/antigravity-ide/.devex-managed")).To(BeAnExistingFile(), "nothing is removed while the lock is held")
+
+			Expect(os.WriteFile(release, nil, 0o600)).To(Succeed())
+			Eventually(done, 10*time.Second).Should(Receive(BeNil()))
+			Expect(sandbox.path("opt/antigravity-ide")).NotTo(BeAnExistingFile())
 		})
 
 		It("uninstalls only what it created and keeps a hand-made install's launcher", func() {
