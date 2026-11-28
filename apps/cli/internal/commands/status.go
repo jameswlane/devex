@@ -232,8 +232,8 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 		}
 
 		// Attempt fixes if requested; nothing can be repaired on a channel
-		// DevEx cannot resolve.
-		if fix && reason == "" && len(appStatus.Issues) > 0 {
+		// DevEx cannot resolve or for an app whose state it cannot check.
+		if fix && reason == "" && appStatus.Status != "unknown" && len(appStatus.Issues) > 0 {
 			attemptFixes(ctx, &app, &appStatus, settings)
 		}
 

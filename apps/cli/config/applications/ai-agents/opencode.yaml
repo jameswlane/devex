@@ -22,6 +22,8 @@ linux:
   download_url: https://opencode.ai/install
   install_scope: user
   installed_binary: opencode
+  # Where the install script puts the binary, so status finds it before PATH is reloaded.
+  destination: ~/.opencode/bin
   self_updating: true
   uninstall_command: rm -f "$HOME/.opencode/bin/opencode"
   official_support: true

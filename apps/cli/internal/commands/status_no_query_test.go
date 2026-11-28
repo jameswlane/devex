@@ -9,6 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
@@ -99,5 +100,22 @@ var _ = Describe("Status for apps without a package query", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Status).To(Equal("unknown"))
 		Expect(result.Installed).To(BeFalse())
+	})
+
+	It("keeps --fix YAML output parseable for an app it cannot check", func() {
+		installers.EnableTestMode()
+		DeferCleanup(installers.DisableTestMode)
+		Expect(repo.AddApp("no-query")).To(Succeed())
+		cmd := commands.NewStatusCmd(repo, settings)
+		cmd.SetArgs([]string{"--app", "no-query", "--fix", "--format", "yaml"})
+
+		var err error
+		output := captureStatusStdout(func() { err = cmd.Execute() })
+
+		Expect(err).NotTo(HaveOccurred())
+		var results []status.AppStatus
+		Expect(yaml.Unmarshal([]byte(output), &results)).To(Succeed(), output)
+		Expect(results).To(HaveLen(1))
+		Expect(results[0].Status).To(Equal("unknown"))
 	})
 })

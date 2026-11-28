@@ -13,6 +13,8 @@ macos:
   download_url: https://code.kimi.com/kimi-code/install.sh
   install_scope: user
   installed_binary: kimi
+  # Where the install script puts the binary, so status finds it before PATH is reloaded.
+  destination: ~/.kimi-code/bin
   self_updating: false
   uninstall_command: rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"
   official_support: true
@@ -45,6 +47,8 @@ linux:
   download_url: https://code.kimi.com/kimi-code/install.sh
   install_scope: user
   installed_binary: kimi
+  # Where the install script puts the binary, so status finds it before PATH is reloaded.
+  destination: ~/.kimi-code/bin
   self_updating: false
   uninstall_command: rm -f "$HOME/.kimi-code/bin/kimi" "$HOME/.kimi-code/bin/kimi.bak"
   official_support: true
