@@ -166,8 +166,8 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 	}
 
 	pluginName := "package-manager-" + p.method
-	switch p.method {
-	case "apt", "appimage", "brew", "deb", "dnf", "flatpak", "mas", "mise", "pip", "winget", "yum", "zypper":
+	switch {
+	case HasInstalledQuery(p.method):
 		packages, err := catalogPackageArguments(p.method, command)
 		if err != nil {
 			return false, err
@@ -188,9 +188,10 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 		return true, nil
 	default:
 		// For plugins without a package-specific installed query, skip the
-		// probe (treating status as unknown) so offline uninstalls are not
-		// blocked by a full package list query. Removal will report whether
-		// the package was present.
+		// probe so offline uninstalls are not blocked by a full package list
+		// query. Removal will report whether the package was present. This is
+		// not proof of presence: status checks HasInstalledQuery first and
+		// reports these methods by installed_binary or as unknown.
 		return true, nil
 	}
 }
