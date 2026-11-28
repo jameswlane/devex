@@ -36,9 +36,13 @@ linux:
         dir=/opt/antigravity-ide
         link=/usr/local/bin/antigravity-ide
         desktop=/usr/share/applications/antigravity-ide.desktop
-        # One install at a time: the checks below and the swap must not interleave.
-        exec 9>/run/lock/devex-antigravity-ide.lock
-        flock -w 600 9 || { echo "Another Antigravity install is still running; try again when it finishes." >&2; exit 1; }
+        # One install or uninstall at a time: the checks below and the swap
+        # must not interleave. The lock lives in a root-only directory.
+        umask 077
+        mkdir -p /var/lib/devex
+        exec 9>>/var/lib/devex/antigravity-ide.lock
+        flock -w 600 9 || { echo "Another Antigravity install or uninstall is still running; try again when it finishes." >&2; exit 1; }
+        umask 022
         if { [ -e "$dir" ] || [ -L "$dir" ]; } && { [ -L "$dir" ] || [ ! -f "$dir/.devex-managed" ]; }; then
           echo "$dir exists and was not installed by DevEx; move it aside, then install Antigravity again." >&2
           exit 1
@@ -57,23 +61,13 @@ linux:
           *) echo "Antigravity has no Linux build for $(uname -m)." >&2; exit 1 ;;
         esac
         url="https://edgedl.me.gvt1.com/edgedl/release2/j0qc3/antigravity/stable/2.8.0-6733682917113856/$arch/Antigravity%20IDE.tar.gz"
+        tmp=""; stage=""; entry=""
+        trap 'rm -rf "$tmp" "$stage" "$entry"' EXIT
         tmp="$(mktemp -d)"
         # Stage next to $dir so the final rename stays on one filesystem.
         stage="$(mktemp -d /opt/.antigravity-ide.XXXXXX)"
-        trap 'rm -rf "$tmp" "$stage"' EXIT
-        curl -fsSL --proto '=https' -o "$tmp/ide.tar.gz" "$url"
-        echo "$sum  $tmp/ide.tar.gz" | sha256sum -c - >/dev/null
-        tar -xzf "$tmp/ide.tar.gz" -C "$stage" --strip-components=1 --no-same-owner
-        [ -x "$stage/bin/antigravity-ide" ] || { echo "The Antigravity tarball has no bin/antigravity-ide." >&2; exit 1; }
-        # The tarball records nobody:nogroup; only root may change what users run.
-        chown -R root:root "$stage"
-        chmod -R go-w "$stage"
-        chmod 755 "$stage"
-        chmod 4755 "$stage/chrome-sandbox"
-        touch "$stage/.devex-managed"
-        rm -rf "$dir"
-        mv "$stage" "$dir"
-        ln -sfn "$dir/bin/antigravity-ide" "$link"
+        # Prepare the desktop entry before touching the installed tree, so a
+        # failure here leaves the previous install as it was.
         entry="$(mktemp /usr/share/applications/.antigravity-ide.XXXXXX)"
         cat > "$entry" <<'DESKTOP'
         [Desktop Entry]
@@ -88,22 +82,47 @@ linux:
         X-DevEx-Managed=true
         DESKTOP
         chmod 644 "$entry"
+        curl -fsSL --proto '=https' -o "$tmp/ide.tar.gz" "$url"
+        echo "$sum  $tmp/ide.tar.gz" | sha256sum -c - >/dev/null
+        tar -xzf "$tmp/ide.tar.gz" -C "$stage" --strip-components=1 --no-same-owner
+        [ -x "$stage/bin/antigravity-ide" ] || { echo "The Antigravity tarball has no bin/antigravity-ide." >&2; exit 1; }
+        # The tarball records nobody:nogroup; only root may change what users run.
+        chown -R root:root "$stage"
+        chmod -R go-w "$stage"
+        chmod 755 "$stage"
+        chmod 4755 "$stage/chrome-sandbox"
+        touch "$stage/.devex-managed"
+        rm -rf "$dir"
+        mv "$stage" "$dir"
+        ln -sfn "$dir/bin/antigravity-ide" "$link"
         mv -fT "$entry" "$desktop"
+  # Runs as root in one step under the install lock, so it cannot interleave
+  # with an install.
   uninstall_command: |
     set -eu
     SUDO=""
     if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+    $SUDO sh -c '
+    set -eu
+    umask 077
+    mkdir -p /var/lib/devex
+    exec 9>>/var/lib/devex/antigravity-ide.lock
+    flock -w 600 9 || { echo "Another Antigravity install or uninstall is still running; try again when it finishes." >&2; exit 1; }
+    dir=/opt/antigravity-ide
+    link=/usr/local/bin/antigravity-ide
+    desktop=/usr/share/applications/antigravity-ide.desktop
     # Remove the link only alongside a DevEx-owned install: a hand-made
     # /opt/antigravity-ide keeps its launcher.
-    if [ ! -L /opt/antigravity-ide ] && [ -f /opt/antigravity-ide/.devex-managed ]; then
-      if [ -L /usr/local/bin/antigravity-ide ] && [ "$(readlink /usr/local/bin/antigravity-ide)" = "/opt/antigravity-ide/bin/antigravity-ide" ]; then
-        $SUDO rm -f /usr/local/bin/antigravity-ide
+    if [ ! -L "$dir" ] && [ -f "$dir/.devex-managed" ]; then
+      if [ -L "$link" ] && [ "$(readlink "$link")" = "$dir/bin/antigravity-ide" ]; then
+        rm -f "$link"
       fi
-      $SUDO rm -rf /opt/antigravity-ide
-    elif [ ! -e /opt/antigravity-ide ] && [ ! -L /opt/antigravity-ide ] && [ -L /usr/local/bin/antigravity-ide ] && [ "$(readlink /usr/local/bin/antigravity-ide)" = "/opt/antigravity-ide/bin/antigravity-ide" ]; then
+      rm -rf "$dir"
+    elif [ ! -e "$dir" ] && [ ! -L "$dir" ] && [ -L "$link" ] && [ "$(readlink "$link")" = "$dir/bin/antigravity-ide" ]; then
       # The install directory is already gone; drop the dangling link.
-      $SUDO rm -f /usr/local/bin/antigravity-ide
+      rm -f "$link"
     fi
-    if [ ! -L /usr/share/applications/antigravity-ide.desktop ] && [ -f /usr/share/applications/antigravity-ide.desktop ] && grep -q '^X-DevEx-Managed=true$' /usr/share/applications/antigravity-ide.desktop; then
-      $SUDO rm -f /usr/share/applications/antigravity-ide.desktop
+    if [ ! -L "$desktop" ] && [ -f "$desktop" ] && grep -q "^X-DevEx-Managed=true\$" "$desktop"; then
+      rm -f "$desktop"
     fi
+    '

@@ -22,8 +22,10 @@ linux:
     sha256: 72c8aaa43e9fe70866486f5914c4a9db0574071ac0be75cc1217e3d3fa2493f6
   self_updating: true
   official_support: true
-  # The catalog resolver falls back to the primary entry on older releases,
-  # so refuse them here: Kiro needs Ubuntu 24.04+, Debian 13+ or Linux Mint 22+.
+  # platform_requirements pick the package by architecture only, so a
+  # Debian testing host (no VERSION_ID) still resolves its arm64 package;
+  # this guard enforces the releases: Ubuntu 24.04+, Debian 13+ or Linux
+  # Mint 22+.
   pre_install:
     - scope: user
       shell: |
@@ -39,10 +41,8 @@ linux:
         esac
   platform_requirements:
     - os: debian
-      version: 13+
       arch: amd64
     - os: ubuntu
-      version: 24.04+
       arch: amd64
   alternatives:
     - install_method: deb
@@ -69,8 +69,6 @@ linux:
             esac
       platform_requirements:
         - os: debian
-          version: 13+
           arch: arm64
         - os: ubuntu
-          version: 24.04+
           arch: arm64

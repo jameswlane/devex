@@ -14,8 +14,10 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	shipconfig "github.com/jameswlane/devex/apps/cli/config"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -34,16 +36,22 @@ func loadShippedApp(path string) types.CrossPlatformApp {
 // hookSandbox runs a catalog hook with its absolute system paths moved under
 // a temp root and with curl, uname, chown, id and sudo replaced by stubs.
 type hookSandbox struct {
-	root    string
-	bin     string
-	curlLog string
-	arch    string
-	tarball string
+	root     string
+	bin      string
+	curlLog  string
+	chownLog string
+	arch     string
+	tarball  string
 }
 
 func newHookSandbox() *hookSandbox {
 	if runtime.GOOS != "linux" {
 		Skip("catalog hooks target Linux")
+	}
+	// The hooks write system paths. Unprivileged, any path the rewrite
+	// missed fails with EACCES instead of touching the host.
+	if os.Geteuid() == 0 {
+		Skip("catalog hook specs refuse to run as root")
 	}
 	for _, tool := range []string{"flock", "sha256sum", "tar", "mktemp", "readlink"} {
 		if _, err := exec.LookPath(tool); err != nil {
@@ -51,17 +59,23 @@ func newHookSandbox() *hookSandbox {
 		}
 	}
 	root := GinkgoT().TempDir()
-	s := &hookSandbox{root: root, bin: filepath.Join(root, "stub-bin"), curlLog: filepath.Join(root, "curl.log"), arch: "x86_64"}
-	for _, dir := range []string{s.bin, "opt", "usr/local/bin", "usr/share/applications", "run/lock", "etc"} {
+	realTar, err := exec.LookPath("tar")
+	Expect(err).NotTo(HaveOccurred())
+	s := &hookSandbox{root: root, bin: filepath.Join(root, "stub-bin"), curlLog: filepath.Join(root, "curl.log"), chownLog: filepath.Join(root, "chown.log"), arch: "x86_64"}
+	for _, dir := range []string{s.bin, "opt", "usr/local/bin", "usr/share/applications", "var/lib", "etc", "home"} {
 		Expect(os.MkdirAll(filepath.Join(root, strings.TrimPrefix(dir, root)), 0o755)).To(Succeed())
 	}
 	stubs := map[string]string{
 		// curl -fsSL --proto '=https' -o OUT URL
 		"curl":  "#!/bin/sh\nout=\"\"; url=\"\"\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=\"$2\"; shift ;; https://*) url=\"$1\" ;; esac; shift; done\necho \"$url\" >> \"$CURL_LOG\"\n[ -n \"$FIXTURE_TARBALL\" ] || exit 22\ncp \"$FIXTURE_TARBALL\" \"$out\"\n",
 		"uname": "#!/bin/sh\necho \"$STUB_ARCH\"\n",
-		"chown": "#!/bin/sh\nexit 0\n",
-		"id":    "#!/bin/sh\necho 1000\n",
-		"sudo":  "#!/bin/sh\nexec \"$@\"\n",
+		// Unprivileged chown cannot hand files to root; record the call.
+		"chown": "#!/bin/sh\necho \"$*\" >> \"$CHOWN_LOG\"\n",
+		// Keep the archive's modes regardless of umask, as root's tar does,
+		// so the specs see what chmod -R go-w has to fix.
+		"tar":  "#!/bin/sh\nexec " + realTar + " \"$@\" --preserve-permissions\n",
+		"id":   "#!/bin/sh\necho 1000\n",
+		"sudo": "#!/bin/sh\nexec \"$@\"\n",
 	}
 	for name, body := range stubs {
 		Expect(os.WriteFile(filepath.Join(s.bin, name), []byte(body), 0o755)).To(Succeed()) //nolint:gosec // test stubs must be executable
@@ -73,20 +87,32 @@ func (s *hookSandbox) path(p string) string { return filepath.Join(s.root, p) }
 
 // rewrite moves the system paths a hook touches under the sandbox root.
 func (s *hookSandbox) rewrite(script string) string {
-	for _, prefix := range []string{"/opt/", "/usr/local/bin/", "/usr/share/applications/", "/run/lock/", "/etc/os-release"} {
+	for _, prefix := range []string{"/opt/", "/usr/local/bin/", "/usr/share/applications/", "/var/lib/devex", "/etc/os-release"} {
 		script = strings.ReplaceAll(script, prefix, s.root+prefix)
+	}
+	// Every absolute path left must be inside the sandbox root.
+	for _, m := range absolutePath.FindAllStringSubmatch(script, -1) {
+		if !strings.HasPrefix(m[1], s.root) && m[1] != "/dev/null" {
+			Fail("hook path " + m[1] + " is not rewritten under the sandbox root")
+		}
 	}
 	return script
 }
 
+var absolutePath = regexp.MustCompile(`(?:^|[\s"'=(])(/[A-Za-z0-9._%-][A-Za-z0-9._%/-]*)`)
+
 func (s *hookSandbox) run(script string) (string, error) {
 	cmd := exec.CommandContext(context.Background(), "bash", "-c", s.rewrite(script))
-	cmd.Env = append(os.Environ(),
-		"PATH="+s.bin+":"+os.Getenv("PATH"),
-		"CURL_LOG="+s.curlLog,
-		"STUB_ARCH="+s.arch,
-		"FIXTURE_TARBALL="+s.tarball,
-	)
+	// A scrubbed environment: no BASH_ENV, and HOME inside the sandbox.
+	cmd.Env = []string{
+		"PATH=" + s.bin + ":/usr/bin:/bin",
+		"HOME=" + s.path("home"),
+		"LANG=C",
+		"CHOWN_LOG=" + s.chownLog,
+		"CURL_LOG=" + s.curlLog,
+		"STUB_ARCH=" + s.arch,
+		"FIXTURE_TARBALL=" + s.tarball,
+	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -176,6 +202,9 @@ var _ = Describe("AI Code Editors catalog hooks", func() {
 				launcher, err := os.Stat(filepath.Join(dir, "antigravity-ide"))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(launcher.Mode().Perm()&0o022).To(BeZero(), "group/world write must be stripped")
+				chowns, err := os.ReadFile(sandbox.chownLog)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(chowns)).To(MatchRegexp(`(?m)^-R root:root ` + regexp.QuoteMeta(sandbox.path("opt/.antigravity-ide.")) + `\S+$`))
 
 				target, err := os.Readlink(sandbox.path("usr/local/bin/antigravity-ide"))
 				Expect(err).NotTo(HaveOccurred())
@@ -240,6 +269,19 @@ var _ = Describe("AI Code Editors catalog hooks", func() {
 			Expect(sandbox.curlCalls()).To(BeEmpty())
 		})
 
+		It("makes uninstall wait for an install holding the lock", func() {
+			Expect(os.MkdirAll(sandbox.path("var/lib/devex"), 0o700)).To(Succeed())
+			lock := sandbox.path("var/lib/devex/antigravity-ide.lock")
+			holder := exec.CommandContext(context.Background(), "flock", lock, "sleep", "2")
+			Expect(holder.Start()).To(Succeed())
+			DeferCleanup(func() { _ = holder.Wait() })
+			Eventually(lock).Should(BeAnExistingFile())
+			start := time.Now()
+			out, err := sandbox.run(uninstall)
+			Expect(err).NotTo(HaveOccurred(), out)
+			Expect(time.Since(start)).To(BeNumerically(">=", time.Second), "uninstall must wait for the lock")
+		})
+
 		It("uninstalls only what it created and keeps a hand-made install's launcher", func() {
 			sum := sandbox.writeAntigravityTarball()
 			out, err := sandbox.run(withFixtureSum(install, sum))
@@ -274,6 +316,20 @@ var _ = Describe("AI Code Editors catalog hooks", func() {
 			Expect(app.Linux.Alternatives[0].PreInstall).To(HaveLen(1))
 			Expect(app.Linux.Alternatives[0].PreInstall[0].Shell).To(Equal(app.Linux.PreInstall[0].Shell), "both architectures must guard the same releases")
 		})
+
+		DescribeTable("picks the package for the architecture, whatever the release",
+			func(plat platform.DetectionResult, wantURL string) {
+				DeferCleanup(types.PinCatalogOSForTesting("linux"))
+				DeferCleanup(types.PinCatalogArchForTesting(plat.Architecture))
+				Expect(app.LinuxConfigForPlatform(plat).DownloadURL).To(Equal(wantURL))
+			},
+			Entry("Debian testing on arm64 (no VERSION_ID)", platform.DetectionResult{OS: "linux", Distribution: "debian", Architecture: "arm64"},
+				"https://prod.download.desktop.kiro.dev/releases/stable/linux-arm64/signed/1.4.154/deb/kiro-ide-1.4.154-stable-linux-arm64.deb"),
+			Entry("Ubuntu 24.04 on arm64", platform.DetectionResult{OS: "linux", Distribution: "ubuntu", DistributionLike: []string{"debian"}, Version: "24.04", Architecture: "arm64"},
+				"https://prod.download.desktop.kiro.dev/releases/stable/linux-arm64/signed/1.4.154/deb/kiro-ide-1.4.154-stable-linux-arm64.deb"),
+			Entry("Debian 13 on amd64", platform.DetectionResult{OS: "linux", Distribution: "debian", Version: "13", Architecture: "amd64"},
+				"https://prod.download.desktop.kiro.dev/releases/stable/linux-x64/signed/1.4.154/deb/kiro-ide-1.4.154-stable-linux-x64.deb"),
+		)
 
 		DescribeTable("guards the releases Kiro supports",
 			func(osRelease string, wantOK bool, wantMessage string) {
