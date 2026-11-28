@@ -707,6 +707,11 @@ func resourceMetadataWithRemovalHints(step templates.PlannedStep, declaration te
 	if _, exists := metadata["removal"]; exists {
 		return metadata
 	}
+	// A plugin-method app has no removal command to guess: its plugin's
+	// "remove" removes something else. Without a hint, removal is refused.
+	if step.App != nil && step.App.InstallMethod == types.InstallMethodPlugin {
+		return metadata
+	}
 	target := declaration.ExternalID
 	if target == "" {
 		target = declaration.Name
