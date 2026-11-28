@@ -165,6 +165,7 @@ func (d *DebInstaller) installDependencies(ctx context.Context, deps []missingDe
 				d.logger.Success("Successfully installed dependencies: %s", strings.Join(satisfyArgs[3:], ", "))
 				return nil
 			}
+			d.logger.Success("Successfully installed dependencies: %s", strings.Join(satisfyArgs[3:], ", "))
 			// Only the groups apt could not be handed whole remain.
 			names = dependencyNames(byName)
 		} else {
