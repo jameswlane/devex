@@ -8,7 +8,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
-	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/viper"
 )
 
@@ -75,35 +74,9 @@ func ValidateDefaultExclusions(settings config.CrossPlatformSettings, detectedPl
 	return err
 }
 
-// getMiseApp returns a CrossPlatformApp for mise installation. mise.run installs
-// into ~/.local/bin, so it runs as the user, never under sudo.
-func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
-	return &types.CrossPlatformApp{
-		Name:        "mise",
-		Description: "Development environment manager for programming languages",
-		Linux: types.OSConfig{
-			InstallMethod:   "curlpipe",
-			DownloadURL:     sdk.MiseInstallScriptURL,
-			InstallCommand:  "curl https://mise.run | sh",
-			InstallScope:    "user",
-			InstalledBinary: "mise",
-			Verification:    sdk.MiseInstallVerification(),
-		},
-		MacOS: types.OSConfig{
-			InstallMethod:   "curlpipe",
-			DownloadURL:     sdk.MiseInstallScriptURL,
-			InstallCommand:  "curl https://mise.run | sh",
-			InstallScope:    "user",
-			InstalledBinary: "mise",
-			Verification:    sdk.MiseInstallVerification(),
-		},
-		Windows: types.OSConfig{
-			InstallMethod:   "curlpipe",
-			DownloadURL:     "https://mise.run",
-			InstallCommand:  "curl https://mise.run | sh",
-			InstalledBinary: "mise",
-		},
-	}
+// languageAppName names the plan item that installs a language.
+func languageAppName(language string) string {
+	return fmt.Sprintf("mise-%s", strings.ToLower(strings.ReplaceAll(language, " ", "-")))
 }
 
 // getLanguageApps creates pseudo-apps for language installations via mise
@@ -150,7 +123,7 @@ func (m *SetupModel) getLanguageApps() []types.CrossPlatformApp {
 		}
 		if packageName, exists := langMap[lang]; exists {
 			app := types.CrossPlatformApp{
-				Name:        fmt.Sprintf("mise-%s", strings.ToLower(strings.ReplaceAll(lang, " ", "-"))),
+				Name:        languageAppName(lang),
 				Description: fmt.Sprintf("Install %s via mise", lang),
 				Linux: types.OSConfig{
 					InstallMethod:  "mise",

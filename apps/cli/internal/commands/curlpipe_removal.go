@@ -12,8 +12,11 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
+// validateCurlpipeRemoval refuses removal of a script or plugin-step install
+// with no uninstall_command: neither has a package to remove, and falling back
+// to the install command would run the installer again.
 func validateCurlpipeRemoval(app types.AppConfig) error {
-	if app.InstallMethod == "curlpipe" && strings.TrimSpace(app.UninstallCommand) == "" {
+	if (app.InstallMethod == "curlpipe" || app.InstallMethod == types.InstallMethodPlugin) && strings.TrimSpace(app.UninstallCommand) == "" {
 		return &sdk.ManualRemovalRequiredError{Applications: []string{app.Name}}
 	}
 	return nil

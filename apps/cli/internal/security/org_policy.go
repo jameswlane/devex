@@ -348,7 +348,7 @@ func (p *OrgPolicy) checkOSConfig(config types.OSConfig) error {
 	if err := p.checkRules(p.InstallMethods, "install_methods", config.InstallMethod); err != nil {
 		return err
 	}
-	if err := p.CheckPlugin("package-manager-" + config.InstallMethod); err != nil {
+	if err := p.CheckPlugin(types.InstallPluginName(config.InstallMethod, config.InstallCommand)); err != nil {
 		return err
 	}
 	for _, source := range appSources(config) {

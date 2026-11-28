@@ -2,6 +2,7 @@ package templates_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 type testAppResolver struct {
@@ -405,6 +407,65 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(plan.Steps[0].Request.Plugin).To(Equal("package-manager-apt"))
 		Expect(plan.Steps[0].Request.Args).To(Equal([]string{"git"}))
+	})
+
+	It("runs a plugin-method app ref as its own plugin step (#757)", func() {
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID:    "mise",
+				Order: 10,
+				App:   &templates.TemplateAppAction{Ref: "mise"},
+			},
+		}
+		planner := templates.TemplatePlanner{
+			Manager: manager,
+			AppResolver: testAppResolver{apps: map[string]*types.AppConfig{
+				"mise": {
+					BaseConfig:     types.BaseConfig{Name: "mise", Category: "development"},
+					InstallMethod:  types.InstallMethodPlugin,
+					InstallCommand: "package-manager-mise ensure-installed",
+				},
+			}},
+		}
+
+		plan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres"},
+				NonInteractive: true,
+			},
+		})
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(plan.Steps[0].Request.Plugin).To(Equal("package-manager-mise"))
+		Expect(plan.Steps[0].Request.Command).To(Equal("ensure-installed"))
+		Expect(plan.Steps[0].Request.Args).To(BeEmpty())
+	})
+
+	It("refuses to remove a plugin-method app through its app reference (#757)", func() {
+		spec.Lifecycle[templates.LifecycleRemove] = []templates.TemplateStepSpec{
+			{ID: "mise", Order: 10, App: &templates.TemplateAppAction{Ref: "mise", Command: "remove"}},
+		}
+		planner := templates.TemplatePlanner{
+			Manager: manager,
+			AppResolver: testAppResolver{apps: map[string]*types.AppConfig{
+				"mise": {
+					BaseConfig:       types.BaseConfig{Name: "mise", Category: "development"},
+					InstallMethod:    types.InstallMethodPlugin,
+					InstallCommand:   "package-manager-mise ensure-installed",
+					UninstallCommand: "tool-example teardown",
+				},
+			}},
+		}
+		_, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleRemove,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres"},
+				NonInteractive: true,
+			},
+		})
+		var manual *sdk.ManualRemovalRequiredError
+		Expect(errors.As(err, &manual)).To(BeTrue(), "%v", err)
 	})
 
 	It("rejects dangerous shell input after interpolation", func() {

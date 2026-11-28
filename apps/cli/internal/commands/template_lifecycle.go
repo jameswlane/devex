@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -16,6 +17,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 type templateLifecycleOptions struct {
@@ -184,7 +186,10 @@ func planTemplateLifecycle(ctx context.Context, planner templates.TemplatePlanne
 		}
 		return plan, nil
 	}
-	if action != templates.LifecycleRemove || len(resources) == 0 {
+	// A step the template can't remove is a refusal, not a reason to build a
+	// removal plan from recorded resources instead.
+	var manual *sdk.ManualRemovalRequiredError
+	if action != templates.LifecycleRemove || len(resources) == 0 || errors.As(err, &manual) {
 		return nil, err
 	}
 	synthesized, synthErr := synthesizeRemovePlanFromResources(selectedRun, resources, opts.Force)

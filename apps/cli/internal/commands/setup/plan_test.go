@@ -51,11 +51,18 @@ var _ = Describe("Install plan and Confirmation screen", func() {
 			},
 			selections: UISelections{selectedLangs: map[int]bool{0: true}},
 			repo:       mocks.NewMockRepository(),
-			settings: config.CrossPlatformSettings{ApplicationOverrides: []types.CrossPlatformApp{
-				aptDefault("bat"),
-				aptDefault("gh"),
-				{Name: "macos-only", Default: true, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "x"}},
-			}},
+			settings: config.CrossPlatformSettings{
+				ApplicationOverrides: []types.CrossPlatformApp{
+					aptDefault("bat"),
+					aptDefault("gh"),
+					{Name: "macos-only", Default: true, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "x"}},
+					miseCatalogEntry(),
+				},
+				ProgrammingLanguages: []types.CrossPlatformApp{
+					miseLanguage("Elixir", "elixir@latest", "Erlang"),
+					miseLanguage("Erlang", "erlang@latest", "mise"),
+				},
+			},
 		}
 	})
 

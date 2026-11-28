@@ -193,6 +193,21 @@ linux:
 
 Removing a pattern removes only the pattern itself, as `zypper remove -t pattern` does; the packages it installed stay. Install, removal and upgrade run with `--non-interactive`. A reboot that a package asks for is reported as a notice, not as a failure. In the plugin, `update` refreshes repository metadata (`zypper refresh`) and `upgrade` upgrades installed packages (`zypper update`).
 
+### Plugin steps
+
+`install_method: plugin` installs an app by running a plugin's own command. `install_command` is the plugin name followed by the command and its arguments. The shipped `mise` entry uses it:
+
+```yaml
+linux:
+  install_method: plugin
+  install_command: package-manager-mise ensure-installed
+  installed_binary: mise
+```
+
+Set `installed_binary` so `devex status` and `devex setup` can tell whether the app is already present. Removal needs an explicit `uninstall_command` in the same form; without one, DevEx reports that the app must be removed manually instead of running the install command again. When a plugin can preview a command, the `devex setup` Confirmation screen shows the changes it will make.
+
+`devex setup` adds these entries to its plan for you: when a selected language or AI agent lists one in `dependencies` (directly, or through a language it depends on), the entry is installed first and shown under "Required by your selections". For example, every language installed through mise lists `dependencies: [mise]`.
+
 ## Custom install hooks
 
 `pre_install` and `post_install` accept explicit `shell` scripts. Treat application YAML and any referenced scripts as trusted executable code: command validation is a pattern-based policy, not a shell sandbox. Both interactive and noninteractive installation validate the original script with the configured security level, global overrides, and the application's `app_overrides` before execution. A rejection names the application and points to `security.yaml`; review the hook first and use a narrowly scoped override only for code you trust.

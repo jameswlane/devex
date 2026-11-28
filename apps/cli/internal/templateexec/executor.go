@@ -707,6 +707,13 @@ func resourceMetadataWithRemovalHints(step templates.PlannedStep, declaration te
 	if _, exists := metadata["removal"]; exists {
 		return metadata
 	}
+	// Guess a removal only for an app its install method's own package
+	// manager installed. A plugin-method app (or one whose method a sensitive
+	// input redacted) has no removal to guess: without a hint, removal is
+	// refused.
+	if step.App != nil && (step.App.InstallMethod == types.InstallMethodPlugin || step.Request.Plugin != "package-manager-"+step.App.InstallMethod) {
+		return metadata
+	}
 	target := declaration.ExternalID
 	if target == "" {
 		target = declaration.Name

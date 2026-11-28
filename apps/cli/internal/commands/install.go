@@ -730,8 +730,11 @@ func previewInstallationWithRepo(ctx context.Context, apps []types.CrossPlatform
 		configfiles.Apply(ctx, app.Name, app.GetOSConfig().ConfigFiles, true, func(message string) { fmt.Fprintln(out, message) })
 
 		osConfig := app.GetOSConfig()
-		pluginName := "package-manager-" + osConfig.InstallMethod
+		pluginName := types.InstallPluginName(osConfig.InstallMethod, osConfig.InstallCommand)
 		installArgs := []string{"install"}
+		if osConfig.InstallMethod == types.InstallMethodPlugin {
+			_, installArgs, _ = types.ParsePluginCommand(osConfig.InstallCommand)
+		}
 		if osConfig.InstallMethod == "curlpipe" && osConfig.InstallScope == "user" {
 			installArgs = append(installArgs, "--user")
 		}

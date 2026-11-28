@@ -426,7 +426,7 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 			Method:         c.InstallMethod,
 			Channel:        app.SelectedChannel(),
 			Channels:       availablePlanChannels(app),
-			Plugin:         "package-manager-" + c.InstallMethod,
+			Plugin:         types.InstallPluginName(c.InstallMethod, c.InstallCommand),
 			Dependencies:   deps,
 			Effects:        effects,
 			Privileges:     "unknown",

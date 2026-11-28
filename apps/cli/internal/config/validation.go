@@ -109,6 +109,18 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 		v.addError(filename, platform+".install_scope", fmt.Sprintf("Unsupported install_scope %q (allowed: user)", osConfig.InstallScope), nil)
 	}
 
+	if osConfig.InstallMethod == types.InstallMethodPlugin {
+		if _, _, err := types.ParsePluginCommand(osConfig.InstallCommand); err != nil {
+			v.addError(filename, platform+".install_command", err.Error(), err)
+		}
+		if strings.TrimSpace(osConfig.UninstallCommand) != "" {
+			if _, _, err := types.ParsePluginCommand(osConfig.UninstallCommand); err != nil {
+				v.addError(filename, platform+".uninstall_command", err.Error(), err)
+			}
+		}
+		return
+	}
+
 	if osConfig.InstallCommand == "" && len(osConfig.Packages) == 0 && !osConfig.IsHookDrivenCurlpipe() && ((osConfig.InstallMethod != "curlpipe" && osConfig.InstallMethod != "appimage") || osConfig.DownloadURL == "") {
 		v.addError(filename, platform+".install_command", "Install command is required", nil)
 	}
