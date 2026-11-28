@@ -188,6 +188,7 @@ var _ = Describe("Curlpipe Validation", func() {
 				"get.docker.com",
 				"sh.rustup.rs",
 				"raw.githubusercontent.com",
+				"mise.run",
 				"claude.ai",
 				"opencode.ai",
 				"code.kimi.com",

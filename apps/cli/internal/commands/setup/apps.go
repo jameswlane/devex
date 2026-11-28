@@ -75,7 +75,8 @@ func ValidateDefaultExclusions(settings config.CrossPlatformSettings, detectedPl
 	return err
 }
 
-// getMiseApp returns a CrossPlatformApp for mise installation
+// getMiseApp returns a CrossPlatformApp for mise installation. mise.run installs
+// into ~/.local/bin, so it runs as the user, never under sudo.
 func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 	return &types.CrossPlatformApp{
 		Name:        "mise",
@@ -84,6 +85,7 @@ func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 			InstallMethod:   "curlpipe",
 			DownloadURL:     sdk.MiseInstallScriptURL,
 			InstallCommand:  "curl https://mise.run | sh",
+			InstallScope:    "user",
 			InstalledBinary: "mise",
 			Verification:    sdk.MiseInstallVerification(),
 		},
@@ -91,6 +93,7 @@ func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 			InstallMethod:   "curlpipe",
 			DownloadURL:     sdk.MiseInstallScriptURL,
 			InstallCommand:  "curl https://mise.run | sh",
+			InstallScope:    "user",
 			InstalledBinary: "mise",
 			Verification:    sdk.MiseInstallVerification(),
 		},

@@ -19,4 +19,10 @@ var _ = Describe("mise bootstrap verification", func() {
 			Expect(osConfig.verification).To(Equal(sdk.MiseInstallVerification()), osConfig.name)
 		}
 	})
+
+	It("installs mise for the user, not under sudo (#698)", func() {
+		app := (&SetupModel{}).getMiseApp()
+		Expect(app.Linux.InstallScope).To(Equal("user"))
+		Expect(app.MacOS.InstallScope).To(Equal("user"))
+	})
 })

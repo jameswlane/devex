@@ -14,6 +14,7 @@ var trustedDomains = []string{
 	"github.com",
 	"install.python-poetry.org",
 	"mise.jdx.dev",
+	"mise.run",
 	"get.helm.sh",
 	"install.k3s.io",
 	"get.k3s.io",

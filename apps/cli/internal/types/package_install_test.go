@@ -41,6 +41,16 @@ all_platforms:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(output)).To(Equal("--channel=" + literal + "\nnvim\n"))
 	})
+	It("adapts setup's docker run command to the docker plugin's install argv (#698)", func() {
+		request, err := types.ResolvePackageInstall("docker", "docker run -d --name postgres16 --restart unless-stopped -p 127.0.0.1:5432:5432 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16", nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(request.Packages).To(Equal([]string{"postgres:16"}))
+		Expect(request.Options).To(Equal([]string{"-d", "--name=postgres16", "--restart=unless-stopped", "-p=127.0.0.1:5432:5432", "-e=POSTGRES_HOST_AUTH_METHOD=trust"}))
+		_, err = types.ResolvePackageInstall("docker", "docker exec postgres16", nil, nil)
+		Expect(err).To(MatchError(ContainSubstring("manager executable requires")))
+		_, err = types.ResolvePackageInstall("docker", "docker run --privileged postgres:16", nil, nil)
+		Expect(err).To(MatchError(ContainSubstring("unsupported docker package option")))
+	})
 	It("passes a winget install scope as a plugin option", func() {
 		request, err := types.ResolvePackageInstall("winget", "winget install --scope machine Docker.DockerDesktop", nil, nil)
 		Expect(err).NotTo(HaveOccurred())
