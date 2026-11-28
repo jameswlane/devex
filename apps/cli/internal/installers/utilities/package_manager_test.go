@@ -82,10 +82,12 @@ var _ = Describe("PackageManagerCache", func() {
 				Expect(mockExec.Commands).To(ContainElement("sudo dnf check-update"))
 			})
 
-			It("executes update command for pacman", func() {
-				err := utilities.EnsurePackageManagerUpdated(ctx, "pacman", mockRepo, time.Hour)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(mockExec.Commands).To(ContainElement("sudo pacman -Sy"))
+			It("never refreshes pacman or yay databases without a full upgrade", func() {
+				for _, pm := range []string{"pacman", "yay"} {
+					err := utilities.EnsurePackageManagerUpdated(ctx, pm, mockRepo, time.Hour)
+					Expect(err).NotTo(HaveOccurred())
+				}
+				Expect(mockExec.Commands).To(BeEmpty())
 			})
 		})
 
@@ -230,7 +232,6 @@ var _ = Describe("PackageManagerCache", func() {
 			expectedCommands := []string{
 				"sudo apt-get update",
 				"sudo dnf check-update",
-				"sudo pacman -Sy",
 				"sudo zypper refresh",
 			}
 

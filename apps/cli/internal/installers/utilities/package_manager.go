@@ -130,6 +130,15 @@ func EnsurePackageManagerUpdated(ctx context.Context, packageManager string, rep
 		return fmt.Errorf("package manager validation failed (hint: use only supported package managers like apt, dnf, yum, pacman): %w", err)
 	}
 
+	// Arch is a rolling release that does not support partial upgrades.
+	// Refreshing the sync databases without upgrading (-Sy) and then installing
+	// can link a new package against libraries the system does not have yet,
+	// so installs use the current databases and only a full -Syu syncs them.
+	if packageManager == "pacman" || packageManager == "yay" {
+		log.Debug("Skipping standalone database refresh; Arch syncs only with a full -Syu upgrade", "packageManager", packageManager)
+		return nil
+	}
+
 	cache := GetPackageManagerCache(repo)
 
 	// Check if recently updated
@@ -149,8 +158,6 @@ func EnsurePackageManagerUpdated(ctx context.Context, packageManager string, rep
 		updateCmd = "sudo dnf check-update"
 	case "yum":
 		updateCmd = "sudo yum check-update"
-	case "pacman":
-		updateCmd = "sudo pacman -Sy"
 	case "zypper":
 		updateCmd = "sudo zypper refresh"
 	case "brew":
@@ -167,8 +174,6 @@ func EnsurePackageManagerUpdated(ctx context.Context, packageManager string, rep
 		updateCmd = "sudo snap refresh"
 	case "xbps":
 		updateCmd = "sudo xbps-install -S"
-	case "yay":
-		updateCmd = "yay -Sy"
 	default:
 		// For package managers that don't need updates (like pip, deb, rpm, appimage, etc.)
 		log.Debug("Package manager doesn't require cache updates", "packageManager", packageManager)

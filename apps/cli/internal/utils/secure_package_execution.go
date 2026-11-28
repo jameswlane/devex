@@ -233,14 +233,17 @@ func (s *SecurePackageInstaller) UpdatePackageCache(ctx context.Context, pm Secu
 
 	var cmd *exec.Cmd
 	switch pm {
+	case Pacman, YAY:
+		// Arch does not support partial upgrades: a standalone -Sy followed by
+		// an install can leave the system half-upgraded. Only a full -Syu
+		// upgrade syncs the databases.
+		return nil
 	case APT:
 		cmd = exec.CommandContext(timeoutCtx, "sudo", "apt-get", "update")
 	case DNF:
 		cmd = exec.CommandContext(timeoutCtx, "sudo", "dnf", "makecache")
 	case YUM:
 		cmd = exec.CommandContext(timeoutCtx, "sudo", "yum", "makecache")
-	case Pacman:
-		cmd = exec.CommandContext(timeoutCtx, "sudo", "pacman", "-Sy")
 	case Zypper:
 		cmd = exec.CommandContext(timeoutCtx, "sudo", "zypper", "refresh")
 	case Flatpak:
