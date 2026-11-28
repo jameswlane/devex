@@ -39,10 +39,13 @@ windows:
   dependencies:
     - docker
 linux:
+  # Upstream's script installs to ${DIR:-$HOME/.local/bin}, so it must run as
+  # the invoking user, not under sudo where $HOME is root's home.
   install_method: curlpipe
+  download_url: https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh
+  install_scope: user
   installed_binary: lazydocker
-  install_command: curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
-  uninstall_command: rm -f $HOME/.local/bin/lazydocker
+  uninstall_command: rm -f "$HOME/.local/bin/lazydocker"
   official_support: true
   system_requirements:
     docker_version: 20.10+
