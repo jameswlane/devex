@@ -74,6 +74,11 @@ func ValidateDefaultExclusions(settings config.CrossPlatformSettings, detectedPl
 	return err
 }
 
+// languageAppName names the plan item that installs a language.
+func languageAppName(language string) string {
+	return fmt.Sprintf("mise-%s", strings.ToLower(strings.ReplaceAll(language, " ", "-")))
+}
+
 // getLanguageApps creates pseudo-apps for language installations via mise
 func (m *SetupModel) getLanguageApps() []types.CrossPlatformApp {
 	var apps []types.CrossPlatformApp
@@ -118,7 +123,7 @@ func (m *SetupModel) getLanguageApps() []types.CrossPlatformApp {
 		}
 		if packageName, exists := langMap[lang]; exists {
 			app := types.CrossPlatformApp{
-				Name:        fmt.Sprintf("mise-%s", strings.ToLower(strings.ReplaceAll(lang, " ", "-"))),
+				Name:        languageAppName(lang),
 				Description: fmt.Sprintf("Install %s via mise", lang),
 				Linux: types.OSConfig{
 					InstallMethod:  "mise",

@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 type StepType string
@@ -434,8 +435,20 @@ func (p *TemplatePlanner) planAppStep(ctx context.Context, result PlannedStep, s
 		Metadata: interpolateAnyMap(action.Metadata, evalCtx),
 	}
 	if app.InstallMethod == types.InstallMethodPlugin {
-		// The app's install_command is the whole plugin step.
-		name, args, err := types.ParsePluginCommand(app.InstallCommand)
+		// The app's install_command (or uninstall_command for removal) is the
+		// whole plugin step.
+		step := app.InstallCommand
+		switch result.Request.Command {
+		case "install":
+		case "remove":
+			if strings.TrimSpace(app.UninstallCommand) == "" {
+				return result, &sdk.ManualRemovalRequiredError{Applications: []string{app.Name}}
+			}
+			step = app.UninstallCommand
+		default:
+			return result, fmt.Errorf("app %s installs through a plugin step and supports only the install and remove commands, not %q", app.Name, result.Request.Command)
+		}
+		name, args, err := types.ParsePluginCommand(step)
 		if err != nil {
 			return result, err
 		}

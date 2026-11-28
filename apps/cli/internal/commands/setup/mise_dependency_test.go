@@ -2,14 +2,17 @@ package setup
 
 import (
 	"context"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/scheduler"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -17,6 +20,7 @@ import (
 // miseCatalogEntry mirrors config/applications/development/mise.yaml.
 func miseCatalogEntry() types.CrossPlatformApp {
 	cfg := types.OSConfig{
+		Channel:         "curlpipe",
 		InstallMethod:   types.InstallMethodPlugin,
 		InstallCommand:  "package-manager-mise ensure-installed",
 		InstalledBinary: "mise",
@@ -110,6 +114,61 @@ var _ = Describe("Prerequisites declared in YAML dependencies (#757)", func() {
 		plan := model.installPlan()
 		Expect(planNames(plan)[0]).To(Equal("mise"))
 		Expect(plan[0].reason).To(Equal("languages: Go"))
+	})
+
+	It("keeps a mise that earlier setup installed with mise.run on the same channel", func() {
+		model = newModel([]types.CrossPlatformApp{miseLanguage("Go", "go@latest", "mise")}, miseCatalogEntry())
+		model.selections.selectedLangs[0] = true
+		record := func(cfg types.OSConfig) {
+			old := types.CrossPlatformApp{Name: "mise", Linux: cfg}
+			Expect(inventory.Record(context.Background(), model.repo, old, inventory.RecordOptions{
+				Query: func(context.Context, string, string) (bool, string, error) { return true, "2026.11.1", nil },
+			})).To(Succeed())
+		}
+
+		// The app getMiseApp() used to build.
+		record(types.OSConfig{InstallMethod: "curlpipe", DownloadURL: "https://mise.run", InstallCommand: "curl https://mise.run | sh", InstallScope: "user", InstalledBinary: "mise"})
+		plan := model.installPlan()
+		Expect(plan[0].app.Name).To(Equal("mise"))
+		Expect(plan[0].channelErr).NotTo(HaveOccurred())
+
+		// Any other recorded channel is still a refused switch.
+		record(types.OSConfig{InstallMethod: "apt", InstallCommand: "mise"})
+		Expect(model.installPlan()[0].channelErr).To(MatchError(ContainSubstring(`installed through channel "apt"`)))
+	})
+
+	It("makes the scheduler start mise's dependents only after mise", func() {
+		agent := types.CrossPlatformApp{Name: "Agent", Category: CategoryAICodingAgents, Linux: types.OSConfig{
+			InstallMethod: "mise", InstallCommand: "node@24 npm:agent@latest", Dependencies: []string{"Node.js"},
+		}}
+		model = newModel([]types.CrossPlatformApp{
+			miseLanguage("Elixir", "elixir@latest", "Erlang"),
+			miseLanguage("Erlang", "erlang@latest", "mise"),
+			miseLanguage("Node.js", "node@lts", "mise"),
+		}, miseCatalogEntry(), agent)
+		model.selections.selectedLangs[0] = true
+		model.selections.selectedAIAgents["Agent"] = true
+
+		dependsOn := map[string][]string{}
+		for _, task := range scheduler.Applications(planApps(model.installPlan()), nil) {
+			dependsOn[task.ID] = task.DependsOn
+		}
+		Expect(dependsOn).To(HaveKey("mise"))
+		Expect(dependsOn["mise"]).To(BeEmpty())
+		for _, dependent := range []string{"mise-erlang", "mise-elixir", "Agent"} {
+			Expect(dependsOn[dependent]).To(ContainElement("mise"), dependent)
+		}
+	})
+
+	It("finds catalog languages that a partial local configuration doesn't define", func() {
+		agent := types.CrossPlatformApp{Name: "Agent", Category: CategoryAICodingAgents, Linux: types.OSConfig{
+			InstallMethod: "mise", InstallCommand: "node@24 npm:agent@latest", Dependencies: []string{"Node.js"},
+		}}
+		node := miseLanguage("Node.js", "node@lts", "mise")
+		model = newModel([]types.CrossPlatformApp{miseLanguage("Go", "go@latest", "mise")}, miseCatalogEntry(), agent, node)
+		model.selections.selectedAIAgents["Agent"] = true
+
+		Expect(strings.Join(planNames(model.installPlan()), ",")).To(Equal("mise,Agent"))
 	})
 
 	It("never plans mise for a language config that installs another way", func() {

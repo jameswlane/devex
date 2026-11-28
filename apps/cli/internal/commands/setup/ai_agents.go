@@ -302,6 +302,7 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 		if entry, ok := selectedByKey[key]; ok {
 			app, prereqErr = entry.app, entry.err
 		}
+		app = withDependsOn(app, dependencies.prerequisitesOf(app.Name))
 		deps = append(deps, planItem{
 			app:        app,
 			group:      planDependency,
@@ -318,7 +319,8 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 			continue
 		}
 		existingNames[key] = true
-		selectedItems = append(selectedItems, planItem{app: entry.app, group: planSelected, channelErr: entry.err})
+		app := withDependsOn(entry.app, dependencies.prerequisitesOf(entry.app.Name))
+		selectedItems = append(selectedItems, planItem{app: app, group: planSelected, channelErr: entry.err})
 	}
 
 	return deps, selectedItems

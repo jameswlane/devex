@@ -55,7 +55,15 @@ func (m *SetupModel) installPlan() []planItem {
 			dependencies.add(language, m.languageDependencies(language))
 		}
 		plan = append(plan, dependencies.items("languages: ", existing)...)
+		languageByApp := make(map[string]string)
+		for _, language := range m.languageEntries() {
+			languageByApp[languageAppName(language.Name)] = language.Name
+		}
+		for _, language := range m.system.languages {
+			languageByApp[languageAppName(language)] = language
+		}
 		for _, app := range m.getLanguageApps() {
+			app = withDependsOn(app, dependencies.prerequisitesOf(languageByApp[app.Name]))
 			resolved, chErr := m.resolvePlanApp(app, false)
 			plan = append(plan, planItem{app: resolved, group: planSelected, channelErr: chErr})
 		}
