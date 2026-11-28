@@ -14,8 +14,10 @@ var _ = Describe("plugin install method in the streaming installer (#757)", func
 		original := runPluginCommand
 		DeferCleanup(func() { runPluginCommand = original })
 		var commands []string
-		runPluginCommand = func(_ context.Context, command string) error {
+		hasDeadline := false
+		runPluginCommand = func(ctx context.Context, command string) error {
 			commands = append(commands, command)
+			_, hasDeadline = ctx.Deadline()
 			return nil
 		}
 
@@ -25,5 +27,6 @@ var _ = Describe("plugin install method in the streaming installer (#757)", func
 
 		Expect(installer.executeInstallCommand(context.Background(), app, &cfg)).To(Succeed())
 		Expect(commands).To(Equal([]string{"package-manager-mise ensure-installed"}))
+		Expect(hasDeadline).To(BeTrue(), "the plugin step runs under the installation timeout")
 	})
 })

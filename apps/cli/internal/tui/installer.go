@@ -1089,7 +1089,13 @@ func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app typ
 		return si.executeMiseInstall(ctx, app, osConfig)
 	case types.InstallMethodPlugin:
 		si.sendLog("INFO", fmt.Sprintf("Installing %s by running %s", app.Name, osConfig.InstallCommand))
-		return runPluginCommand(ctx, osConfig.InstallCommand)
+		timeout := si.config.InstallationTimeout
+		if timeout <= 0 {
+			timeout = DefaultInstallerConfig().InstallationTimeout
+		}
+		pluginCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return runPluginCommand(pluginCtx, osConfig.InstallCommand)
 	case "dnf", "yum", "pacman", "zypper", "brew", "apk", "emerge", "eopkg", "flatpak", "snap", "xbps", "yay":
 		return si.executePackageManagerInstall(ctx, app, osConfig)
 	default:
