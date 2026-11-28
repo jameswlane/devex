@@ -84,7 +84,7 @@ chmod +x scripts/cli-docker-test-enhanced.sh
 | **Fedora** | `Dockerfile.fedora` | `fedora:39` | `dnf` | 2 | ✅ Active |
 | **Alpine** | `Dockerfile.alpine` | `alpine:3.19` | `apk` | 2 | ✅ Active |
 | **Red Hat** | `Dockerfile.redhat` | `ubi9/ubi:9.3` | `dnf` | 2 | ✅ Active |
-| **openSUSE** | `Dockerfile.suse` | `opensuse/leap:15.5` | `zypper` | 2 | ✅ Active |
+| **openSUSE** | `Dockerfile.suse` | `opensuse/leap:15.5` (end of life) | `zypper` | 2 | ❌ Legacy; CI uses `test/e2e/docker/Dockerfile.opensuse-*` |
 | **CentOS Stream** | `Dockerfile.centos-stream` | `centos:stream9` | `dnf` | 3 | ⚠️ Testing |
 | **Manjaro** | `Dockerfile.manjaro` | `manjarolinux/base` | `pacman` | 3 | ⚠️ Testing |
 

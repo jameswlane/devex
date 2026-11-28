@@ -44,14 +44,15 @@ var prepareAptSources = tui.PrepareAptSources
 // Query the native manager rather than trusting a potentially stale tracking row.
 var nativeApplicationInstalled = func(ctx context.Context, app types.CrossPlatformApp) (bool, error) {
 	cfg := app.GetOSConfig()
-	if cfg.InstallMethod != "apt" && cfg.InstallMethod != "dnf" {
+	if cfg.InstallMethod != "apt" && cfg.InstallMethod != "dnf" && cfg.InstallMethod != "zypper" {
 		return false, nil
 	}
 	installer := installers.GetInstaller(ctx, cfg.InstallMethod)
 	if installer == nil {
 		return false, fmt.Errorf("no installer for %s", cfg.InstallMethod)
 	}
-	return installer.IsInstalled(cfg.InstallCommand)
+	// Query what status queries: structured packages and the selected kind.
+	return installer.IsInstalled(app.ToLegacyAppConfig().PackageQueryCommand())
 }
 
 func initializeApplicationInstallers(ctx context.Context, provider pluginBootstrapProvider) error {

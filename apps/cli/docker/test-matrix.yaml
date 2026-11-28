@@ -70,7 +70,9 @@ distributions:
     family: "suse"
     dockerfile: "Dockerfile.suse"
     priority: 2
-    ci_enabled: true
+    # Leap 15.5 is end of life. Maintained openSUSE CI coverage lives in
+    # test/e2e/docker/Dockerfile.opensuse-{tumbleweed,leap-16.0}.
+    ci_enabled: false
   alpine:
     name: "Alpine Linux"
     versions: ["3.19", "3.18"]
@@ -159,7 +161,7 @@ ci_pipelines:
       - "push"
       - "merge_requests"
     matrix_strategy:
-      include_distros: ["debian", "ubuntu", "redhat", "suse"]
+      include_distros: ["debian", "ubuntu", "redhat"]
       parallel_jobs: 4
 # Test scenarios
 test_scenarios:

@@ -117,7 +117,8 @@ tasks:
       - go generate ./...
   # === END-TO-END (CONTAINER SANDBOX) ===
   e2e:docker:
-    desc: Run the e2e suite in a container sandbox (DISTRO=ubuntu-24.04|debian-12|fedora-44|centos-stream-9)
+    # DISTRO: ubuntu-24.04, debian-12, fedora-44, centos-stream-9, opensuse-tumbleweed or opensuse-leap-16.0.
+    desc: Run the e2e suite in a container sandbox (DISTRO=<name> of a test/e2e/docker/Dockerfile.<name>)
     vars:
       DISTRO: '{{.DISTRO | default "ubuntu-24.04"}}'
     cmds:
@@ -134,6 +135,10 @@ tasks:
         vars: {DISTRO: fedora-44}
       - task: e2e:docker
         vars: {DISTRO: centos-stream-9}
+      - task: e2e:docker
+        vars: {DISTRO: opensuse-tumbleweed}
+      - task: e2e:docker
+        vars: {DISTRO: opensuse-leap-16.0}
   # === DESKTOP VIRTUAL MACHINES ===
   e2e:vm:
     desc: Run desktop setup in a disposable KVM virtual machine (DISTRO=ubuntu-24.04|debian-12, DESKTOP=gnome|kde)
