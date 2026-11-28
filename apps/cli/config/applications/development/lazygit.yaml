@@ -50,13 +50,34 @@ linux:
   official_support: true
   # Upstream documents the release tarball for Debian/Ubuntu releases that do
   # not package lazygit; other distros use their alternative below, and an
-  # unmatched distro falls back to this entry.
+  # unmatched distro falls back to this entry. arm64 hosts use the arm64
+  # tarball alternative that follows.
   platform_requirements:
     - os: debian
       version: <13
+      arch: amd64
     - os: ubuntu
       version: <25.10
+      arch: amd64
   alternatives:
+    - install_method: curlpipe
+      installed_binary: lazygit
+      download_url: https://github.com/jesseduffield/lazygit/releases/download/v0.66.3/lazygit_0.66.3_linux_arm64.tar.gz
+      destination: /usr/local/bin
+      verification:
+        sha256: ac0b48237f3d0283813e7154ec063237e519532feb0470c0881a1793ee78fd42
+      official_support: true
+      platform_requirements:
+        - os: debian
+          version: <13
+          arch: arm64
+        - os: ubuntu
+          version: <25.10
+          arch: arm64
+      system_requirements:
+        git_version: '>=2.0'
+        required_commands:
+          - git
     - install_method: apt
       install_command: lazygit
       uninstall_command: lazygit
