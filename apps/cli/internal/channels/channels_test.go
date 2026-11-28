@@ -305,6 +305,25 @@ var _ = Describe("Channel resolution", func() {
 			Expect(definition.GetOSConfig().InstallCommand).To(Equal("old-git"))
 		})
 
+		It("fills a destination the catalog added after the saved definition was recorded (#653)", func() {
+			agent := func(destination string) types.CrossPlatformApp {
+				return types.CrossPlatformApp{Name: "Agent", Linux: types.OSConfig{
+					InstallMethod: "curlpipe", DownloadURL: "https://example.com/install.sh",
+					InstalledBinary: "agent", Destination: destination, OfficialSupport: true,
+				}}
+			}
+			repo := mocks.NewMockRepository()
+			data, err := json.Marshal(agent(""))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.Set("installed-app-definition:agent", string(data))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Agent"), `{"manager":"curlpipe","channel":"curlpipe"}`)).To(Succeed())
+
+			definition, found, err := channels.StatusDefinition(repo, agent("~/.agent/bin"), true, "Agent")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(definition.GetOSConfig().Destination).To(Equal("~/.agent/bin"))
+		})
+
 		It("reports a recorded channel that neither the saved definition nor the catalog has as unresolved (M4)", func() {
 			repo := mocks.NewMockRepository()
 			data, err := json.Marshal(newGit())

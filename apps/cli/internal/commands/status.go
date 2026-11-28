@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -94,13 +95,7 @@ Warnings go to stderr, so --format json|yaml output on stdout stays parseable.`,
 				if ctx == nil {
 					ctx = context.Background()
 				}
-				results, err := agentapi.Status(ctx, settings, repo, agentapi.StatusRequest{Names: apps, Category: category}, func(ctx context.Context, app types.AppConfig) (bool, error) {
-					installer := installers.GetInstaller(ctx, app.InstallMethod)
-					if installer == nil {
-						return false, &agentapi.Error{Category: "unsupported", Message: "local plugin runtime unavailable"}
-					}
-					return installer.IsInstalled(app.PackageQueryCommand())
-				})
+				results, err := agentapi.Status(ctx, settings, repo, agentapi.StatusRequest{Names: apps, Category: category}, probeAppInstalled)
 				if format == "json" {
 					if len(results) == 0 && err != nil && agentapi.APIError(err).Category != "not_found" {
 						return writeAPIJSON(cmd, nil, err)
@@ -237,8 +232,8 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 		}
 
 		// Attempt fixes if requested; nothing can be repaired on a channel
-		// DevEx cannot resolve.
-		if fix && reason == "" && len(appStatus.Issues) > 0 {
+		// DevEx cannot resolve or for an app whose state it cannot check.
+		if fix && reason == "" && appStatus.Status != "unknown" && len(appStatus.Issues) > 0 {
 			attemptFixes(ctx, &app, &appStatus, settings)
 		}
 
@@ -361,6 +356,28 @@ func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSetti
 	return resolved
 }
 
+// probeAppInstalled reports whether app is installed. Methods whose plugin
+// has no package-specific installed query (curlpipe, for example) are
+// answered by looking up the declared installed_binary; without one the state
+// is unknown, reported as an "unsupported" error rather than as installed.
+func probeAppInstalled(ctx context.Context, app types.AppConfig) (bool, error) {
+	if !installers.HasInstalledQuery(app.InstallMethod) {
+		if app.InstalledBinary != "" {
+			return installers.AppBinaryInstalled(app), nil
+		}
+		return false, &agentapi.Error{Category: "unsupported", Message: noInstalledCheckMessage(app.InstallMethod)}
+	}
+	installer := installers.GetInstaller(ctx, app.InstallMethod)
+	if installer == nil {
+		return false, &agentapi.Error{Category: "unsupported", Message: fmt.Sprintf("No installer available for install method %q; check that its package-manager plugin is installed", app.InstallMethod)}
+	}
+	return installer.IsInstalled(app.PackageQueryCommand())
+}
+
+func noInstalledCheckMessage(method string) string {
+	return fmt.Sprintf("Install method %q has no installed-state check and the application declares no installed_binary", method)
+}
+
 func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.CrossPlatformSettings, verbose bool) status.AppStatus {
 	appStatus := status.AppStatus{
 		Name:          app.Name,
@@ -378,14 +395,13 @@ func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.C
 		return appStatus
 	}
 
-	installer := installers.GetInstaller(ctx, app.InstallMethod)
-	if installer == nil {
+	installed, err := probeAppInstalled(ctx, *app)
+	var unchecked *agentapi.Error
+	if errors.As(err, &unchecked) && unchecked.Category == "unsupported" {
 		appStatus.Status = "unknown"
-		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("No installer available for install method %q; check that its package-manager plugin is installed", app.InstallMethod))
+		appStatus.Issues = append(appStatus.Issues, unchecked.Message)
 		return appStatus
 	}
-
-	installed, err := installer.IsInstalled(app.PackageQueryCommand())
 	if err != nil {
 		appStatus.Status = "error"
 		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Failed to check installation: %v", err))

@@ -2,13 +2,10 @@ package tui
 
 import (
 	"context"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"sync"
 
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -23,7 +20,7 @@ func InstalledApps(ctx context.Context, apps []types.CrossPlatformApp) map[strin
 	for _, app := range apps {
 		cfg := app.GetOSConfig()
 		if cfg.InstalledBinary != "" {
-			if binaryInstalled(cfg) {
+			if installers.BinaryInstalled(cfg) {
 				mu.Lock()
 				result[app.Name] = true
 				mu.Unlock()
@@ -63,71 +60,4 @@ func InstalledApps(ctx context.Context, apps []types.CrossPlatformApp) map[strin
 	}
 	wg.Wait()
 	return result
-}
-
-// binaryInstalled reports whether an app's declared executable already exists,
-// on PATH or in the directories script installers commonly use but a setup
-// shell may not have on PATH yet (~/.local/bin, ~/bin, the app's destination
-// and its declared path entries).
-func binaryInstalled(cfg types.OSConfig) bool {
-	name := cfg.InstalledBinary
-	if strings.ContainsAny(name, `/\`) {
-		return isExecutable(name)
-	}
-	if _, err := exec.LookPath(name); err == nil {
-		return true
-	}
-	var dirs []string
-	if home, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(home, ".local", "bin"), filepath.Join(home, "bin"))
-	}
-	if cfg.Destination != "" {
-		dirs = append(dirs, expandHome(cfg.Destination))
-	}
-	for _, step := range cfg.PostInstall {
-		for _, dir := range step.Path {
-			dirs = append(dirs, expandHome(dir))
-		}
-	}
-	for _, dir := range dirs {
-		if hasExecutableInDir(dir, name) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasExecutableInDir(dir, name string) bool {
-	if isExecutable(filepath.Join(dir, name)) {
-		return true
-	}
-	if runtime.GOOS == "windows" && filepath.Ext(name) == "" {
-		for _, ext := range []string{".exe", ".cmd", ".bat", ".com"} {
-			if isExecutable(filepath.Join(dir, name+ext)) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func isExecutable(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		ext := strings.ToLower(filepath.Ext(path))
-		return ext == ".exe" || ext == ".cmd" || ext == ".bat" || ext == ".com"
-	}
-	return info.Mode().Perm()&0o111 != 0
-}
-
-func expandHome(path string) string {
-	if rest, ok := strings.CutPrefix(path, "~/"); ok {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, rest)
-		}
-	}
-	return path
 }

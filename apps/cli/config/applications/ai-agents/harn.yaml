@@ -17,6 +17,8 @@ macos:
   download_url: https://harnlang.com/install.sh
   install_scope: user
   installed_binary: harn
+  # Where the install script puts the binary, so status finds it before PATH is reloaded.
+  destination: ~/.harn/bin
   self_updating: false
   # The installer picks one directory: $XDG_BIN_DIR, else ~/bin or ~/.local/bin
   # (the first that exists and is on PATH), else ~/.harn/bin. post_install
@@ -64,6 +66,8 @@ linux:
   download_url: https://harnlang.com/install.sh
   install_scope: user
   installed_binary: harn
+  # Where the install script puts the binary, so status finds it before PATH is reloaded.
+  destination: ~/.harn/bin
   self_updating: false
   # The installer picks one directory: $XDG_BIN_DIR, else ~/bin or ~/.local/bin
   # (the first that exists and is on PATH), else ~/.harn/bin. post_install

@@ -300,6 +300,7 @@ func CrossPlatformAppFromLegacy(legacy types.AppConfig) types.CrossPlatformApp {
 			DownloadURL:        legacy.DownloadURL,
 			Verification:       legacy.Verification,
 			Destination:        legacy.InstallDir,
+			InstalledBinary:    legacy.InstalledBinary,
 		},
 	}
 }
