@@ -573,17 +573,13 @@ func (app *CrossPlatformApp) LinuxConfigForPlatform(detected platform.DetectionR
 	if len(app.Linux.PlatformRequirements) == 0 {
 		return app.Linux
 	}
-	ids := append([]string{detected.Distribution}, detected.DistributionLike...)
-	ids = append(ids, "linux")
-	for _, id := range ids {
-		if app.Linux.matchesLinuxRequirement(id, detected) {
-			return app.Linux
-		}
+	if app.Linux.matchesLinuxPlatform(detected) {
+		return app.Linux
 	}
 	// Exact ID wins over ID_LIKE; os-release orders related IDs by proximity.
-	for _, id := range ids {
+	for _, id := range linuxRequirementIDs(detected) {
 		for _, alternative := range app.Linux.Alternatives {
-			if alternative.matchesLinuxRequirement(id, detected) {
+			if alternative.matchesRequirement(id, detected) {
 				return alternative
 			}
 		}
@@ -591,7 +587,27 @@ func (app *CrossPlatformApp) LinuxConfigForPlatform(detected platform.DetectionR
 	return app.Linux
 }
 
-func (config OSConfig) matchesLinuxRequirement(id string, detected platform.DetectionResult) bool {
+// linuxRequirementIDs lists the IDs a Linux requirement may name, nearest first:
+// the detected ID, its os-release ID_LIKE parents, then generic "linux".
+func linuxRequirementIDs(detected platform.DetectionResult) []string {
+	ids := append([]string{detected.Distribution}, detected.DistributionLike...)
+	return append(ids, "linux")
+}
+
+// matchesLinuxPlatform reports whether any requirement matches the detected
+// distribution (or an ID_LIKE parent), version and architecture.
+func (config OSConfig) matchesLinuxPlatform(detected platform.DetectionResult) bool {
+	for _, id := range linuxRequirementIDs(detected) {
+		if config.matchesRequirement(id, detected) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesRequirement reports whether a requirement names id and admits the
+// detected version and architecture.
+func (config OSConfig) matchesRequirement(id string, detected platform.DetectionResult) bool {
 	if id == "" {
 		return false
 	}
@@ -724,33 +740,12 @@ func (app *CrossPlatformApp) IsCompatibleWithDesktopEnvironment(desktopEnv strin
 	return false
 }
 
-// IsPlatformSupported checks if the current platform meets the requirements
+// IsPlatformSupported reports whether the detected platform meets the
+// requirements. On Linux, each requirement is checked against the detected
+// distribution and its ID_LIKE parents, version and architecture, so an Arch
+// rule never matches Debian, Ubuntu or Fedora.
 func (config *OSConfig) IsPlatformSupported() bool {
-	// If no platform requirements specified, assume supported
-	if len(config.PlatformRequirements) == 0 {
-		return true
-	}
-
-	// Get current platform info
-	currentOS := catalogOS
-	// TODO: Add platform detection for version and arch
-	// For now, we'll implement basic OS matching
-
-	for _, req := range config.PlatformRequirements {
-		if req.OS == currentOS {
-			// For now, if OS matches, we consider it supported
-			// Later we can add version checking logic
-			return true
-		}
-		// Handle Linux distribution mapping
-		if currentOS == "linux" && (req.OS == "debian" || req.OS == "ubuntu" || req.OS == "fedora" || req.OS == "arch" || req.OS == "gentoo" || req.OS == "opensuse" || req.OS == "void" || req.OS == "alpine") {
-			// TODO: Add actual distribution detection
-			// For now, assume any Linux matches any Linux distro requirement
-			return true
-		}
-	}
-
-	return false
+	return config.meetsPlatformRequirements()
 }
 
 // GetBestOSConfig returns the best matching OS configuration based on platform requirements

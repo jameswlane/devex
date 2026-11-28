@@ -341,8 +341,9 @@ devex config set variables.nodejs_version "${NODEJS_VERSION}"
     
     **Pacman Issues (Arch):**
     ```bash
-    # Update package database
-    sudo pacman -Sy
+    # Sync the databases and upgrade the whole system
+    # (never run "pacman -Sy" alone: Arch doesn't support partial upgrades)
+    sudo pacman -Syu
     
     # Fix keyring issues
     sudo pacman-key --refresh-keys

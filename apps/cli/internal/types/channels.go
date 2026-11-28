@@ -102,23 +102,20 @@ func isChannelAvailable(cfg OSConfig) bool {
 	if strings.TrimSpace(cfg.InstallMethod) == "" {
 		return false
 	}
-	if len(cfg.PlatformRequirements) == 0 {
+	return cfg.meetsPlatformRequirements()
+}
+
+// meetsPlatformRequirements reports whether the detected platform satisfies
+// any of config's platform requirements. On Linux it checks the detected
+// distribution and its ID_LIKE parents, version and architecture.
+func (config OSConfig) meetsPlatformRequirements() bool {
+	if len(config.PlatformRequirements) == 0 {
 		return true
 	}
 	if catalogOS == "linux" {
-		detected := currentCatalogPlatform()
-		ids := make([]string, 0, len(detected.DistributionLike)+2)
-		ids = append(ids, detected.Distribution)
-		ids = append(ids, detected.DistributionLike...)
-		ids = append(ids, "linux")
-		for _, id := range ids {
-			if cfg.matchesLinuxRequirement(id, detected) {
-				return true
-			}
-		}
-		return false
+		return config.matchesLinuxPlatform(currentCatalogPlatform())
 	}
-	for _, req := range cfg.PlatformRequirements {
+	for _, req := range config.PlatformRequirements {
 		osMatch := req.OS == "" ||
 			strings.EqualFold(req.OS, catalogOS) ||
 			(catalogOS == "darwin" && strings.EqualFold(req.OS, "macos"))

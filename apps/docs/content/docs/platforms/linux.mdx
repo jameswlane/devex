@@ -53,6 +53,21 @@ separate from those command tests.
 | Alpine / Gentoo / Void / Solus / Nix | APK / Emerge / XBPS / Eopkg / Nix | [Native command audit #187](https://github.com/jameswlane/devex/issues/187) |
 | Legacy RHEL | YUM (planned; no plugin) | [Plugin #104](https://github.com/jameswlane/devex/issues/104) |
 
+### Arch-based distributions
+
+A catalog entry's `platform_requirements` are matched against the detected
+system: its `/etc/os-release` `ID`, the parents listed in `ID_LIKE` (nearest
+first), the `VERSION_ID` and the CPU architecture. An `os: arch` rule matches
+Arch, and also Manjaro and EndeavourOS (`ID_LIKE=arch`). It never matches
+Debian, Ubuntu or Fedora.
+
+Arch is a rolling release and doesn't support partial upgrades. DevEx never
+runs a standalone `pacman -Sy` or `yay -Sy`: installs use the package
+databases already on the system, and only a full upgrade (`pacman -Syu`,
+the Pacman and Yay plugins' `update` command) syncs them. If an install fails
+because a package file is gone from the mirror, upgrade the system first, then
+retry the install.
+
 Testing or implementation on these systems is deferred to the linked work;
 Debian/Ubuntu validation does not verify their behavior. See the
 [support matrix](/platforms) for optional managers and package-file methods.
