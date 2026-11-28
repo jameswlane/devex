@@ -129,7 +129,59 @@ linux:
     - fzf
   post_install:
     - path: [/opt/nvim-linux-x86_64/bin]
+  # arm64 hosts use the arm64 archive alternative that follows; it lists
+  # Debian and Ubuntu so their apt alternative does not take precedence.
+  platform_requirements:
+    - os: linux
+      arch: amd64
   alternatives:
+    - install_method: curlpipe
+      installed_binary: nvim
+      download_url: https://github.com/neovim/neovim/releases/download/v0.12.6/nvim-linux-arm64.tar.gz
+      destination: /opt
+      verification:
+        sha256: 8f1f64a0bdb97247034038c3823c6cbad5bdf9ecd5751b85494b71c3ee04c815
+      official_support: true
+      platform_requirements:
+        - os: debian
+          arch: arm64
+        - os: ubuntu
+          arch: arm64
+        - os: linux
+          arch: arm64
+      dependencies:
+        - git
+        - curl
+        - fzf
+      post_install:
+        - path: [/opt/nvim-linux-arm64/bin]
+      config_files:
+        - source: ~/.local/share/devex/assets/defaults/neovim/transparency.lua
+          destination: ~/.config/nvim/plugin/after/transparency.lua
+          requires_any:
+            - ~/.config/nvim/init.lua
+            - ~/.config/nvim/init.vim
+            - ~/.config/nvim/lua/config/lazy.lua
+            - ~/.config/nvim/lazy-lock.json
+        - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
+          destination: ~/.config/nvim/lazyvim.json
+          requires_any:
+            - ~/.config/nvim/lua/config/lazy.lua
+            - ~/.config/nvim/lazy-lock.json
+      system_requirements:
+        required_commands:
+          - git
+          - curl
+      themes:
+        - name: Tokyo Night
+          theme_color: '#1A1B26'
+          theme_background: dark
+          files:
+            - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
+              destination: ~/.config/nvim/lua/plugins/theme.lua
+              requires_any:
+                - ~/.config/nvim/lua/config/lazy.lua
+                - ~/.config/nvim/lazy-lock.json
     - install_method: apt
       install_command: neovim
       uninstall_command: neovim
