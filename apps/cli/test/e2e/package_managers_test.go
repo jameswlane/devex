@@ -40,6 +40,7 @@ var packageManagerCases = []packageManagerCase{
 		verifyRemoved:   dpkgRemoved("jq", "jq"),
 	},
 	{method: "dnf", distros: []string{"fedora-44", "centos-9"}, fixture: "dnf-jq.yaml", pkg: "jq", verifyInstalled: rpmInstalled("jq"), verifyRemoved: rpmRemoved("jq")},
+	{method: "zypper", distros: []string{"opensuse-tumbleweed", "opensuse-leap-16.0"}, fixture: "zypper-jq.yaml", pkg: "jq", verifyInstalled: rpmInstalled("jq"), verifyRemoved: rpmRemoved("jq")},
 }
 
 // The install timeout covers apt-get update plus the download on a slow mirror.
@@ -230,7 +231,12 @@ func installedApps(home, config string) []string {
 	return names
 }
 
+// currentDistro names the sandbox like its Dockerfile. Rolling releases have
+// a snapshot VERSION_ID, so they are named by ID alone.
 func currentDistro() string {
+	if id := osRelease("ID"); id == "opensuse-tumbleweed" {
+		return id
+	}
 	return osRelease("ID") + "-" + osRelease("VERSION_ID")
 }
 

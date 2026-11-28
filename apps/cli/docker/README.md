@@ -30,7 +30,7 @@ This directory contains a comprehensive Docker testing framework for the DevEx C
 | **Fedora** | `fedora:39` | `dnf` | 2 | ✅ |
 | **Alpine** | `alpine:3.19` | `apk` | 2 | ✅ |
 | **Red Hat** | `ubi9/ubi:9.3` | `dnf` | 2 | ✅ |
-| **openSUSE** | `opensuse/leap:15.5` | `zypper` | 2 | ✅ |
+| **openSUSE** | `opensuse/leap:15.5` (end of life) | `zypper` | 2 | ❌ Legacy; CI uses `test/e2e/docker/Dockerfile.opensuse-*` |
 | **CentOS Stream** | `centos:stream9` | `dnf` | 3 | ⚠️ |
 | **Manjaro** | `manjarolinux/base` | `pacman` | 3 | ⚠️ |
 

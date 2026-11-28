@@ -23,7 +23,7 @@ var _ = Describe("Startup dependency checks", func() {
 		_, output, err := sandbox.runWithStderr(home, sandbox.binary, 30*time.Second, map[string]string{"PATH": pathWithout("unzip")}, "status", "--no-tui")
 		Expect(err).To(HaveOccurred(), "the CLI must refuse to start without unzip:\n%s", output)
 		Expect(output).To(ContainSubstring("missing dependency: unzip"), "the error must name the missing tool")
-		Expect(output).To(MatchRegexp(`(apt-get|dnf) install`), "the error must say how to install it")
+		Expect(output).To(MatchRegexp(`(apt-get|dnf|zypper) install`), "the error must say how to install it")
 		if legacyWarning {
 			Expect(output).To(ContainSubstring("Warning: legacy migration skipped"), "migration warnings must not hide dependency diagnostics")
 		}

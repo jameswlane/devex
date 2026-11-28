@@ -10,6 +10,7 @@
 #
 # Environment:
 #   DISTRO                  ubuntu-24.04 (default) | debian-12 | fedora-44 | centos-stream-9
+#                           | opensuse-tumbleweed | opensuse-leap-16.0
 #   CONTAINER_ENGINE        docker | podman (default: whichever is found first)
 #   E2E_DRY_RUN=1           print the engine commands instead of running them
 #   E2E_DEVEX_BINARY        prebuilt linux devex binary to test instead of building one
@@ -132,7 +133,10 @@ build_binaries() {
 	mkdir -p "$context/testdata/plugins"
 	if [[ -z "${E2E_DEVEX_BINARY:-}" ]]; then
 		local methods=(apt)
-		case "$DISTRO" in fedora-* | centos-stream-*) methods=(dnf rpm) ;; esac
+		case "$DISTRO" in
+		fedora-* | centos-stream-*) methods=(dnf rpm) ;;
+		opensuse-*) methods=(zypper) ;;
+		esac
 		local method
 		for method in "${methods[@]}"; do
 			log "building package-manager-$method from source (linux/$goarch)"

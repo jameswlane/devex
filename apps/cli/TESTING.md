@@ -17,7 +17,7 @@ This runs the Ginkgo unit test suites recursively. Use `task test:short` to skip
 
 ## End-to-end tests
 
-The Ginkgo v2 end-to-end suite lives in `test/e2e`. It exercises the real CLI in a disposable Ubuntu, Debian, Fedora or CentOS Stream container with an empty home directory, including setup, plugin downloads and registry checksums, desktop-specific plugin selection, and optional package installation and removal. The suite refuses to run outside its sandbox because it changes `$HOME` and destructive specs use sudo.
+The Ginkgo v2 end-to-end suite lives in `test/e2e`. It exercises the real CLI in a disposable Ubuntu, Debian, Fedora, CentOS Stream or openSUSE container with an empty home directory, including setup, plugin downloads and registry checksums, desktop-specific plugin selection, and optional package installation and removal. The suite refuses to run outside its sandbox because it changes `$HOME` and destructive specs use sudo.
 
 ### Run with Docker
 
@@ -26,6 +26,8 @@ task e2e:docker DISTRO=ubuntu-24.04
 task e2e:docker DISTRO=debian-12
 task e2e:docker DISTRO=fedora-44
 task e2e:docker DISTRO=centos-stream-9
+task e2e:docker DISTRO=opensuse-tumbleweed
+task e2e:docker DISTRO=opensuse-leap-16.0
 ```
 
 The runner builds the CLI and test binary, creates the sandbox, and executes the suite with verbose Ginkgo output and a JUnit report. CI enables destructive specs because every container is throwaway; local runs skip them unless explicitly enabled.
@@ -157,7 +159,7 @@ repositories. The older `docker/Dockerfile.{fedora,redhat,centos-stream}`
 fixtures are separate from this runner.
 
 Source CLI runs also rebuild the target's native package-manager plugin
-(APT on Ubuntu/Debian, DNF on Fedora/CentOS) from this checkout, including
+(APT on Ubuntu/Debian, DNF and RPM on Fedora/CentOS, Zypper on openSUSE) from this checkout, including
 plugin-sdk changes. The suite exposes that binary and its SHA256 through a
 loopback registry overlay, forwarding other plugin requests to the selected
 registry. CLI download verification remains active. This always-build policy
@@ -182,8 +184,8 @@ only after querying the package manager; stale tracking triggers installation
 and query failures fail the command. Existing non-native install flows retain
 their normal behavior.
 
-The CI manual `distro` input and reusable workflow accept both new target
-names, or `all`. Destructive specs default to enabled in CI. `runner.log`
+The CI manual `distro` input and reusable workflow accept every target
+name, or `all`. Destructive specs default to enabled in CI. `runner.log`
 captures build and suite output, including failures before JUnit can be
 created; command transcripts, failure state and `junit.xml` are uploaded by
 the existing always-run artifact step. To lint these build-tagged specs, use
@@ -191,3 +193,30 @@ the existing always-run artifact step. To lint these build-tagged specs, use
 suite. A quick registry-overlay regression check can run without Docker using
 a fresh temporary HOME, `DEVEX_E2E_SANDBOX=1`, and Ginkgo's `registry` label;
 never enable destructive specs on the host.
+
+### openSUSE lifecycle coverage
+
+`test/e2e/docker/` also holds `opensuse/tumbleweed:latest` (rolling) and
+`opensuse/leap:16.0`, the maintained Leap release under the
+[openSUSE Leap lifecycle](https://en.opensuse.org/Lifetime). Leap 15.x is
+not a maintained target; the older `docker/Dockerfile.suse` (Leap 15.5, end of
+life) is a legacy fixture outside this runner and CI. Bump the Leap version
+before upstream support ends. Tumbleweed reports a snapshot `VERSION_ID`, so
+the suite names it `opensuse-tumbleweed` without a version.
+
+Reproduce the complete Zypper lifecycle locally from `apps/cli`:
+
+```bash
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=opensuse-tumbleweed
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=opensuse-leap-16.0
+# Narrow to the Zypper lifecycle while debugging:
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=opensuse-leap-16.0 -- --ginkgo.label-filter=pm:zypper
+```
+
+Both fixtures start without jq. Source runs build `package-manager-zypper`
+from this checkout. Specs install jq with Zypper, verify `rpm -q jq` and
+`jq --version`, check `devex status`, repeat the installation and assert the
+`skipped jq (already installed)` result without new plugin downloads, then
+uninstall and verify `rpm -q jq` reports the package as not installed. CI runs
+both targets in the `CLI end-to-end` matrix and uploads `runner.log`, command
+transcripts and `junit.xml` for each.
