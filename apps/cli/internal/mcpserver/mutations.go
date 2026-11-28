@@ -81,12 +81,15 @@ type Executor interface {
 }
 
 type storedPlan struct {
-	operation string
-	digest    string
-	expires   time.Time
-	apps      []string
-	uninstall UninstallOptions
-	targets   []UninstallTarget
+	operation         string
+	digest            string
+	expires           time.Time
+	requestNames      []string
+	requestCategories []string
+	apps              []string
+	channel           string
+	uninstall         UninstallOptions
+	targets           []UninstallTarget
 }
 
 // PreparedPlan is returned by prepare_install and prepare_uninstall.
@@ -178,8 +181,14 @@ func sortedUnique(values []string) []string {
 }
 
 // installDigest binds the complete execution snapshot and stable platform.
-func (s *server) installDigest(ctx context.Context, names, categories []string) (agentapi.ExecutionSnapshot, []string, string, error) {
-	request := agentapi.PlanRequest{Names: names, Categories: categories}
+func (s *server) installDigest(ctx context.Context, names, categories []string, channel string) (agentapi.ExecutionSnapshot, []string, string, error) {
+	request := agentapi.PlanRequest{
+		Names:               names,
+		Categories:          categories,
+		Channel:             channel,
+		Repo:                s.opts.Repo,
+		RefuseChannelSwitch: true,
+	}
 	snapshot, err := s.opts.Executor.ResolveInstall(ctx, request)
 	if err != nil {
 		return agentapi.ExecutionSnapshot{}, nil, "", err
@@ -206,7 +215,7 @@ func stablePlatform(host *platform.Platform) platform.Platform {
 	return stable
 }
 
-func (s *server) store(operation, digest string, apps []string, uninstall UninstallOptions, targets []UninstallTarget) (string, time.Time, error) {
+func (s *server) store(operation, digest string, requestNames, requestCategories, apps []string, channel string, uninstall UninstallOptions, targets []UninstallTarget) (string, time.Time, error) {
 	id, err := newPlanID()
 	if err != nil {
 		return "", time.Time{}, err
@@ -218,7 +227,17 @@ func (s *server) store(operation, digest string, apps []string, uninstall Uninst
 			delete(s.plans, key)
 		}
 	}
-	s.plans[id] = &storedPlan{operation: operation, digest: digest, expires: expires, apps: apps, uninstall: uninstall, targets: targets}
+	s.plans[id] = &storedPlan{
+		operation:         operation,
+		digest:            digest,
+		expires:           expires,
+		requestNames:      requestNames,
+		requestCategories: requestCategories,
+		apps:              apps,
+		channel:           channel,
+		uninstall:         uninstall,
+		targets:           targets,
+	}
 	return id, expires, nil
 }
 
@@ -249,6 +268,7 @@ func (s *server) take(operation string, input ExecuteInput) (*storedPlan, error)
 type PrepareInstallInput struct {
 	Apps       []string `json:"apps,omitempty" jsonschema:"application names"`
 	Categories []string `json:"categories,omitempty" jsonschema:"categories"`
+	Channel    string   `json:"channel,omitempty" jsonschema:"install channel to use (for example official, mise, brew)"`
 }
 
 func (s *server) prepareInstall(ctx context.Context, _ *mcp.CallToolRequest, in PrepareInstallInput) (*mcp.CallToolResult, PreparedPlan, error) {
@@ -256,6 +276,9 @@ func (s *server) prepareInstall(ctx context.Context, _ *mcp.CallToolRequest, in 
 		return nil, PreparedPlan{}, err
 	}
 	if err := checkNames("categories", in.Categories); err != nil {
+		return nil, PreparedPlan{}, err
+	}
+	if err := checkText("channel", in.Channel); err != nil {
 		return nil, PreparedPlan{}, err
 	}
 	names, categories := sortedUnique(in.Apps), sortedUnique(in.Categories)
@@ -267,7 +290,7 @@ func (s *server) prepareInstall(ctx context.Context, _ *mcp.CallToolRequest, in 
 		return nil, PreparedPlan{}, err
 	}
 	defer done()
-	snapshot, apps, digest, err := s.installDigest(ctx, names, categories)
+	snapshot, apps, digest, err := s.installDigest(ctx, names, categories, in.Channel)
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}
@@ -277,7 +300,7 @@ func (s *server) prepareInstall(ctx context.Context, _ *mcp.CallToolRequest, in 
 			plan.Warnings = appendOnce(plan.Warnings, "Some plugin effects and required privileges are unknown until the plugin runs; installation runs without a terminal and fails if a password is required.")
 		}
 	}
-	id, expires, err := s.store("install", digest, apps, UninstallOptions{}, nil)
+	id, expires, err := s.store("install", digest, names, categories, apps, in.Channel, UninstallOptions{}, nil)
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}
@@ -308,7 +331,7 @@ func (s *server) installApps(ctx context.Context, _ *mcp.CallToolRequest, in Exe
 		return nil, ExecuteOutput{}, err
 	}
 	// The configuration, catalog or platform may have changed since the plan.
-	snapshot, apps, digest, err := s.installDigest(ctx, plan.apps, nil)
+	snapshot, apps, digest, err := s.installDigest(ctx, plan.requestNames, plan.requestCategories, plan.channel)
 	if err != nil {
 		return nil, ExecuteOutput{}, toolError(err)
 	}
@@ -361,7 +384,7 @@ func (s *server) prepareUninstall(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}
-	id, expires, err := s.store("uninstall", digest, apps, options, targets)
+	id, expires, err := s.store("uninstall", digest, apps, nil, apps, "", options, targets)
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}

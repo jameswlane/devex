@@ -8,9 +8,11 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
@@ -85,6 +87,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 			},
 			selectedApps:     make(map[int]bool), // No desktop apps for automated setup
 			selectedAIAgents: selectedAIAgents,
+			selectedChannels: make(map[string]string),
 			aiAgentPreset:    aiAgentPreset,
 			selectedTheme:    0,
 			ohMyZsh:          configuredOhMyZsh(viper.GetBool("setup.oh_my_zsh.enabled")),
@@ -197,8 +200,13 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 		model.refreshDesktopPreview(ctx)
 	}
 
-	// Convert default selections to CrossPlatformApp objects
-	apps := model.buildAppList()
+	// Convert default selections to CrossPlatformApp objects and validate
+	// channel selection / refuse channel switches before installed-state skip checks.
+	plan := model.installPlan()
+	if err := joinPlanChannelErrors(plan); err != nil {
+		return err
+	}
+	apps := planApps(plan)
 
 	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", model.getSelectedLanguages(), "databases", model.getSelectedDatabases())
 	// Apps whose DevEx lifecycle is unfinished run it again, so failed hooks are retried.
@@ -266,6 +274,9 @@ var installAutomatedApp = installers.InstallCrossPlatformApp
 // batch, then runs each app's own lifecycle. It returns per-app failures and
 // stops only for cancellation or lost sudo authorization.
 func installAutomatedApps(ctx context.Context, apps []types.CrossPlatformApp, alreadyInstalled map[string]bool, outcomes *tui.OutcomeRecorder, settings config.CrossPlatformSettings, repo types.Repository) ([]string, error) {
+	if err := channels.CheckRefusedChannelSwitches(repo, apps); err != nil {
+		return nil, err
+	}
 	var pending []types.CrossPlatformApp
 	for _, app := range apps {
 		if !alreadyInstalled[app.Name] {
@@ -314,6 +325,13 @@ func installAutomatedApps(ctx context.Context, apps []types.CrossPlatformApp, al
 			}
 			outcomes.Record(app.Name, tui.OutcomeFailed, err)
 			failures = append(failures, fmt.Sprintf("failed to install %s: %v", app.Name, err))
+			continue
+		}
+		if err := inventory.RegisterInstalled(appCtx, repo, app, func(recErr error) {
+			log.Warn("Could not record the installed version", "app", app.Name, "error", recErr)
+		}); err != nil {
+			outcomes.Record(app.Name, tui.OutcomeFailed, err)
+			failures = append(failures, fmt.Sprintf("failed to register %s: %v", app.Name, err))
 			continue
 		}
 		if err := tui.RecordLifecycle(repo, app.Name, true); err != nil {

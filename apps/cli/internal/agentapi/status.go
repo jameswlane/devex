@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -57,19 +58,64 @@ func Status(ctx context.Context, s config.CrossPlatformSettings, repo StatusRead
 			return results, &Error{Category: "unavailable", Retryable: true, Message: "cannot read tracked applications", cause: err}
 		}
 	}
+	recordReader, _ := repo.(channels.RecordReader)
+	catalogByName := map[string]types.CrossPlatformApp{}
+	for _, entry := range s.GetAllApps() {
+		catalogByName[normalizeInstallLookup(entry.Name)] = entry
+		if cmd := strings.TrimSpace(entry.GetOSConfig().InstallCommand); cmd != "" {
+			key := normalizeInstallLookup(cmd)
+			if _, exists := catalogByName[key]; !exists {
+				catalogByName[key] = entry
+			}
+		}
+	}
+	unresolved := map[string]string{}
+	resolveStatusApp := func(app types.AppConfig) types.AppConfig {
+		// The installed definition wins over configured channel preferences
+		// so status probes the channel that was actually installed.
+		catalogApp, inCatalog := catalogByName[normalizeInstallLookup(app.Name)]
+		if definition, found, err := channels.StatusDefinition(recordReader, catalogApp, inCatalog, app.Name); err != nil {
+			// No install method: reported as unknown, never probed.
+			unresolved[app.Name] = err.Error()
+			// Keep the category for filtering; leave the install method empty.
+			var bare types.AppConfig
+			bare.Name = app.Name
+			bare.Category = app.Category
+			if bare.Category == "" && inCatalog {
+				bare.Category = catalogApp.Category
+			}
+			return bare
+		} else if found {
+			resolved := definition.ToLegacyAppConfig()
+			resolved.Name = app.Name
+			return resolved
+		}
+		if inCatalog {
+			if app.InstallMethod == "" {
+				if chosen, _, err := channels.Resolve(catalogApp, channels.PreferencesFromViper(), ""); err == nil {
+					return chosen.ToLegacyAppConfig()
+				}
+				return catalogApp.ToLegacyAppConfig()
+			}
+		}
+		if resolved, e := s.GetApplicationByName(app.Name); e == nil && app.InstallMethod == "" {
+			return *resolved
+		}
+		return app
+	}
 	failed := false
 	for _, app := range apps {
 		if err := ctx.Err(); err != nil {
 			return results, APIError(err)
 		}
-		if resolved, e := s.GetApplicationByName(app.Name); e == nil && app.InstallMethod == "" {
-			app = *resolved
-		}
+		app = resolveStatusApp(app)
 		if r.Category != "" && !strings.EqualFold(app.Category, r.Category) {
 			continue
 		}
-		result := status.AppStatus{Name: app.Name, InstallMethod: app.InstallMethod, Status: "unknown", Issues: []string{}}
-		if app.InstallMethod == "" {
+		result := status.AppStatus{Name: app.Name, InstallMethod: app.InstallMethod, Channel: app.Channel, Status: "unknown", Issues: []string{}}
+		if reason, ok := unresolved[app.Name]; ok {
+			result.Issues = append(result.Issues, "Recorded install channel cannot be resolved: "+reason)
+		} else if app.InstallMethod == "" {
 			result.Issues = append(result.Issues, "Install method unknown: the application is not in the DevEx configuration")
 		}
 		if probe != nil && app.InstallMethod != "" {

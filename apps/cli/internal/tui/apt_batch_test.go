@@ -163,6 +163,9 @@ var _ = Describe("APT batching", func() {
 		Expect(tracked.Get(lifecycleKey("GitHub CLI"))).To(Equal(lifecycleComplete))
 		// Registration records the install receipt devex inventory reads.
 		Expect(tracked.Get(inventory.ReceiptKey("GitHub CLI"))).To(SatisfyAll(ContainSubstring(`"manager":"apt"`), ContainSubstring(`"packages":["gh"]`), ContainSubstring(`"managed_by":"devex"`)))
+		// It also saves the installed definition, so uninstall still works if
+		// the catalog later drops this channel.
+		Expect(tracked.Get("installed-app-definition:github cli")).To(ContainSubstring(`"Name":"GitHub CLI"`))
 		// bat was installed outside a DevEx lifecycle, so it is still skipped.
 		_, err := tracked.GetApp("bat")
 		Expect(err).To(HaveOccurred())

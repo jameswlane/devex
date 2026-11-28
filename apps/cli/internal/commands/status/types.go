@@ -9,6 +9,7 @@ type AppStatus struct {
 	Version           string              `json:"version,omitempty"`
 	LatestVersion     string              `json:"latest_version,omitempty"`
 	InstallMethod     string              `json:"install_method,omitempty"`
+	Channel           string              `json:"channel,omitempty"`
 	InstallDate       *time.Time          `json:"install_date,omitempty"`
 	Status            string              `json:"status"` // "healthy", "warning", "error", "not_installed"
 	Issues            []string            `json:"issues,omitempty"`

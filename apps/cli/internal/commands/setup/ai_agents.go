@@ -249,14 +249,22 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 	var miseRequesters []string
 	prereqOrder := make([]string, 0)
 	prereqApps := make(map[string]types.CrossPlatformApp)
+	prereqErrs := make(map[string]error)
 	prereqRequesters := make(map[string][]string)
 
+	type resolvedAgent struct {
+		app types.CrossPlatformApp
+		err error
+	}
+	resolvedSelected := make([]resolvedAgent, 0, len(selected))
 	for _, app := range selected {
-		cfg := osConfigForPlatform(app, m.system.detectedPlatform.OS)
+		resolved, chErr := m.resolvePlanApp(app, false)
+		resolvedSelected = append(resolvedSelected, resolvedAgent{app: resolved, err: chErr})
+		cfg := osConfigForPlatform(resolved, m.system.detectedPlatform.OS)
 		if cfg.InstallMethod == "mise" {
-			miseRequesters = append(miseRequesters, app.Name)
+			miseRequesters = append(miseRequesters, resolved.Name)
 		}
-		appKey := strings.ToLower(strings.TrimSpace(app.Name))
+		appKey := strings.ToLower(strings.TrimSpace(resolved.Name))
 		for _, prereqName := range cfg.SandboxPrerequisites {
 			key := strings.ToLower(strings.TrimSpace(prereqName))
 			if key == "" || key == appKey || existingNames[key] {
@@ -268,40 +276,59 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 			}
 			if _, seen := prereqApps[key]; !seen {
 				prereqOrder = append(prereqOrder, key)
-				prereqApps[key] = prereqApp
+				resolvedPrereq, prereqErr := m.resolvePlanApp(prereqApp, true)
+				prereqApps[key] = resolvedPrereq
+				prereqErrs[key] = prereqErr
+				// A prerequisite on a mise channel needs mise planned first too.
+				if prereqErr == nil && osConfigForPlatform(resolvedPrereq, m.system.detectedPlatform.OS).InstallMethod == "mise" {
+					miseRequesters = append(miseRequesters, resolvedPrereq.Name)
+				}
 			}
-			prereqRequesters[key] = append(prereqRequesters[key], app.Name)
+			prereqRequesters[key] = append(prereqRequesters[key], resolved.Name)
 		}
 	}
 
 	if len(miseRequesters) > 0 && !existingNames["mise"] {
 		if miseApp := m.getMiseApp(); miseApp != nil {
+			resolvedMise, miseErr := m.resolvePlanApp(*miseApp, true)
 			deps = append(deps, planItem{
-				app:    *miseApp,
-				group:  planDependency,
-				reason: "AI agents: " + strings.Join(miseRequesters, ", "),
+				app:        resolvedMise,
+				group:      planDependency,
+				reason:     "AI agents: " + strings.Join(miseRequesters, ", "),
+				channelErr: miseErr,
 			})
 			existingNames["mise"] = true
 		}
 	}
 
+	// A selected agent that is also another agent's prerequisite keeps the
+	// channel chosen for it, in the prerequisite's earlier slot.
+	selectedByKey := make(map[string]resolvedAgent, len(resolvedSelected))
+	for _, entry := range resolvedSelected {
+		selectedByKey[strings.ToLower(strings.TrimSpace(entry.app.Name))] = entry
+	}
 	for _, key := range prereqOrder {
+		app, prereqErr := prereqApps[key], prereqErrs[key]
+		if entry, ok := selectedByKey[key]; ok {
+			app, prereqErr = entry.app, entry.err
+		}
 		deps = append(deps, planItem{
-			app:    prereqApps[key],
-			group:  planDependency,
-			reason: "AI agents: " + strings.Join(prereqRequesters[key], ", "),
+			app:        app,
+			group:      planDependency,
+			reason:     "AI agents: " + strings.Join(prereqRequesters[key], ", "),
+			channelErr: prereqErr,
 		})
 		existingNames[key] = true
 	}
 
-	selectedItems := make([]planItem, 0, len(selected))
-	for _, app := range selected {
-		key := strings.ToLower(strings.TrimSpace(app.Name))
+	selectedItems := make([]planItem, 0, len(resolvedSelected))
+	for _, entry := range resolvedSelected {
+		key := strings.ToLower(strings.TrimSpace(entry.app.Name))
 		if existingNames[key] {
 			continue
 		}
 		existingNames[key] = true
-		selectedItems = append(selectedItems, planItem{app: app, group: planSelected})
+		selectedItems = append(selectedItems, planItem{app: entry.app, group: planSelected, channelErr: entry.err})
 	}
 
 	return deps, selectedItems

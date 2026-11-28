@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -191,11 +192,12 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 
 				// Try to get from database first
 				if installedApp, err := repo.GetApp(name); err == nil && installedApp != nil {
-					appsToCheck = append(appsToCheck, resolveTrackedApp(settings, *installedApp))
+					appsToCheck = append(appsToCheck, resolveTrackedApp(repo, settings, *installedApp))
 				} else {
 					// Try to get from configuration
 					if app, err := settings.GetApplicationByName(name); err == nil {
-						appsToCheck = append(appsToCheck, *app)
+						// The record may be stored under the catalog's spelling.
+						appsToCheck = append(appsToCheck, resolveTrackedApp(repo, settings, *app))
 					} else {
 						// Warnings go to stderr so JSON/YAML output on stdout stays parseable.
 						fmt.Fprintf(os.Stderr, "Warning: Unknown application '%s': not tracked by DevEx and not found in configuration\n", name)
@@ -229,9 +231,14 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 	results := make([]status.AppStatus, 0, len(appsToCheck))
 	for _, app := range appsToCheck {
 		appStatus := checkAppStatus(ctx, &app, settings, verbose)
+		reason := unresolvedChannelReason(repo, settings, app)
+		if reason != "" {
+			appStatus.Issues = []string{"Recorded install channel cannot be resolved: " + reason}
+		}
 
-		// Attempt fixes if requested
-		if fix && len(appStatus.Issues) > 0 {
+		// Attempt fixes if requested; nothing can be repaired on a channel
+		// DevEx cannot resolve.
+		if fix && reason == "" && len(appStatus.Issues) > 0 {
 			attemptFixes(ctx, &app, &appStatus, settings)
 		}
 
@@ -281,16 +288,67 @@ func listTrackedApps(repo types.Repository, settings config.CrossPlatformSetting
 		return nil, fmt.Errorf("failed to list installed apps: %w", err)
 	}
 	for i := range installedApps {
-		installedApps[i] = resolveTrackedApp(settings, installedApps[i])
+		installedApps[i] = resolveTrackedApp(repo, settings, installedApps[i])
 	}
 	return installedApps, nil
 }
 
+// unresolvedChannelReason explains why app has no install method when its
+// recorded channel cannot be resolved, or returns "" otherwise.
+func unresolvedChannelReason(repo types.Repository, settings config.CrossPlatformSettings, app types.AppConfig) string {
+	if app.InstallMethod != "" || repo == nil {
+		return ""
+	}
+	normalized := normalizeInstallLookup(app.Name)
+	for _, entry := range settings.GetAllApps() {
+		if normalizeInstallLookup(entry.Name) == normalized {
+			if _, _, err := channels.StatusDefinition(repo, entry, true, app.Name); err != nil {
+				return err.Error()
+			}
+			return ""
+		}
+	}
+	if _, _, err := channels.StatusDefinition(repo, types.CrossPlatformApp{}, false, app.Name); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // resolveTrackedApp fills in install details for an application recorded in
-// the database. The database only stores application names, so the install
-// method, command, and category come from the matching configuration entry.
-// Applications no longer in the configuration are returned unchanged.
-func resolveTrackedApp(settings config.CrossPlatformSettings, app types.AppConfig) types.AppConfig {
+// the database. A saved definition or install receipt wins over configured
+// channel preferences so status inspects the channel that is actually installed.
+func resolveTrackedApp(repo types.Repository, settings config.CrossPlatformSettings, app types.AppConfig) types.AppConfig {
+	normalized := normalizeInstallLookup(app.Name)
+	var catalog types.CrossPlatformApp
+	inCatalog := false
+	for _, entry := range settings.GetAllApps() {
+		if normalizeInstallLookup(entry.Name) == normalized {
+			catalog, inCatalog = entry, true
+			break
+		}
+	}
+	definition, found, err := channels.StatusDefinition(repo, catalog, inCatalog, app.Name)
+	if err != nil {
+		// The recorded channel cannot be resolved: no install method, so
+		// status reports it as unknown rather than probe another channel.
+		var bare types.AppConfig
+		bare.Name = app.Name
+		bare.Category = app.Category
+		if bare.Category == "" && inCatalog {
+			bare.Category = catalog.Category
+		}
+		return bare
+	}
+	if found {
+		resolved := definition.ToLegacyAppConfig()
+		resolved.Name = app.Name
+		return resolved
+	}
+	if inCatalog {
+		resolved := catalog.ToLegacyAppConfig()
+		resolved.Name = app.Name
+		return resolved
+	}
 	if app.InstallMethod != "" && app.InstallCommand != "" {
 		return app
 	}

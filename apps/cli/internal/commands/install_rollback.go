@@ -2,15 +2,17 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
@@ -57,6 +59,9 @@ func (e batchStepExecutor) Compensate(ctx context.Context, c templateexec.Compen
 }
 
 func runRollbackBatch(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) error {
+	if err := channels.CheckRefusedChannelSwitches(repo, apps); err != nil {
+		return err
+	}
 	if err := prepareApplicationInstallers(ctx, provider); err != nil {
 		return err
 	}
@@ -68,10 +73,8 @@ func runRollbackBatch(ctx context.Context, out io.Writer, apps []types.CrossPlat
 	plan := templates.ExecutionPlan{ID: fmt.Sprintf("app-batch-%d", time.Now().UnixNano()), TemplateID: "app-batch", Action: templates.LifecycleInstall}
 	executor := batchStepExecutor{apps: make(map[string]types.CrossPlatformApp), repo: repo, settings: settings}
 	for i, app := range apps {
-		cfg, err := settings.GetApplicationByName(app.Name)
-		if err != nil {
-			return err
-		}
+		legacy := app.ToLegacyAppConfig()
+		cfg := &legacy
 		id := fmt.Sprintf("app-%d", i)
 		executor.apps[id] = app
 		plan.Steps = append(plan.Steps, templates.PlannedStep{ID: id, Type: templates.StepTypeApp, App: cfg, DisplayName: app.Name, Request: templates.ExecutionRequest{Plugin: "package-manager-" + cfg.InstallMethod, Command: "install", Args: strings.Fields(cfg.InstallCommand)}})
@@ -93,19 +96,11 @@ func runRollbackBatch(ctx context.Context, out io.Writer, apps []types.CrossPlat
 		return errors.Join(cause, recoveryErr, recordErr)
 	}
 	for _, app := range apps {
-		if existing, lookupErr := repo.GetApp(app.Name); lookupErr != nil || existing == nil {
-			if err := repo.AddApp(app.Name); err != nil {
-				return failRegistration(err)
-			}
-		}
-		data, err := json.Marshal(app)
-		if err != nil {
+		if err := inventory.RegisterInstalled(ctx, repo, app, func(recErr error) {
+			log.Warn("Could not record the installed version", "app", app.Name, "error", recErr)
+		}); err != nil {
 			return failRegistration(err)
 		}
-		if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), string(data)); err != nil {
-			return failRegistration(err)
-		}
-		recordInstallReceipt(ctx, repo, app)
 	}
 	return nil
 }

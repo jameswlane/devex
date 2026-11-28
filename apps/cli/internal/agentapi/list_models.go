@@ -8,6 +8,8 @@ type InstalledApp struct {
 	Description       string
 	Category          string
 	Method            string
+	Channel           string        `json:"channel,omitempty" yaml:"channel,omitempty"`
+	Channels          []PlanChannel `json:"channels,omitempty" yaml:"channels,omitempty"`
 	Status            string
 	MissingDefinition bool `json:"missing_definition" yaml:"missing_definition"`
 }
@@ -19,6 +21,8 @@ type AvailableApp struct {
 	Category    string
 	Platform    string
 	Method      string
+	Channel     string        `json:"channel,omitempty" yaml:"channel,omitempty"`
+	Channels    []PlanChannel `json:"channels,omitempty" yaml:"channels,omitempty"`
 	Recommended bool
 }
 

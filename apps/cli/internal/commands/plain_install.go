@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentsandbox"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/scheduler"
 
 	"github.com/spf13/viper"
@@ -19,6 +19,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
@@ -72,15 +73,20 @@ func initializeApplicationInstallers(ctx context.Context, provider pluginBootstr
 }
 
 func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) error {
-	return runPlainInstallObserved(ctx, out, apps, repo, settings, provider, nil)
+	return runPlainInstallObserved(ctx, out, apps, repo, settings, provider, nil, true)
 }
 
 // installObserver receives each application's outcome: installed, skipped or failed.
 type installObserver func(app, status string, err error)
 
-func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider, observe installObserver) (result error) {
+func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider, observe installObserver, allowChannelSwitch bool) (result error) {
 	if observe == nil {
 		observe = func(string, string, error) {}
+	}
+	if !allowChannelSwitch {
+		if err := channels.CheckRefusedChannelSwitches(repo, apps); err != nil {
+			return err
+		}
 	}
 	run, err := state.StartApplicationRun(ctx, apps, settings)
 	if err != nil {
@@ -120,6 +126,11 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 	var bootstrapErr error
 	if len(apps) > 0 {
 		bootstrapErr = prepareApplicationInstallers(ctx, provider)
+	}
+	if allowChannelSwitch && bootstrapErr == nil && ctx.Err() == nil && len(apps) > 0 {
+		if switchErr := prepareChannelSwitches(ctx, out, apps, repo); switchErr != nil {
+			return switchErr
+		}
 	}
 	var batch tui.PackageBatch
 	if bootstrapErr == nil && ctx.Err() == nil && len(apps) > 0 {
@@ -196,19 +207,11 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 		}
 		if err == nil {
 			err = state.AuditStep(appCtx, "registration", true, func() error {
-				if existing, lookupErr := repo.GetApp(app.Name); lookupErr != nil || existing == nil {
-					if err := repo.AddApp(app.Name); err != nil {
-						return err
-					}
+				if regErr := inventory.RegisterInstalled(appCtx, repo, app, func(recErr error) {
+					log.Warn("Could not record the installed version", "app", app.Name, "error", recErr)
+				}); regErr != nil {
+					return regErr
 				}
-				data, err := json.Marshal(app)
-				if err != nil {
-					return err
-				}
-				if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), string(data)); err != nil {
-					return err
-				}
-				recordInstallReceipt(appCtx, repo, app)
 				return tui.RecordLifecycle(repo, app.Name, true)
 			})
 		}

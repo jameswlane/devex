@@ -19,9 +19,10 @@ const (
 
 // planItem is one app in the install plan.
 type planItem struct {
-	app    types.CrossPlatformApp
-	group  planGroup
-	reason string // for dependencies: what needs it
+	app        types.CrossPlatformApp
+	group      planGroup
+	reason     string // for dependencies: what needs it
+	channelErr error  // invalid channel selection or refused channel switch
 }
 
 // installPlan returns every app setup will install, in install order. Both
@@ -35,32 +36,38 @@ func (m *SetupModel) installPlan() []planItem {
 			if m.selections.excludedDefaults[app.Name] {
 				continue
 			}
-			plan = append(plan, planItem{app: app, group: planDefault})
+			resolved, chErr := m.resolvePlanApp(app, false)
+			plan = append(plan, planItem{app: resolved, group: planDefault, channelErr: chErr})
 		}
 	}
 
 	if languages := m.getSelectedLanguages(); len(languages) > 0 {
 		if miseApp := m.getMiseApp(); miseApp != nil {
-			plan = append(plan, planItem{app: *miseApp, group: planDependency, reason: "languages: " + strings.Join(languages, ", ")})
+			resolved, chErr := m.resolvePlanApp(*miseApp, true)
+			plan = append(plan, planItem{app: resolved, group: planDependency, reason: "languages: " + strings.Join(languages, ", "), channelErr: chErr})
 		}
 		for _, app := range m.getLanguageApps() {
-			plan = append(plan, planItem{app: app, group: planSelected})
+			resolved, chErr := m.resolvePlanApp(app, false)
+			plan = append(plan, planItem{app: resolved, group: planSelected, channelErr: chErr})
 		}
 	}
 
 	if databases := m.getSelectedDatabases(); len(databases) > 0 {
 		if dockerApp := m.getDockerApp(); dockerApp != nil {
-			plan = append(plan, planItem{app: *dockerApp, group: planDependency, reason: "databases: " + strings.Join(databases, ", ")})
+			resolved, chErr := m.resolvePlanApp(*dockerApp, true)
+			plan = append(plan, planItem{app: resolved, group: planDependency, reason: "databases: " + strings.Join(databases, ", "), channelErr: chErr})
 		}
 		for _, app := range m.getDatabaseApps() {
-			plan = append(plan, planItem{app: app, group: planSelected})
+			resolved, chErr := m.resolvePlanApp(app, false)
+			plan = append(plan, planItem{app: resolved, group: planSelected, channelErr: chErr})
 		}
 	}
 
 	if m.system.hasDesktop {
 		for _, name := range m.getSelectedDesktopApps() {
 			if app := m.getDesktopAppByName(name); app != nil {
-				plan = append(plan, planItem{app: *app, group: planSelected})
+				resolved, chErr := m.resolvePlanApp(*app, false)
+				plan = append(plan, planItem{app: resolved, group: planSelected, channelErr: chErr})
 			}
 		}
 	}
@@ -114,5 +121,12 @@ func (m *SetupModel) refreshInstalledApps() {
 		ctx = context.Background()
 	}
 	m.refreshDesktopPreview(ctx)
-	m.selections.alreadyInstalled = tui.SkippableInstalledApps(m.repo, installedAppsCheck(ctx, planApps(m.installPlan())))
+	plan := m.installPlan()
+	checkable := make([]types.CrossPlatformApp, 0, len(plan))
+	for _, item := range plan {
+		if item.channelErr == nil {
+			checkable = append(checkable, item.app)
+		}
+	}
+	m.selections.alreadyInstalled = tui.SkippableInstalledApps(m.repo, installedAppsCheck(ctx, checkable))
 }

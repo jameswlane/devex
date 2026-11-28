@@ -45,6 +45,7 @@ The install command handles:
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--category` | `-c` | `string` | `all` | Install specific category (development, databases, optional) |
+| `--channel` | | `string` | | Select an install channel for requested apps (e.g., `official`, `apt`, `mise`, `brew`). Can also be set via `DEVEX_CHANNEL`. |
 | `--app` | `-a` | `string[]` | | Install specific applications only |
 | `--skip` | `-s` | `string[]` | | Skip specific applications |
 | `--force` | `-f` | `bool` | `false` | Force reinstall even if already installed |
@@ -118,6 +119,40 @@ devex install --skip slack --skip chrome
 # Force reinstall of specific tools
 devex install --app docker --force
 ```
+
+### Install Channels
+
+DevEx follows an **official by default, community by choice** channel policy. Each catalog application uses its vendor's official channel by default, and you can opt into alternative channels offered for your platform:
+
+```bash
+# Override the channel for a single install
+devex install "Kimi Code" --channel mise
+
+# Force the vendor-official channel even if config sets a preference
+devex install "Kimi Code" --channel official
+
+# Override via environment variable
+DEVEX_CHANNEL=mise devex install "Kimi Code"
+
+# Preview the selected channel and all offered channels as JSON
+devex install "Kimi Code" --channel mise --dry-run --format json
+```
+
+When `--channel` is passed with multiple applications or a category, DevEx applies that channel to every application offering it and fails listing any applications that do not offer the requested channel on the current platform.
+
+Channel preferences resolve in order from highest to lowest priority:
+
+1. `--channel <name>` CLI flag
+2. `DEVEX_CHANNEL` environment variable
+3. Per-application `channels:` map in `$DEVEX_CONFIG_DIR/config.yaml` (or `~/.devex/config.yaml`)
+4. Global `channel_order:` list in config (for example `[official, mise, brew]`)
+5. The catalog default (the vendor's official channel)
+
+An application DevEx already installed keeps its recorded channel when you give no explicit preference (`--channel`, `DEVEX_CHANNEL`, a `channels:` entry, or a matching `channel_order:` entry), so a later change to the catalog default never moves it. If the recorded channel is no longer offered, `devex install` stops and asks you to uninstall it or pick a channel.
+
+Only a plain `devex install` switches an installed application to another channel: it uninstalls the recorded channel first, then installs the selected one, and `--dry-run` describes the switch without running it. `devex setup`, MCP installs, confirmed plans (`--expect-plan`) and `--rollback-on-failure` never switch; they stop before changing anything with `<App> is installed through channel "<old>"; run 'devex uninstall --app "<App>"' first, then install it with --channel <new>`.
+
+For `devex update`, `devex upgrade`, `devex uninstall`, and `devex status`, the recorded installed channel takes precedence over configured channel preferences so maintenance always targets what is actually installed. When the recorded channel can no longer be resolved, they report it instead of acting on a different channel.
 
 ## Installation Process
 

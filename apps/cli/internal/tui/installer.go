@@ -980,15 +980,12 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	err = state.AuditStep(ctx, "registration", true, func() error {
 		si.repoMutex.Lock()
 		defer si.repoMutex.Unlock()
-		// A retried lifecycle may already be registered; app names are unique.
-		if existing, lookupErr := si.repo.GetApp(app.Name); lookupErr != nil || existing == nil {
-			if err := si.repo.AddApp(app.Name); err != nil {
-				return err
-			}
-		}
-		// The receipt feeds devex inventory; failing to write it must not fail the install.
-		if err := inventory.Record(ctx, si.repo, app, inventory.RecordOptions{}); err != nil {
-			si.sendLog("WARN", fmt.Sprintf("Could not record the installed version of %s: %v", app.Name, err))
+		// Register the app, its installed definition and its receipt the same
+		// way plain and automated installs do; a receipt failure only warns.
+		if err := inventory.RegisterInstalled(ctx, si.repo, app, func(recErr error) {
+			si.sendLog("WARN", fmt.Sprintf("Could not record the installed version of %s: %v", app.Name, recErr))
+		}); err != nil {
+			return err
 		}
 		return RecordLifecycle(si.repo, app.Name, hooksComplete)
 	})

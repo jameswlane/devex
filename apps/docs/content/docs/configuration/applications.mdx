@@ -58,7 +58,47 @@ all_platforms:
   uninstall_command: example-tool
 ```
 
-An OS configuration can also define `dependencies`, `pre_install`, `post_install`, `config_files`, `themes`, `download_url`, `destination`, `install_scope`, `self_updating`, and alternative installation configurations. Follow a shipped application with the same installer when adding these fields.
+An OS configuration can also define `channel`, `official_support`, `dependencies`, `pre_install`, `post_install`, `config_files`, `themes`, `download_url`, `destination`, `install_scope`, `self_updating`, and alternative installation configurations. Follow a shipped application with the same installer when adding these fields.
+
+## Install Channels
+
+DevEx ships **official by default, community by choice**:
+
+- Each platform block (`linux`, `macos`, `windows`, `all_platforms`) has a primary configuration and optional `alternatives`.
+- A channel's name defaults to its `install_method` (for example `apt`, `curlpipe`, `mise`, `brew`). Set `channel:` explicitly when a platform block defines multiple entries with the same `install_method` (such as `dnf` for Fedora and `dnf-rhel` for RHEL).
+- Channel names must be unique within a platform block, and `official` is reserved to select the vendor-official channel.
+- A primary entry cannot set `official_support: false` when any alternative in the same platform block has `official_support: true`.
+
+```yaml
+linux:
+  install_method: curlpipe
+  official_support: true
+  download_url: https://code.kimi.com/kimi-code/install.sh
+  install_scope: user
+  alternatives:
+    - install_method: mise
+      install_command: node@lts npm:@moonshot-ai/kimi-code@latest
+      official_support: true
+```
+
+### Configuring Default Channel Preferences
+
+Set persistent channel preferences in `$DEVEX_CONFIG_DIR/config.yaml` (normally `~/.config/devex/config.yaml`, or `~/.devex/config.yaml`):
+
+```yaml
+# Per-application channel overrides
+channels:
+  kimi-code: mise
+  neovim: apt-ppa
+
+# Global preference order; first offered and available channel wins
+channel_order:
+  - official
+  - mise
+  - brew
+```
+
+You can also override preferences for a single invocation with `--channel <name>` (on `devex install` and `devex setup`) or `DEVEX_CHANNEL=<name>`. During interactive `devex setup`, press `c` on a highlighted application to cycle through its available channels.
 
 ## AI Coding Agents
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -31,12 +32,12 @@ type packageMaintenanceOperation struct {
 
 // NewUpdateCmd refreshes repository metadata without upgrading applications.
 func NewUpdateCmd(settings config.CrossPlatformSettings) *cobra.Command {
-	return newPackageMaintenanceCmd("update", settings, nil)
+	return newPackageMaintenanceCmdWithRepo("update", nil, settings, nil)
 }
 
 // NewUpgradeCmd upgrades only packages belonging to the selected applications.
 func NewUpgradeCmd(settings config.CrossPlatformSettings) *cobra.Command {
-	return newPackageMaintenanceCmd("upgrade", settings, nil)
+	return newPackageMaintenanceCmdWithRepo("upgrade", nil, settings, nil)
 }
 
 var maintenanceExecutor = func(ctx context.Context, provider pluginBootstrapProvider) (packageMaintenanceExecutor, error) {
@@ -56,6 +57,10 @@ var maintenanceExecutor = func(ctx context.Context, provider pluginBootstrapProv
 }
 
 func newPackageMaintenanceCmd(action string, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) *cobra.Command {
+	return newPackageMaintenanceCmdWithRepo(action, nil, settings, provider)
+}
+
+func newPackageMaintenanceCmdWithRepo(action string, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) *cobra.Command {
 	cmd := &cobra.Command{
 		Annotations: map[string]string{catalogAnnotation: catalogRequired},
 		Use:         action + " [apps...]", Short: "Refresh package metadata for configured applications",
@@ -75,11 +80,37 @@ func newPackageMaintenanceCmd(action string, settings config.CrossPlatformSettin
 		if err := viper.BindPFlags(cmd.Flags()); err != nil {
 			return err
 		}
-		apps, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+		// Select first, then resolve each app once: an installed app follows
+		// its installed definition, any other app the channel preferences.
+		// A per-app failure does not stop maintenance for the others.
+		apps, _, err := agentapi.SelectRequestedApplications(cmd.Context(), settings, agentapi.PlanRequest{
+			Names:        args,
+			Categories:   viper.GetStringSlice("categories"),
+			SkipChannels: true,
+		})
 		if err != nil {
 			return err
 		}
+		prefs := channels.PreferencesFromViper()
+		var unresolved []error
+		resolvedApps := make([]types.CrossPlatformApp, 0, len(apps))
+		for _, app := range apps {
+			var resolved types.CrossPlatformApp
+			var resolveErr error
+			if repo != nil && channels.InstalledChannelForApp(repo, app) != "" {
+				resolved, resolveErr = channels.InstalledDefinition(repo, app)
+			} else {
+				resolved, _, resolveErr = channels.Resolve(app, prefs, "")
+			}
+			if resolveErr != nil {
+				unresolved = append(unresolved, resolveErr)
+				continue
+			}
+			resolvedApps = append(resolvedApps, resolved)
+		}
+		apps = resolvedApps
 		plan, skipped, failures := planPackageMaintenance(action, apps)
+		failures = append(unresolved, failures...)
 		for _, name := range skipped {
 			cmd.Printf("%s manages its own updates; skipped\n", name)
 		}

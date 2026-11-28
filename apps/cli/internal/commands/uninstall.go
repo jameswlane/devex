@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -187,6 +188,8 @@ var (
 )
 
 func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSettings, name string) (types.AppConfig, error) {
+	receipt, hasReceipt := inventory.ReadReceipt(repo, name)
+
 	data, definitionErr := repo.Get("installed-app-definition:" + normalizeInstallLookup(name))
 	if definitionErr != nil && !strings.Contains(definitionErr.Error(), "not found") {
 		return types.AppConfig{}, fmt.Errorf("failed to read installed definition for %s: %w", name, definitionErr)
@@ -199,15 +202,67 @@ func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSet
 		if definition.Name == "" {
 			return types.AppConfig{}, fmt.Errorf("invalid installed definition for %s: application name is empty", name)
 		}
-		return definition.ToLegacyAppConfig(), nil
+		if !hasReceipt {
+			receipt, hasReceipt = inventory.ReadReceipt(repo, definition.Name)
+		}
+		if !hasReceipt {
+			return definition.ToLegacyAppConfig(), nil
+		}
+		if matched, ok := matchCrossPlatformAppToReceipt(definition, receipt); ok {
+			return matched.ToLegacyAppConfig(), nil
+		}
 	}
 
 	installedApp, installedErr := repo.GetApp(name)
 	if installedErr != nil && !strings.Contains(installedErr.Error(), "not found") {
 		return types.AppConfig{}, fmt.Errorf("failed to read installation record for %s: %w", name, installedErr)
 	}
+	if installedApp != nil && !hasReceipt {
+		receipt, hasReceipt = inventory.ReadReceipt(repo, installedApp.Name)
+	}
 	if installedApp != nil && installedApp.InstallMethod != "" {
-		return *installedApp, nil
+		if !hasReceipt || appConfigMatchesReceipt(*installedApp, receipt) {
+			return *installedApp, nil
+		}
+	}
+
+	// Look up the full CrossPlatformApp in the catalog so recorded receipts
+	// (including legacy manager-only receipts) win over channel preferences.
+	normalized := normalizeInstallLookup(name)
+	for _, entry := range settings.GetAllApps() {
+		if normalizeInstallLookup(entry.Name) == normalized || normalizeInstallLookup(entry.GetOSConfig().InstallCommand) == normalized {
+			entryReceipt, hasEntryReceipt := receipt, hasReceipt
+			if !hasEntryReceipt {
+				entryReceipt, hasEntryReceipt = inventory.ReadReceipt(repo, entry.Name)
+			}
+			if hasEntryReceipt {
+				recLabel := channels.InferRecordedChannel(entryReceipt, entry)
+				if recLabel == "" && entryReceipt.Manager != "" && entryReceipt.Manager != "unknown" {
+					recLabel = strings.TrimSpace(entryReceipt.Manager)
+				}
+				if recLabel != "" {
+					switched, _, err := channels.Resolve(entry, channels.Preferences{}, recLabel)
+					if err != nil {
+						return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %q' to clear the record", entry.Name, recLabel, entry.Name)
+					}
+					return switched.ToLegacyAppConfig(), nil
+				}
+			}
+			if chosen, _, err := channels.Resolve(entry, channels.PreferencesFromViper(), ""); err == nil {
+				return chosen.ToLegacyAppConfig(), nil
+			}
+			return entry.ToLegacyAppConfig(), nil
+		}
+	}
+
+	if hasReceipt {
+		recLabel := strings.TrimSpace(receipt.Channel)
+		if recLabel == "" && receipt.Manager != "" && receipt.Manager != "unknown" {
+			recLabel = strings.TrimSpace(receipt.Manager)
+		}
+		if recLabel != "" {
+			return types.AppConfig{}, fmt.Errorf("cannot uninstall %s: recorded channel %q is no longer offered in the catalog and no matching saved definition is available; remove it manually and run 'devex uninstall --forget %q' to clear the record", name, recLabel, name)
+		}
 	}
 
 	catalogApp, catalogErr := settings.GetApplicationByName(name)

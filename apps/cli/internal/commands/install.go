@@ -22,6 +22,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/execinputs"
@@ -104,18 +105,26 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			channel := strings.TrimSpace(viper.GetString("channel"))
+			if cmd.Flags().Changed("channel") {
+				flagVal, _ := cmd.Flags().GetString("channel")
+				channel = strings.TrimSpace(flagVal)
+			}
 			format, _ := cmd.Flags().GetString("format")
 			if format == "json" {
 				if !viper.GetBool("dry-run") || templateID != "" {
 					return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "JSON install requires --dry-run without --template"})
 				}
-				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")}, currentExecutionPolicy(), currentExecutionTrust())
+				planReq := agentapi.PlanRequest{
+					Names:               args,
+					Categories:          viper.GetStringSlice("categories"),
+					Channel:             channel,
+					Repo:                repo,
+					RefuseChannelSwitch: true,
+				}
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, planReq, currentExecutionPolicy(), currentExecutionTrust())
 				if err == nil {
-					selected, _, selectErr := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
-					if selectErr != nil {
-						return writeAPIJSON(cmd, nil, selectErr)
-					}
-					for _, app := range selected {
+					for _, app := range snapshot.Roots {
 						_ = system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { fmt.Fprintln(cmd.ErrOrStderr(), message) })
 					}
 				}
@@ -150,7 +159,13 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				}
 				// Resolve once, verify, then execute exactly this snapshot: its
 				// roots, settings and policy, never a fresh selection.
-				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories}, currentExecutionPolicy(), currentExecutionTrust())
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{
+					Names:               args,
+					Categories:          categories,
+					Channel:             channel,
+					Repo:                repo,
+					RefuseChannelSwitch: true,
+				}, currentExecutionPolicy(), currentExecutionTrust())
 				if err != nil {
 					return fmt.Errorf("check the confirmed plan: %w", err)
 				}
@@ -174,6 +189,11 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if len(args) > 0 || len(categories) > 0 {
 					return fmt.Errorf("--template cannot be combined with app arguments or --categories")
 				}
+				// Templates install each app's catalog default; they do not
+				// apply channel preferences.
+				if channel != "" {
+					return fmt.Errorf("--template does not support install channels: unset --channel or DEVEX_CHANNEL (%q), or install the apps by name with --channel", channel)
+				}
 				return executeTemplateInstall(ctx, templateID, templateInstallOptions{
 					Answers:        answers,
 					AnswerFiles:    answerFiles,
@@ -183,7 +203,13 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 			}
 
 			if viper.GetBool("rollback-on-failure") && !dryRun {
-				selection, err := agentapi.SelectApplicationsWithWarnings(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories})
+				selection, err := agentapi.SelectApplicationsWithWarnings(ctx, settings, agentapi.PlanRequest{
+					Names:               args,
+					Categories:          categories,
+					Channel:             channel,
+					Repo:                repo,
+					RefuseChannelSwitch: true,
+				})
 				if err != nil {
 					return err
 				}
@@ -196,7 +222,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
 				return runRollbackBatch(ctx, cmd.ErrOrStderr(), selection.Apps, repo, selection.Settings, getPluginBootstrap)
 			}
-			return executeInstallWithOutput(ctx, args, categories, verbose, dryRun, repo, settings, cmd.OutOrStdout(), getPluginBootstrap)
+			return executeInstallWithOutputAndChannel(ctx, args, categories, channel, verbose, dryRun, repo, settings, cmd.OutOrStdout(), getPluginBootstrap)
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
@@ -205,6 +231,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 	_ = viper.BindPFlag("rollback-on-failure", cmd.Flags().Lookup("rollback-on-failure"))
 	cmd.Flags().String("format", "table", "Output format (table, json; JSON requires --dry-run)")
 	// Define command-specific flags
+	cmd.Flags().String("channel", "", "Install channel to use (for example official, mise, brew); env: DEVEX_CHANNEL; not supported with --template")
 	cmd.Flags().StringSlice("categories", nil, "Install apps from specific categories")
 	cmd.Flags().StringVar(&templateID, "template", "", "Install a DevEx lifecycle template by ID or path")
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
@@ -214,6 +241,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Install without the TUI; fail instead of prompting for template inputs")
 
 	// Bind flags to Viper for hierarchical config
+	_ = viper.BindPFlag("channel", cmd.Flags().Lookup("channel"))
 	_ = viper.BindPFlag("categories", cmd.Flags().Lookup("categories"))
 	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
 
@@ -229,6 +257,14 @@ func executeInstall(ctx context.Context, apps []string, categories []string, ver
 }
 
 func executeInstallWithOutput(ctx context.Context, apps, categories []string, verbose, dryRun bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer, provider pluginBootstrapProvider) error {
+	return executeInstallWithOutputAndChannel(ctx, apps, categories, strings.TrimSpace(viper.GetString("channel")), verbose, dryRun, repo, settings, out, provider)
+}
+
+func executeInstallWithOutputAndChannel(ctx context.Context, apps, categories []string, channel string, verbose, dryRun bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer, provider pluginBootstrapProvider) error {
+	return executeInstallWithChannelPolicy(ctx, apps, categories, channel, false, verbose, dryRun, repo, settings, out, provider)
+}
+
+func executeInstallWithChannelPolicy(ctx context.Context, apps, categories []string, channel string, refuseChannelSwitch, verbose, dryRun bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer, provider pluginBootstrapProvider) error {
 	_, span := tracer.Start(ctx, "install_command",
 		trace.WithAttributes(
 			attribute.StringSlice("apps", apps),
@@ -250,6 +286,7 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 		"dry-run", dryRun,
 		"apps", apps,
 		"categories", categories,
+		"channel", channel,
 	)
 
 	// Validate inputs
@@ -259,7 +296,13 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 		return fmt.Errorf("invalid inputs: %w", err)
 	}
 
-	selection, err := agentapi.SelectApplicationsWithWarnings(ctx, settings, agentapi.PlanRequest{Names: apps, Categories: categories})
+	selection, err := agentapi.SelectApplicationsWithWarnings(ctx, settings, agentapi.PlanRequest{
+		Names:               apps,
+		Categories:          categories,
+		Channel:             channel,
+		Repo:                repo,
+		RefuseChannelSwitch: refuseChannelSwitch,
+	})
 	if err != nil {
 		return err
 	}
@@ -271,7 +314,7 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 
 	// Handle dry run
 	if dryRun {
-		return previewInstallation(ctx, appsToInstall, provider, out)
+		return previewInstallationWithRepo(ctx, appsToInstall, repo, provider, out)
 	}
 	if len(appsToInstall) == 0 && len(selection.Warnings) > 0 {
 		return nil
@@ -389,6 +432,9 @@ func executeSnapshot(ctx context.Context, cmd *cobra.Command, snapshot agentapi.
 }
 
 func executeSnapshotObserved(ctx context.Context, out, errOut io.Writer, snapshot agentapi.ExecutionSnapshot, repo types.Repository, provider pluginBootstrapProvider, observe installObserver) error {
+	if err := channels.CheckRefusedChannelSwitches(repo, snapshot.Roots); err != nil {
+		return err
+	}
 	settings := snapshot.Settings
 	if err := pinExecution(snapshot); err != nil {
 		return err
@@ -417,8 +463,8 @@ func executeSnapshotObserved(ctx context.Context, out, errOut io.Writer, snapsho
 		}
 		return err
 	}
-	// A confirmed install always runs the plain lifecycle, never the TUI.
-	return runPlainInstallObserved(ctx, out, snapshot.Roots, repo, settings, provider, observe)
+	// A confirmed install always runs the plain lifecycle, never the TUI, and never switches channels.
+	return runPlainInstallObserved(ctx, out, snapshot.Roots, repo, settings, provider, observe, false)
 }
 
 // currentExecutionTrust reads the effective plugin trust configuration that a
@@ -462,6 +508,9 @@ func installSelected(ctx context.Context, span trace.Span, appsToInstall []types
 	}
 
 	if err := prepareApplicationInstallers(ctx, provider); err != nil {
+		return err
+	}
+	if err := prepareChannelSwitches(ctx, out, appsToInstall, repo); err != nil {
 		return err
 	}
 
@@ -624,6 +673,10 @@ func validateInstallInputs(apps []string, categories []string) error {
 
 // previewInstallation shows what would be installed without executing
 func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, provider pluginBootstrapProvider, out io.Writer) error {
+	return previewInstallationWithRepo(ctx, apps, nil, provider, out)
+}
+
+func previewInstallationWithRepo(ctx context.Context, apps []types.CrossPlatformApp, repo types.Repository, provider pluginBootstrapProvider, out io.Writer) error {
 	var plugins map[string]sdk.PluginMetadata
 	if provider != nil {
 		if b := provider(); b != nil {
@@ -643,6 +696,15 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 	log.Info("Dry run - showing what would be installed:")
 
 	for _, app := range apps {
+		if switchPlan, switching := detectChannelSwitch(repo, app); switching {
+			if !switchPlan.CanRemove {
+				fmt.Fprintf(out, "Would fail switching %s from channel %s to %s: %s; run 'devex uninstall --app %q' first\n",
+					app.Name, switchPlan.OldChannel, switchPlan.NewChannel, switchPlan.Reason, app.Name)
+			} else {
+				fmt.Fprintf(out, "Would switch %s from channel %s to %s (would uninstall %s channel first, then install via %s)\n",
+					app.Name, switchPlan.OldChannel, switchPlan.NewChannel, switchPlan.OldChannel, switchPlan.NewChannel)
+			}
+		}
 		// Preview reports failures without executing hooks or installations.
 		_ = system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { fmt.Fprintln(out, message) })
 		if len(app.GetOSConfig().PreInstall)+len(app.GetOSConfig().PostInstall) > 0 {
@@ -677,21 +739,46 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 			installArgs = append(installArgs, request.Options...)
 		}
 		privilege := sdk.PluginOperationPrivilege(plugins[pluginName].PluginInfo, installArgs)
+		channelDetail := formatDryRunChannelDetail(app)
 		if privilege == nil {
-			fmt.Fprintf(out, "Would install %s (scope: unspecified; legacy or unavailable plugin metadata)\n", app.Name)
+			fmt.Fprintf(out, "Would install %s%s (scope: unspecified; legacy or unavailable plugin metadata)\n", app.Name, channelDetail)
 			continue
 		}
 		plan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{Privilege: *privilege, Name: pluginName})
 		if err != nil {
 			return fmt.Errorf("preview %s privilege: %w", app.Name, err)
 		}
-		fmt.Fprintf(out, "Would install %s (scope: %s, intended user: %s, elevation required: %t)\n", app.Name, privilege.Scope, plan.IntendedUser.Username, plan.Elevate)
+		fmt.Fprintf(out, "Would install %s%s (scope: %s, intended user: %s, elevation required: %t)\n", app.Name, channelDetail, privilege.Scope, plan.IntendedUser.Username, plan.Elevate)
 	}
 
 	log.Info("Total applications", "count", len(apps))
 	log.Info("Use --verbose for detailed installation commands")
 
 	return nil
+}
+
+func formatDryRunChannelDetail(app types.CrossPlatformApp) string {
+	selected := strings.TrimSpace(app.SelectedChannel())
+	if selected == "" {
+		return ""
+	}
+	infos := app.Channels()
+	ordered := make([]types.ChannelInfo, 0, len(infos))
+	for _, ch := range infos {
+		if ch.Default {
+			ordered = append(ordered, ch)
+		}
+	}
+	for _, ch := range infos {
+		if !ch.Default {
+			ordered = append(ordered, ch)
+		}
+	}
+	offered := types.FormatAvailableChannels(ordered)
+	if offered != "" && offered != "none" {
+		return fmt.Sprintf(" via channel %s (channels: %s)", selected, offered)
+	}
+	return fmt.Sprintf(" via channel %s", selected)
 }
 
 // switchToZsh attempts to switch the user's shell to zsh

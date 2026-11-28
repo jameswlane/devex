@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -143,11 +144,11 @@ Run 'devex setup' to begin the guided installation process.`,
 					In:          cmd.InOrStdin(),
 					Out:         out,
 					InstallApps: func(ctx context.Context, names []string) error {
-						apps, selected, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: names})
+						apps, selected, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: names, Repo: repo, RefuseChannelSwitch: true})
 						if err != nil {
 							return err
 						}
-						return runPlainInstall(ctx, out, apps, repo, selected, nil)
+						return runPlainInstallObserved(ctx, out, apps, repo, selected, nil, nil, false)
 					},
 				}
 				if err := preflight.Run(ctx); err != nil {
@@ -163,7 +164,7 @@ Run 'devex setup' to begin the guided installation process.`,
 			if !setup.IsInteractiveMode() {
 				log.Info("Running in non-interactive automated mode")
 				if viper.IsSet("applications") {
-					installErr := executeInstallWithOutput(ctx, nil, nil, verbose, viper.GetBool("dry-run"), repo, settings, cmd.OutOrStdout(), nil)
+					installErr := executeInstallWithChannelPolicy(ctx, nil, nil, strings.TrimSpace(viper.GetString("channel")), true, verbose, viper.GetBool("dry-run"), repo, settings, cmd.OutOrStdout(), nil)
 					if installErr != nil || viper.GetBool("dry-run") {
 						return installErr
 					}
@@ -234,6 +235,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	cmd.Flags().String("shell", "", "Shell for automated setup (bash, zsh, fish); config key: setup.shell; defaults to the current shell")
 	cmd.Flags().StringSlice("ai-agents", nil, "Optional AI coding agents to install (repeatable or comma-separated); config key: setup.ai_agents.apps")
 	cmd.Flags().String("ai-agents-preset", "", "Permission preset for selected AI coding agents (balanced or strict); config key: setup.ai_agents.preset")
+	cmd.Flags().String("channel", "", "Install channel to use for applications (for example official, mise, brew); env: DEVEX_CHANNEL")
 	cmd.Flags().StringP("config", "c", "", "Path to custom setup configuration file (YAML)")
 	cmd.Flags().StringSlice("windows-prerequisites", nil, "On Windows, fix these prerequisites without asking: developer-mode, long-paths, powershell, windows-terminal or all; config key: setup.windows.prerequisites")
 
@@ -246,6 +248,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	_ = viper.BindPFlag("setup.shell", cmd.Flags().Lookup("shell"))
 	_ = viper.BindPFlag("setup.ai_agents.apps", cmd.Flags().Lookup("ai-agents"))
 	_ = viper.BindPFlag("setup.ai_agents.preset", cmd.Flags().Lookup("ai-agents-preset"))
+	_ = viper.BindPFlag("channel", cmd.Flags().Lookup("channel"))
 	_ = viper.BindPFlag("config", cmd.Flags().Lookup("config"))
 	_ = viper.BindPFlag("setup.windows.prerequisites", cmd.Flags().Lookup("windows-prerequisites"))
 

@@ -7,8 +7,42 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"gopkg.in/yaml.v3"
 )
+
+// formatChannelSummary formats the selected channel and available channels,
+// marking the official channel, for human-readable list output.
+func formatChannelSummary(selected string, available []agentapi.PlanChannel) string {
+	if selected == "" && len(available) == 0 {
+		return ""
+	}
+	if len(available) == 0 {
+		return selected
+	}
+	parts := make([]string, 0, len(available))
+	selectedOfficial := false
+	for _, ch := range available {
+		label := ch.Name
+		if ch.Official {
+			label += " (official)"
+		}
+		if strings.EqualFold(ch.Name, selected) {
+			selectedOfficial = ch.Official
+		}
+		parts = append(parts, label)
+	}
+	if len(available) == 1 {
+		return parts[0]
+	}
+	selectedLabel := selected
+	if selectedLabel == "" {
+		selectedLabel = available[0].Name
+	} else if selectedOfficial {
+		selectedLabel += " (official)"
+	}
+	return fmt.Sprintf("%s; channels: %s", selectedLabel, strings.Join(parts, ", "))
+}
 
 // outputInstalledJSON outputs installed apps in JSON format
 func outputInstalledJSON(apps []InstalledApp, writer io.Writer) error {
@@ -193,7 +227,11 @@ func renderInstalledAppsTable(apps []InstalledApp, config *TableConfig, writer i
 		name := truncateString(app.Name, config.NameWidth)
 		desc := truncateString(app.Description, config.DescriptionWidth)
 		category := truncateString(app.Category, config.CategoryWidth)
-		method := truncateString(app.Method, config.MethodWidth)
+		methodLabel := app.Method
+		if summary := formatChannelSummary(app.Channel, app.Channels); summary != "" {
+			methodLabel = summary
+		}
+		method := truncateString(methodLabel, config.MethodWidth)
 		status := truncateString(app.Status, config.StatusWidth)
 
 		fmt.Fprintf(writer, "%s %-*s %s %-*s %s %-*s %s %-*s %s %-*s %s\n",
@@ -222,7 +260,11 @@ func renderInstalledAppsList(apps []InstalledApp, writer io.Writer) error {
 	fmt.Fprintf(writer, "Installed Applications (%d):\n\n", len(apps))
 
 	for _, app := range apps {
-		fmt.Fprintf(writer, "• %s (%s) - %s\n", app.Name, app.Method, app.Description)
+		label := app.Method
+		if summary := formatChannelSummary(app.Channel, app.Channels); summary != "" {
+			label = summary
+		}
+		fmt.Fprintf(writer, "• %s (%s) - %s\n", app.Name, label, app.Description)
 	}
 
 	return nil
@@ -257,7 +299,11 @@ func renderAvailableAppsTable(apps []AvailableApp, config *TableConfig, writer i
 		name := truncateString(app.Name, config.NameWidth)
 		desc := truncateString(app.Description, config.DescriptionWidth)
 		category := truncateString(app.Category, config.CategoryWidth)
-		method := truncateString(app.Method, config.MethodWidth)
+		methodLabel := app.Method
+		if summary := formatChannelSummary(app.Channel, app.Channels); summary != "" {
+			methodLabel = summary
+		}
+		method := truncateString(methodLabel, config.MethodWidth)
 		platform := truncateString(app.Platform, config.StatusWidth)
 
 		// Add recommended indicator
@@ -327,7 +373,11 @@ func renderCategorizedApps(categories map[string][]AvailableApp, sortedCategorie
 			if app.Recommended {
 				prefix = "  ⭐ "
 			}
-			fmt.Fprintf(writer, "%s%s - %s\n", prefix, app.Name, app.Description)
+			if summary := formatChannelSummary(app.Channel, app.Channels); summary != "" {
+				fmt.Fprintf(writer, "%s%s [%s] - %s\n", prefix, app.Name, summary, app.Description)
+			} else {
+				fmt.Fprintf(writer, "%s%s - %s\n", prefix, app.Name, app.Description)
+			}
 		}
 
 		totalApps += len(apps)

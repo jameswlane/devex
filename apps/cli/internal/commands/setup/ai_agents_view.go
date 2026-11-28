@@ -88,7 +88,11 @@ func (m *SetupModel) renderAIAgents() string {
 		if m.selections.selectedAIAgents[app.Name] {
 			selected = selectedStyle.Render("✓")
 		}
-		lines = append(lines, fmt.Sprintf("%s [%s] %s", cursor, selected, app.Name))
+		label := app.Name
+		if tag := formatSetupChannelTag(m.appWithSelectedChannel(app)); tag != "" {
+			label += " " + subtitleStyle.Render(tag)
+		}
+		lines = append(lines, fmt.Sprintf("%s [%s] %s", cursor, selected, label))
 	}
 
 	var scrollIndicators []string
@@ -110,7 +114,7 @@ func (m *SetupModel) renderAIAgents() string {
 		"",
 		description,
 		"",
-		"Use ↑/↓ to navigate, Space to select/deselect, Enter to continue (or skip if none selected)",
+		"Use ↑/↓ to navigate, Space to select/deselect, 'c' to switch channel, Enter to continue (or skip if none selected)",
 	)
 	return strings.Join(lines, "\n")
 }

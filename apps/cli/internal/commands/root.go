@@ -196,8 +196,8 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(setupCmd)
 	cmd.AddCommand(NewInstallCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewUninstallCmd(repo, settings))
-	cmd.AddCommand(newPackageMaintenanceCmd("update", settings, runtime.getPluginBootstrap))
-	cmd.AddCommand(newPackageMaintenanceCmd("upgrade", settings, runtime.getPluginBootstrap))
+	cmd.AddCommand(newPackageMaintenanceCmdWithRepo("update", repo, settings, runtime.getPluginBootstrap))
+	cmd.AddCommand(newPackageMaintenanceCmdWithRepo("upgrade", repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewRollbackCmd(repo, settings))
 	cmd.AddCommand(NewStatusCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewMaintainCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
@@ -279,6 +279,8 @@ func initializeConfig(cmd *cobra.Command) error {
 	// Preserve legacy debug environment aliases below the supported verbose key.
 	_ = viper.BindEnv("verbose", "DEVEX_VERBOSE", "DEVEX_DEBUG", "DEBUG")
 	_ = viper.BindEnv("non-interactive", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE")
+	_ = viper.BindEnv("channel", "DEVEX_CHANNEL")
+	_ = viper.BindEnv("channel_order", "DEVEX_CHANNEL_ORDER")
 	_ = viper.BindEnv(state.DBPathConfigKey, state.DBPathEnvVar, state.DBPathAutoEnvVar)
 
 	if err := loadCLIConfig(viper.GetString("config")); err != nil {
@@ -373,6 +375,9 @@ func setConfigurationDefaults() {
 
 	// Command-specific defaults
 	viper.SetDefault("categories", []string{})
+	viper.SetDefault("channel", "")
+	viper.SetDefault("channels", map[string]string{})
+	viper.SetDefault("channel_order", []string{})
 	viper.SetDefault("non-interactive", false)
 	viper.SetDefault("skip-plugin-download", false)
 	viper.SetDefault("offline", false)

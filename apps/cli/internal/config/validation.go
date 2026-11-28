@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
@@ -94,6 +95,7 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 	for i, alternative := range osConfig.Alternatives {
 		v.validateOSConfig(alternative, fmt.Sprintf("%s.alternatives[%d]", platform, i), filename)
 	}
+	v.validateOSChannels(osConfig, platform, filename)
 	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
 		if _, err := types.ResolvePackageInstall(osConfig.InstallMethod, osConfig.InstallCommand, osConfig.Packages, osConfig.Options); err != nil {
 			v.addError(filename, platform+".packages", err.Error(), err)
@@ -110,6 +112,87 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 	if osConfig.InstallCommand == "" && len(osConfig.Packages) == 0 && !osConfig.IsHookDrivenCurlpipe() && ((osConfig.InstallMethod != "curlpipe" && osConfig.InstallMethod != "appimage") || osConfig.DownloadURL == "") {
 		v.addError(filename, platform+".install_command", "Install command is required", nil)
 	}
+}
+
+// validateOSChannels enforces unique channel names within one platform block
+// and ensures a non-official primary is never paired with an official alternative.
+func (v *ConfigValidator) validateOSChannels(osConfig types.OSConfig, platform, filename string) {
+	if strings.EqualFold(strings.TrimSpace(osConfig.Channel), types.ChannelOfficial) {
+		v.addError(filename, platform+".channel", fmt.Sprintf("Channel name %q is reserved", types.ChannelOfficial), nil)
+	}
+	if len(osConfig.Alternatives) == 0 {
+		return
+	}
+
+	seen := map[string]string{}
+	seenConfigs := map[string][]types.OSConfig{}
+	if primaryName := strings.ToLower(osConfig.ChannelName()); primaryName != "" {
+		seen[primaryName] = platform
+		seenConfigs[primaryName] = []types.OSConfig{osConfig}
+	}
+
+	for i, alt := range osConfig.Alternatives {
+		altField := fmt.Sprintf("%s.alternatives[%d]", platform, i)
+		if altName := strings.ToLower(alt.ChannelName()); altName != "" {
+			prev, duplicate := seen[altName]
+			// Entries that each declare platform_requirements are platform
+			// variants of one channel (amd64 and arm64 archives, say).
+			variant := duplicate
+			for _, earlier := range seenConfigs[altName] {
+				variant = variant && isPlatformVariant(earlier, alt)
+			}
+			switch {
+			case variant:
+				seenConfigs[altName] = append(seenConfigs[altName], alt)
+			case duplicate:
+				v.addError(filename, altField+".channel", fmt.Sprintf("Duplicate channel name %q (already used by %s); add an explicit channel key to distinguish channels sharing an install_method", alt.ChannelName(), prev), nil)
+			default:
+				seen[altName] = altField
+				seenConfigs[altName] = []types.OSConfig{alt}
+			}
+		}
+		if !osConfig.OfficialSupport && alt.OfficialSupport {
+			v.addError(filename, platform+".official_support", fmt.Sprintf("Primary channel %q has official_support: false while alternative %q (%s) has official_support: true; make the official channel primary", osConfig.ChannelName(), alt.ChannelName(), altField), nil)
+		}
+	}
+}
+
+// isPlatformVariant reports whether a and b are builds of one channel for
+// different architectures: the same install_method, and architecture
+// requirements on both that never overlap.
+func isPlatformVariant(a, b types.OSConfig) bool {
+	if !strings.EqualFold(strings.TrimSpace(a.InstallMethod), strings.TrimSpace(b.InstallMethod)) {
+		return false
+	}
+	archesA, archesB := requirementArches(a), requirementArches(b)
+	if len(archesA) == 0 || len(archesB) == 0 {
+		return false
+	}
+	for arch := range archesA {
+		if archesB[arch] {
+			return false
+		}
+	}
+	return true
+}
+
+// requirementArches returns the architectures a's platform_requirements name,
+// or nil when any requirement leaves the architecture open.
+func requirementArches(cfg types.OSConfig) map[string]bool {
+	arches := map[string]bool{}
+	for _, req := range cfg.PlatformRequirements {
+		arch := strings.ToLower(strings.TrimSpace(req.Arch))
+		switch arch {
+		case "":
+			return nil
+		case "x86_64":
+			arch = "amd64"
+		case "aarch64":
+			arch = "arm64"
+		}
+		arches[arch] = true
+	}
+	return arches
 }
 
 // addError adds a validation error

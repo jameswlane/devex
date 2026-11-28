@@ -50,6 +50,9 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		if _, err := m.getOhMyZshPlan(); err != nil {
 			return m, nil
 		}
+		if err := m.validatePlanChannels(); err != nil {
+			return m, nil
+		}
 		m.step = StepInstalling
 		m.installation.setInstalling(true)
 		return m, m.startInstallation()

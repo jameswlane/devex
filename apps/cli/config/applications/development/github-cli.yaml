@@ -61,7 +61,8 @@ linux:
           shell: dnf install -y dnf5-plugins
         - scope: system
           shell: test -e /etc/yum.repos.d/gh-cli.repo || dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo
-    - install_method: dnf
+    - channel: dnf-rhel
+      install_method: dnf
       install_command: gh
       uninstall_command: gh
       official_support: true

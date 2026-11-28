@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/channels"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
@@ -41,9 +42,53 @@ func APIError(err error) *Error {
 }
 
 type PlanRequest struct {
-	Names      []string
-	Categories []string
+	Names               []string
+	Categories          []string
+	Channel             string
+	RecordedChannel     func(types.CrossPlatformApp) string
+	Repo                types.Repository
+	RefuseChannelSwitch bool
+	// SkipChannels returns the selected applications with their default
+	// channels, for callers such as maintenance that resolve each app's
+	// channel themselves.
+	SkipChannels bool
 }
+
+// PlanChannel describes one available install channel for an application on the
+// current platform.
+type PlanChannel struct {
+	Name     string `json:"name" yaml:"name"`
+	Official bool   `json:"official" yaml:"official"`
+	Default  bool   `json:"default,omitempty" yaml:"default,omitempty"`
+}
+
+func availablePlanChannels(app types.CrossPlatformApp) []PlanChannel {
+	all := app.Channels()
+	if len(all) == 0 {
+		return nil
+	}
+	out := make([]PlanChannel, 0, len(all))
+	for _, ch := range all {
+		if !ch.Available {
+			continue
+		}
+		out = append(out, PlanChannel{
+			Name:     ch.Name,
+			Official: ch.Official,
+			Default:  ch.Default,
+		})
+	}
+	return out
+}
+
+func planChannelPreferences(r PlanRequest) channels.Preferences {
+	prefs := channels.PreferencesFromViper()
+	if ch := strings.TrimSpace(r.Channel); ch != "" {
+		prefs.Channel = ch
+	}
+	return prefs
+}
+
 type Plan struct {
 	Apps               []PlannedApp `json:"apps"`
 	DependencyOrder    []string     `json:"dependency_order"`
@@ -62,13 +107,15 @@ type PolicyRef struct {
 	ApprovalRequired bool `json:"approval_required,omitempty"`
 }
 type PlannedApp struct {
-	Name           string   `json:"name"`
-	Method         string   `json:"method"`
-	Plugin         string   `json:"plugin"`
-	Dependencies   []string `json:"dependencies"`
-	Effects        []string `json:"effects"`
-	Privileges     string   `json:"privileges"`
-	UnknownEffects bool     `json:"unknown_effects"`
+	Name           string        `json:"name"`
+	Method         string        `json:"method"`
+	Channel        string        `json:"channel,omitempty"`
+	Channels       []PlanChannel `json:"channels,omitempty"`
+	Plugin         string        `json:"plugin"`
+	Dependencies   []string      `json:"dependencies"`
+	Effects        []string      `json:"effects"`
+	Privileges     string        `json:"privileges"`
+	UnknownEffects bool          `json:"unknown_effects"`
 }
 
 // SelectionResult holds the applications selected for installation together
@@ -112,7 +159,16 @@ func SelectApplicationsWithWarnings(ctx context.Context, s config.CrossPlatformS
 	}
 	filtered, headlessWarnings := filterHeadlessApplications(apps)
 	// A graphical sandbox prerequisite is skipped on headless hosts too.
-	expanded, prereqWarnings := filterHeadlessApplications(expandSandboxPrerequisites(filtered, s))
+	withPrerequisites, err := expandSandboxPrerequisites(filtered, s, planChannelPreferences(r).WithoutExplicitChannel(), r.Repo)
+	if err != nil {
+		return SelectionResult{Settings: s}, &Error{Category: "invalid_request", Message: err.Error(), cause: err}
+	}
+	expanded, prereqWarnings := filterHeadlessApplications(withPrerequisites)
+	if r.RefuseChannelSwitch && r.Repo != nil {
+		if switchErr := channels.CheckRefusedChannelSwitches(r.Repo, expanded); switchErr != nil {
+			return SelectionResult{Settings: s}, &Error{Category: "invalid_request", Message: switchErr.Error(), cause: switchErr}
+		}
+	}
 	warnings := make([]string, 0, len(osWarnings)+len(headlessWarnings)+len(prereqWarnings))
 	warnings = append(warnings, osWarnings...)
 	warnings = append(warnings, headlessWarnings...)
@@ -169,7 +225,25 @@ func selectRequestedApplications(ctx context.Context, s config.CrossPlatformSett
 	if len(apps) == 0 && len(warnings) == 0 && !present {
 		return nil, s, nil, &Error{Category: "not_found", Message: "no applications matched the install request"}
 	}
-	return apps, s, warnings, nil
+	if r.SkipChannels {
+		return apps, s, warnings, nil
+	}
+	var resolved []types.CrossPlatformApp
+	if r.RecordedChannel != nil {
+		resolved, err = channels.ResolveAll(apps, planChannelPreferences(r), r.RecordedChannel)
+	} else {
+		var installedLookup func(types.CrossPlatformApp) string
+		if r.Repo != nil {
+			installedLookup = func(app types.CrossPlatformApp) string {
+				return channels.InstalledChannelForApp(r.Repo, app)
+			}
+		}
+		resolved, err = channels.ResolveAllForInstall(apps, planChannelPreferences(r), installedLookup)
+	}
+	if err != nil {
+		return nil, s, nil, &Error{Category: "invalid_request", Message: err.Error(), cause: err}
+	}
+	return resolved, s, warnings, nil
 }
 
 // expandSandboxPrerequisites puts the current-platform sandbox_prerequisites
@@ -178,15 +252,21 @@ func selectRequestedApplications(ctx context.Context, s config.CrossPlatformSett
 // catalog applications supported on this platform. The order depends only on
 // the set of selected apps' declarations, so resolving the expanded names again
 // (as MCP confirmation does) yields the same roots in the same order.
-func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) []types.CrossPlatformApp {
+func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings, prereqPrefs channels.Preferences, repo types.Repository) ([]types.CrossPlatformApp, error) {
 	if len(apps) == 0 {
-		return apps
+		return apps, nil
 	}
 	catalog := make(map[string]types.CrossPlatformApp)
 	for _, app := range settings.GetAllApps() {
 		catalog[normalizeInstallLookup(app.Name)] = app
 	}
+	// A prerequisite the user also asked for keeps the channel chosen for it.
+	selected := make(map[string]types.CrossPlatformApp, len(apps))
+	for _, app := range apps {
+		selected[normalizeInstallLookup(app.Name)] = app
+	}
 	var prerequisites []types.CrossPlatformApp
+	var failures []error
 	isPrerequisite := map[string]bool{}
 	for _, app := range apps {
 		appKey := normalizeInstallLookup(app.Name)
@@ -199,12 +279,25 @@ func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.C
 			if !ok || !prerequisite.IsSupported() {
 				continue
 			}
+			if chosen, requested := selected[key]; requested {
+				prerequisite = chosen
+			} else {
+				resolved, _, err := channels.ResolveForInstall(prerequisite, prereqPrefs, channels.InstalledChannelForApp(repo, prerequisite))
+				if err != nil {
+					failures = append(failures, fmt.Errorf("sandbox prerequisite of %s: %w", app.Name, err))
+					continue
+				}
+				prerequisite = resolved
+			}
 			isPrerequisite[key] = true
 			prerequisites = append(prerequisites, prerequisite)
 		}
 	}
+	if len(failures) > 0 {
+		return nil, errors.Join(failures...)
+	}
 	if len(prerequisites) == 0 {
-		return apps
+		return apps, nil
 	}
 	expanded := append([]types.CrossPlatformApp(nil), prerequisites...)
 	emitted := map[string]bool{}
@@ -216,7 +309,7 @@ func expandSandboxPrerequisites(apps []types.CrossPlatformApp, settings config.C
 		emitted[key] = true
 		expanded = append(expanded, app)
 	}
-	return expanded
+	return expanded, nil
 }
 
 // PlanInstall has no installer, executor, filesystem writer, or network dependency.
@@ -245,13 +338,38 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 	var violations []string
 	byName := map[string]types.CrossPlatformApp{}
 	aliases := map[string]string{}
+	depPrefs := planChannelPreferences(r).WithoutExplicitChannel()
+	// Resolution errors only matter for the dependencies the plan reaches.
+	resolveErrs := map[string]error{}
 	for _, app := range s.GetAllApps() {
-		byName[normalizeInstallLookup(app.Name)] = app
-		aliases[normalizeInstallLookup(app.Name)] = normalizeInstallLookup(app.Name)
-		c := app.GetOSConfig()
-		if c.InstallCommand != "" {
-			aliases[normalizeInstallLookup(c.InstallCommand)] = normalizeInstallLookup(app.Name)
+		key := normalizeInstallLookup(app.Name)
+		aliases[key] = key
+		// A dependency may name the catalog's default command or the
+		// selected channel's command; both resolve to the app.
+		if command := app.GetOSConfig().InstallCommand; command != "" {
+			aliases[normalizeInstallLookup(command)] = key
 		}
+		recorded := channels.InstalledChannelForApp(r.Repo, app)
+		if selected, _, resolveErr := channels.ResolveForInstall(app, depPrefs, recorded); resolveErr == nil {
+			app = selected
+			if r.RefuseChannelSwitch {
+				if switchErr := channels.CheckRefusedChannelSwitch(r.Repo, selected); switchErr != nil {
+					resolveErrs[key] = switchErr
+				}
+			}
+		} else {
+			resolveErrs[key] = resolveErr
+		}
+		byName[key] = app
+		if command := app.GetOSConfig().InstallCommand; command != "" {
+			if _, taken := aliases[normalizeInstallLookup(command)]; !taken {
+				aliases[normalizeInstallLookup(command)] = key
+			}
+		}
+	}
+	for _, app := range apps {
+		byName[normalizeInstallLookup(app.Name)] = app
+		delete(resolveErrs, normalizeInstallLookup(app.Name))
 	}
 	visited := map[string]bool{}
 	var visit func(types.CrossPlatformApp) error
@@ -262,6 +380,9 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 		key := normalizeInstallLookup(app.Name)
 		if visited[key] {
 			return nil
+		}
+		if resolveErr := resolveErrs[key]; resolveErr != nil {
+			return &Error{Category: "invalid_request", Message: resolveErr.Error(), cause: resolveErr}
 		}
 		visited[key] = true
 		if err := orgPolicy.CheckApp(app); err != nil {
@@ -300,7 +421,17 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 				deps[i] = "[redacted]"
 			}
 		}
-		result.Apps = append(result.Apps, PlannedApp{Name: app.Name, Method: c.InstallMethod, Plugin: "package-manager-" + c.InstallMethod, Dependencies: deps, Effects: effects, Privileges: "unknown", UnknownEffects: true})
+		result.Apps = append(result.Apps, PlannedApp{
+			Name:           app.Name,
+			Method:         c.InstallMethod,
+			Channel:        app.SelectedChannel(),
+			Channels:       availablePlanChannels(app),
+			Plugin:         "package-manager-" + c.InstallMethod,
+			Dependencies:   deps,
+			Effects:        effects,
+			Privileges:     "unknown",
+			UnknownEffects: true,
+		})
 		result.DependencyOrder = append(result.DependencyOrder, app.Name)
 		if config.ClassifyInstallMethod(c.InstallMethod) != config.MethodSupported {
 			result.Warnings = append(result.Warnings, "unsupported install method")

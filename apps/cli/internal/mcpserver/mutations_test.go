@@ -17,7 +17,9 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/catalog"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/mcpserver"
+	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -368,6 +370,134 @@ var _ = Describe("MCP mutating tools", func() {
 		decode(call(session, "install_apps", map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}), &out)
 		Expect(out.Result).To(Equal("failed"))
 		Expect(out.Note).To(ContainSubstring("finish run: disk full"))
+	})
+
+	It("confirms an install with --channel when an app expands sandbox prerequisites that do not offer that channel", func() {
+		codexSettings := config.CrossPlatformSettings{
+			HomeDir: GinkgoT().TempDir(),
+			ApplicationOverrides: []types.CrossPlatformApp{
+				{
+					Name:        "Codex CLI",
+					Description: "OpenAI Codex CLI",
+					Category:    "AI Coding Agents",
+					Linux: types.OSConfig{
+						InstallMethod:        "curlpipe",
+						DownloadURL:          "https://example.invalid/codex.sh",
+						OfficialSupport:      true,
+						SandboxPrerequisites: []string{"Bubblewrap"},
+						Alternatives: []types.OSConfig{
+							{
+								InstallMethod:        "mise",
+								InstallCommand:       "npm:@openai/codex@latest",
+								OfficialSupport:      true,
+								SandboxPrerequisites: []string{"Bubblewrap"},
+							},
+						},
+					},
+				},
+				{
+					Name:        "Bubblewrap",
+					Description: "Unprivileged sandboxing tool",
+					Category:    "Security",
+					Linux: types.OSConfig{
+						InstallMethod:   "apt",
+						InstallCommand:  "bubblewrap",
+						OfficialSupport: true,
+					},
+				},
+			},
+		}
+		executor.settings = codexSettings
+		options.Settings = codexSettings
+
+		session := connect()
+		var plan mcpserver.PreparedPlan
+		decode(call(session, "prepare_install", map[string]any{
+			"apps":    []string{"Codex CLI"},
+			"channel": "mise",
+		}), &plan)
+
+		byName := map[string]agentapi.PlannedApp{}
+		for _, app := range plan.Install.Apps {
+			byName[app.Name] = app
+		}
+		Expect(byName).To(HaveKey("Codex CLI"))
+		Expect(byName["Codex CLI"].Channel).To(Equal("mise"))
+		Expect(byName).To(HaveKey("Bubblewrap"))
+		Expect(byName["Bubblewrap"].Channel).To(Equal("apt"))
+
+		var out mcpserver.ExecuteOutput
+		decode(call(session, "install_apps", map[string]any{
+			"plan_id": plan.PlanID,
+			"digest":  plan.Digest,
+		}), &out)
+		Expect(out.Result).To(Equal("completed"))
+		Expect(executor.installed).To(Equal([][]string{{"Bubblewrap", "Codex CLI"}}))
+	})
+
+	It("refuses channel switches in plan_install, prepare_install, and install_apps confirmation (S3)", func() {
+		repo := mocks.NewMockRepository()
+		ghosttySettings := config.CrossPlatformSettings{
+			HomeDir: GinkgoT().TempDir(),
+			ApplicationOverrides: []types.CrossPlatformApp{
+				{
+					Name:        "Ghostty",
+					Description: "GPU-accelerated terminal",
+					Category:    "Terminal Emulators",
+					Linux: types.OSConfig{
+						InstallMethod:   "apt",
+						InstallCommand:  "ghostty",
+						OfficialSupport: true,
+						Alternatives: []types.OSConfig{
+							{
+								InstallMethod:   "snap",
+								InstallCommand:  "ghostty --classic",
+								OfficialSupport: false,
+							},
+						},
+					},
+				},
+			},
+		}
+		executor.settings = ghosttySettings
+		options.Settings = ghosttySettings
+		options.Repo = repo
+
+		session := connect()
+
+		// Prepare a snap install before Ghostty is installed.
+		var plan mcpserver.PreparedPlan
+		decode(call(session, "prepare_install", map[string]any{
+			"apps":    []string{"Ghostty"},
+			"channel": "snap",
+		}), &plan)
+
+		// Now record an apt install receipt before confirmation.
+		aptGhostty, err := ghosttySettings.ApplicationOverrides[0].WithChannel("apt")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo.AddApp(aptGhostty.Name)).To(Succeed())
+		Expect(inventory.Record(ctx, repo, aptGhostty, inventory.RecordOptions{
+			Query: func(context.Context, string, string) (bool, string, error) { return true, "1.0.0", nil },
+		})).To(Succeed())
+
+		expectedMsg := `Ghostty is installed through channel "apt"; run 'devex uninstall --app "Ghostty"' first, then install it with --channel snap`
+
+		// Confirmation must refuse before running Install.
+		Expect(errorText(call(session, "install_apps", map[string]any{
+			"plan_id": plan.PlanID,
+			"digest":  plan.Digest,
+		}))).To(ContainSubstring(expectedMsg))
+		Expect(executor.installed).To(BeEmpty())
+
+		// New plan_install and prepare_install calls also refuse immediately.
+		Expect(errorText(call(session, "plan_install", map[string]any{
+			"apps":    []string{"Ghostty"},
+			"channel": "snap",
+		}))).To(ContainSubstring(expectedMsg))
+		Expect(errorText(call(session, "prepare_install", map[string]any{
+			"apps":    []string{"Ghostty"},
+			"channel": "snap",
+		}))).To(ContainSubstring(expectedMsg))
 	})
 })
 

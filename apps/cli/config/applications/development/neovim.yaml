@@ -139,7 +139,8 @@ linux:
         - os: ubuntu
       dependencies:
         - python3-neovim
-    - install_method: apt
+    - channel: apt-ppa
+      install_method: apt
       install_command: neovim
       uninstall_command: neovim
       official_support: false
@@ -164,7 +165,8 @@ linux:
           version: 8+
         - os: rhel
           version: 8+
-    - install_method: dnf
+    - channel: dnf-nightly
+      install_method: dnf
       install_command: neovim python3-neovim
       uninstall_command: neovim python3-neovim
       official_support: false
@@ -233,7 +235,8 @@ linux:
       install_command: nvim --classic
       uninstall_command: nvim
       official_support: true
-    - install_method: snap
+    - channel: snap-edge
+      install_method: snap
       install_command: --edge nvim --classic
       uninstall_command: nvim
       official_support: true

@@ -95,7 +95,8 @@ linux:
       pre_install:
         - shell: sudo zypper ar https://download.opensuse.org/repositories/devel:/languages:/go/openSUSE_Factory/devel:languages:go.repo
         - shell: sudo zypper --non-interactive --gpg-auto-import-keys ref
-    - install_method: zypper
+    - channel: zypper-leap
+      install_method: zypper
       install_command: lazygit
       uninstall_command: lazygit
       official_support: true

@@ -24,7 +24,8 @@ linux:
       platform_requirements:
         - os: debian
         - os: ubuntu
-    - install_method: apt
+    - channel: apt-debian
+      install_method: apt
       install_command: ulauncher
       uninstall_command: ulauncher
       official_support: true

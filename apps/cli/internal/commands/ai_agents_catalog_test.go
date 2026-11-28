@@ -246,6 +246,20 @@ var _ = Describe("AI Coding Agents catalog", func() {
 		})
 	})
 
+	It("keeps Codex CLI's Bubblewrap sandbox prerequisite on its mise channel", func() {
+		DeferCleanup(types.PinCatalogPlatformForTesting(platform.DetectionResult{
+			OS: "linux", Distribution: "ubuntu", DistributionLike: []string{"debian"}, Version: "24.04", Architecture: "amd64",
+		}))
+		apps, _, err := agentapi.SelectApplications(context.Background(), settings, agentapi.PlanRequest{Names: []string{"Codex CLI"}, Channel: "mise"})
+		Expect(err).NotTo(HaveOccurred())
+		names := make([]string, 0, len(apps))
+		for _, app := range apps {
+			names = append(names, app.Name)
+		}
+		Expect(names).To(Equal([]string{"Bubblewrap", "Codex CLI"}))
+		Expect(apps[1].SelectedChannel()).To(Equal("mise"))
+	})
+
 	It("ships and strictly validates every AI coding agent definition", func() {
 		Expect(files).To(Equal([]string{
 			"aider.yaml",

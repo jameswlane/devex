@@ -361,6 +361,7 @@ func (s *server) validateConfig(ctx context.Context, _ *mcp.CallToolRequest, in 
 type PlanInput struct {
 	Apps       []string `json:"apps,omitempty" jsonschema:"application names to plan"`
 	Categories []string `json:"categories,omitempty" jsonschema:"categories to plan"`
+	Channel    string   `json:"channel,omitempty" jsonschema:"install channel to use (for example official, mise, brew)"`
 }
 
 func (s *server) planInstall(ctx context.Context, _ *mcp.CallToolRequest, in PlanInput) (*mcp.CallToolResult, agentapi.Plan, error) {
@@ -370,12 +371,21 @@ func (s *server) planInstall(ctx context.Context, _ *mcp.CallToolRequest, in Pla
 	if err := checkNames("categories", in.Categories); err != nil {
 		return nil, agentapi.Plan{}, err
 	}
+	if err := checkText("channel", in.Channel); err != nil {
+		return nil, agentapi.Plan{}, err
+	}
 	ctx, done, err := s.begin(ctx)
 	if err != nil {
 		return nil, agentapi.Plan{}, err
 	}
 	defer done()
-	plan, err := agentapi.PlanInstall(ctx, s.opts.Settings, agentapi.PlanRequest{Names: in.Apps, Categories: in.Categories})
+	plan, err := agentapi.PlanInstall(ctx, s.opts.Settings, agentapi.PlanRequest{
+		Names:               in.Apps,
+		Categories:          in.Categories,
+		Channel:             in.Channel,
+		Repo:                s.opts.Repo,
+		RefuseChannelSwitch: true,
+	})
 	if err != nil {
 		return nil, agentapi.Plan{}, toolError(err)
 	}

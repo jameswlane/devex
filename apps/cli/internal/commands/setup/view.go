@@ -483,7 +483,11 @@ func (m *SetupModel) renderDesktopApps() string {
 		if m.selections.selectedDesktopApps[app.Name] {
 			selected = selectedStyle.Render("✓")
 		}
-		lines = append(lines, fmt.Sprintf("%s [%s] %s", cursor, selected, app.Name))
+		label := app.Name
+		if tag := formatSetupChannelTag(m.appWithSelectedChannel(app)); tag != "" {
+			label += " " + subtitleStyle.Render(tag)
+		}
+		lines = append(lines, fmt.Sprintf("%s [%s] %s", cursor, selected, label))
 	}
 
 	var scrollIndicators []string
@@ -505,7 +509,7 @@ func (m *SetupModel) renderDesktopApps() string {
 		"",
 		description,
 		"",
-		"Use ↑/↓ to navigate, Space to select/deselect, Enter to continue",
+		"Use ↑/↓ to navigate, Space to select/deselect, Enter to continue, 'c' to switch channel",
 	)
 	return strings.Join(lines, "\n")
 }

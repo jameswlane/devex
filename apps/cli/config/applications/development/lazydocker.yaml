@@ -15,7 +15,8 @@ macos:
     min_memory_mb: 512
     min_disk_space_mb: 100
   alternatives:
-    - install_method: brew
+    - channel: brew-core
+      install_method: brew
       install_command: lazydocker
       uninstall_command: lazydocker
       official_support: true
