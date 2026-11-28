@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -46,13 +47,20 @@ func libatomicInstalled() bool {
 	return false
 }
 
-// needsNode reports whether any spec installs mise's node runtime, either
-// directly (node@lts) or as the runtime for an npm: backend tool.
+// needsNode reports whether any spec installs a mise node runtime that can be
+// Node 26 or later. Explicit pins below 26 (node@24) do not link libatomic.
 func needsNode(specs []string) bool {
 	for _, spec := range specs {
-		if toolName(spec) == "node" {
-			return true
+		if toolName(spec) != "node" {
+			continue
 		}
+		version := strings.TrimPrefix(spec, "node")
+		version = strings.TrimPrefix(version, "@")
+		major, _, _ := strings.Cut(version, ".")
+		if n, err := strconv.Atoi(major); err == nil && n < 26 {
+			continue
+		}
+		return true
 	}
 	return false
 }
