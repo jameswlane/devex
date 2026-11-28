@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"debug/elf"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -38,4 +39,18 @@ func SetLibatomicPatterns(patterns []string) func() {
 	previous := libatomicPatterns
 	libatomicPatterns = patterns
 	return func() { libatomicPatterns = previous }
+}
+
+// SetLdconfigPaths overrides the loader-cache tools that are queried.
+func SetLdconfigPaths(paths []string) func() {
+	previous := ldconfigPaths
+	ldconfigPaths = paths
+	return func() { ldconfigPaths = previous }
+}
+
+// SetNativeELFMachine overrides the architecture libatomic must be built for.
+func SetNativeELFMachine(machine elf.Machine) func() {
+	previous := nativeELFMachine
+	nativeELFMachine = machine
+	return func() { nativeELFMachine = previous }
 }

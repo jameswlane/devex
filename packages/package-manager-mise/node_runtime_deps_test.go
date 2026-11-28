@@ -2,8 +2,12 @@ package main_test
 
 import (
 	"context"
+	"debug/elf"
+	"encoding/binary"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -35,6 +39,8 @@ var _ = Describe("Node runtime dependencies on Linux (#703)", func() {
 		restores = []func(){
 			main.SetTargetOS("linux"),
 			main.SetLibatomicPatterns([]string{filepath.Join(libDir, "*", "libatomic.so.1")}),
+			main.SetLdconfigPaths(nil),
+			main.SetNativeELFMachine(elf.EM_X86_64),
 		}
 	})
 
@@ -44,10 +50,34 @@ var _ = Describe("Node runtime dependencies on Linux (#703)", func() {
 		}
 	})
 
+	// writeELF writes a minimal ELF64 shared-object header for machine.
+	writeELF := func(path string, machine elf.Machine) {
+		header := make([]byte, 64)
+		copy(header, elf.ELFMAG)
+		header[elf.EI_CLASS] = byte(elf.ELFCLASS64)
+		header[elf.EI_DATA] = byte(elf.ELFDATA2LSB)
+		header[elf.EI_VERSION] = byte(elf.EV_CURRENT)
+		binary.LittleEndian.PutUint16(header[16:], uint16(elf.ET_DYN))
+		binary.LittleEndian.PutUint16(header[18:], uint16(machine))
+		binary.LittleEndian.PutUint32(header[20:], uint32(elf.EV_CURRENT))
+		binary.LittleEndian.PutUint16(header[52:], 64)
+		Expect(os.MkdirAll(filepath.Dir(path), 0o755)).To(Succeed())
+		Expect(os.WriteFile(path, header, 0o644)).To(Succeed())
+	}
+
 	provideLibatomic := func() {
-		dir := filepath.Join(libDir, "x86_64-linux-gnu")
-		Expect(os.MkdirAll(dir, 0o755)).To(Succeed())
-		Expect(os.WriteFile(filepath.Join(dir, "libatomic.so.1"), nil, 0o644)).To(Succeed())
+		writeELF(filepath.Join(libDir, "x86_64-linux-gnu", "libatomic.so.1"), elf.EM_X86_64)
+	}
+
+	// fakeLdconfig makes `ldconfig -p` list libatomic.so.1 at path.
+	fakeLdconfig := func(path string) {
+		if runtime.GOOS == "windows" {
+			Skip("the fake ldconfig is a shell script")
+		}
+		script := filepath.Join(GinkgoT().TempDir(), "ldconfig")
+		body := "#!/bin/sh\nprintf '2 libs found in cache\\n\\tlibc.so.6 (libc6,x86-64) => /lib/libc.so.6\\n\\tlibatomic.so.1 (libc6,x86-64) => " + path + "\\n'\n"
+		Expect(os.WriteFile(script, []byte(body), 0o755)).To(Succeed())
+		restores = append(restores, main.SetLdconfigPaths([]string{script}))
 	}
 
 	It("installs libatomic1 with apt-get before mise installs node", func() {
@@ -96,6 +126,90 @@ var _ = Describe("Node runtime dependencies on Linux (#703)", func() {
 
 		Expect(recorder.Calls("apt-get")).To(BeEmpty())
 		Expect(recorder.Calls("mise")).To(HaveLen(1))
+	})
+
+	It("treats mise's nodejs alias like node (#738)", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"nodejs@lts"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{
+			{Args: []string{"install", "-y", "libatomic1"}, ElevationRequested: true},
+		}))
+	})
+
+	It("leaves node@system, which uses the Node already installed, alone (#738)", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@system"})).To(Succeed())
+		Expect(plugin.HandleInstall(context.Background(), []string{"nodejs@system"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
+	})
+
+	It("ignores a libatomic built for another architecture (#738)", func() {
+		writeELF(filepath.Join(libDir, "i386-linux-gnu", "libatomic.so.1"), elf.EM_386)
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@lts"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(HaveLen(1))
+	})
+
+	It("ignores an x32 libatomic, which is 32-bit x86-64 (#738)", func() {
+		if strconv.IntSize != 64 {
+			Skip("the ELF class check applies to 64-bit builds")
+		}
+		path := filepath.Join(libDir, "x32", "libatomic.so.1")
+		writeELF(path, elf.EM_X86_64)
+		raw, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		raw[elf.EI_CLASS] = byte(elf.ELFCLASS32)
+		Expect(os.WriteFile(path, raw[:52], 0o644)).To(Succeed())
+		x32, err := elf.Open(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(x32.Machine).To(Equal(elf.EM_X86_64))
+		Expect(x32.Close()).To(Succeed())
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@lts"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(HaveLen(1))
+	})
+
+	It("ignores a dangling libatomic.so.1 symlink (#738)", func() {
+		if runtime.GOOS == "windows" {
+			Skip("symlinks need extra privileges on Windows")
+		}
+		dir := filepath.Join(libDir, "x86_64-linux-gnu")
+		Expect(os.MkdirAll(dir, 0o755)).To(Succeed())
+		Expect(os.Symlink(filepath.Join(dir, "libatomic.so.1.2.0"), filepath.Join(dir, "libatomic.so.1"))).To(Succeed())
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@lts"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(HaveLen(1))
+	})
+
+	It("finds a libatomic registered only in the loader cache (#738)", func() {
+		optLib := filepath.Join(GinkgoT().TempDir(), "opt", "gcc", "lib64", "libatomic.so.1")
+		writeELF(optLib, elf.EM_X86_64)
+		fakeLdconfig(optLib)
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@lts"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
+		Expect(recorder.Calls("mise")).To(HaveLen(1))
+	})
+
+	It("does not trust a loader-cache entry whose file is gone (#738)", func() {
+		fakeLdconfig(filepath.Join(libDir, "missing", "libatomic.so.1"))
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@lts"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(HaveLen(1))
 	})
 
 	It("leaves node pins below 25, which do not need libatomic, alone", func() {
