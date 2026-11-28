@@ -13,7 +13,25 @@ const (
 	PostgreSQLPort = "5432:5432"
 	MySQLPort      = "3306:3306"
 	RedisPort      = "6379:6379"
+	MongoDBPort    = "27017:27017"
 )
+
+// databaseContainer is how the setup Databases screen runs one database.
+type databaseContainer struct {
+	image     string
+	container string
+	port      string
+	env       string
+}
+
+// databaseContainers holds a container for every database the setup menu
+// offers. A name on the menu without an entry here would install nothing.
+var databaseContainers = map[string]databaseContainer{
+	"PostgreSQL": {image: "postgres:16", container: "postgres16", port: PostgreSQLPort, env: "POSTGRES_HOST_AUTH_METHOD=trust"},
+	"MySQL":      {image: "mysql:8.4", container: "mysql8", port: MySQLPort, env: "MYSQL_ALLOW_EMPTY_PASSWORD=true"},
+	"Redis":      {image: "redis:7", container: "redis", port: RedisPort},
+	"MongoDB":    {image: "mongo:7", container: "mongodb", port: MongoDBPort},
+}
 
 // getDockerApp returns the Docker app that database selections depend on. It
 // is the catalog's Docker entry, so the Confirmation screen shows the same
@@ -59,35 +77,14 @@ func (m *SetupModel) getDatabaseApps() []types.CrossPlatformApp {
 	var apps []types.CrossPlatformApp
 	selectedDBs := m.getSelectedDatabases()
 
-	dbConfigs := map[string]map[string]string{
-		"PostgreSQL": {
-			"image":     "postgres:16",
-			"container": "postgres16",
-			"port":      PostgreSQLPort,
-			"env":       "POSTGRES_HOST_AUTH_METHOD=trust",
-		},
-		"MySQL": {
-			"image":     "mysql:8.4",
-			"container": "mysql8",
-			"port":      MySQLPort,
-			"env":       "MYSQL_ALLOW_EMPTY_PASSWORD=true",
-		},
-		"Redis": {
-			"image":     "redis:7",
-			"container": "redis",
-			"port":      RedisPort,
-			"env":       "",
-		},
-	}
-
 	for _, db := range selectedDBs {
-		if dbConfig, exists := dbConfigs[db]; exists {
+		if dbConfig, exists := databaseContainers[db]; exists {
 			// Build Docker command securely with validation
 			dockerCmd, err := BuildSecureDockerCommand(
-				dbConfig["container"],
-				dbConfig["image"],
-				dbConfig["port"],
-				dbConfig["env"],
+				dbConfig.container,
+				dbConfig.image,
+				dbConfig.port,
+				dbConfig.env,
 			)
 			if err != nil {
 				log.Error("Invalid Docker configuration for database", err, "database", db)
