@@ -155,6 +155,24 @@ var _ = Describe("Node runtime dependencies on Linux (#703)", func() {
 		Expect(recorder.Calls("apt-get")).To(HaveLen(1))
 	})
 
+	It("ignores an x32 libatomic, which is 32-bit x86-64 (#738)", func() {
+		path := filepath.Join(libDir, "x32", "libatomic.so.1")
+		writeELF(path, elf.EM_X86_64)
+		raw, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		raw[elf.EI_CLASS] = byte(elf.ELFCLASS32)
+		Expect(os.WriteFile(path, raw[:52], 0o644)).To(Succeed())
+		x32, err := elf.Open(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(x32.Machine).To(Equal(elf.EM_X86_64))
+		Expect(x32.Close()).To(Succeed())
+		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
+
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@lts"})).To(Succeed())
+
+		Expect(recorder.Calls("apt-get")).To(HaveLen(1))
+	})
+
 	It("ignores a dangling libatomic.so.1 symlink (#738)", func() {
 		if runtime.GOOS == "windows" {
 			Skip("symlinks need extra privileges on Windows")

@@ -21,8 +21,8 @@ var targetOS = runtime.GOOS
 
 // libatomicPatterns are the glob patterns searched for libatomic.so.1. They
 // cover the merged-/usr and multiarch layouts of Debian, Ubuntu, Fedora,
-// openSUSE and Arch. /sbin/ldconfig is not on a Debian user's PATH, so the
-// plugin looks for the file instead of asking the linker cache.
+// openSUSE and Arch. They are checked first; the loader cache is the fallback
+// for libraries installed elsewhere.
 var libatomicPatterns = []string{
 	"/lib/*-linux-gnu/libatomic.so.1",
 	"/usr/lib/*-linux-gnu/libatomic.so.1",
@@ -87,6 +87,9 @@ func nativeLibrary(path string) bool {
 		return false
 	}
 	defer func() { _ = f.Close() }()
+	if strconv.IntSize == 64 && f.Class != elf.ELFCLASS64 {
+		return false // for example Ubuntu's x32 libx32atomic1, which is EM_X86_64
+	}
 	return nativeELFMachine == elf.EM_NONE || f.Machine == nativeELFMachine
 }
 
@@ -163,6 +166,10 @@ func (m *MisePlugin) ensureNodeRuntimeDeps(ctx context.Context, specs []string) 
 		}
 		if err != nil {
 			return fmt.Errorf("install libatomic for Node.js: %w; run `sudo %s %s` and retry", err, pkg.manager, strings.Join(pkg.args, " "))
+		}
+		if !libatomicInstalled(ctx) {
+			// The package can already be installed with its library broken, such as a dangling symlink.
+			m.logger.Warning("libatomic.so.1 is still missing after installing it with %s; Node.js may fail to start until the package is reinstalled", pkg.manager)
 		}
 		return nil
 	}
