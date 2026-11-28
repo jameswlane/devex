@@ -15,7 +15,7 @@ import (
 // PluginBasedInstaller.IsInstalled cannot tell whether the app is present.
 func HasInstalledQuery(method string) bool {
 	switch method {
-	case "apt", "appimage", "brew", "deb", "dnf", "flatpak", "mas", "mise", "pip", "winget", "yum", "zypper":
+	case "apt", "appimage", "brew", "deb", "dnf", "flatpak", "mas", "mise", "pip", "rpm", "winget", "yum", "zypper":
 		return true
 	default:
 		return false

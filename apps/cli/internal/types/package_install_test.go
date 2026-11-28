@@ -64,6 +64,12 @@ all_platforms:
 		_, err = types.ResolvePackageInstall("winget", "Git.Git --force", nil, nil)
 		Expect(err).To(MatchError(ContainSubstring("unsupported winget package option")))
 	})
+	It("queries an rpm app by its uninstall_command package name, not its .rpm file (#421)", func() {
+		config := types.AppConfig{InstallMethod: "rpm", InstallCommand: "/opt/pkgs/tool-1.0-1.x86_64.rpm", UninstallCommand: "tool"}
+		Expect(config.PackageQueryCommand()).To(Equal("tool"))
+		config.UninstallCommand = ""
+		Expect(config.PackageQueryCommand()).To(Equal("/opt/pkgs/tool-1.0-1.x86_64.rpm"))
+	})
 	It("keeps the zypper pattern selection for install, removal and queries", func() {
 		config := types.AppConfig{InstallMethod: "zypper", Packages: []string{"devel_basis"}, Options: []string{"-t", "pattern"}}
 		Expect(config.PackageQueryCommand()).To(Equal("zypper install '--type=pattern' 'devel_basis'"))
