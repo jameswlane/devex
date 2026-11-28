@@ -262,10 +262,10 @@ func startupDryRun(args []string) bool {
 
 // explicitDryRun reads --dry-run as Cobra parses it, so a flag value such as
 // --template --dry-run=false is not taken for the flag, and falls back to
-// DEVEX_DRY_RUN. Unresolved command lines are scanned up to --. set is false
+// DEVEX_DRY_RUN. Unresolved or unparsable command lines are scanned up to --. set is false
 // when neither is given.
 func explicitDryRun(args []string) (dry, set bool) {
-	if route := resolveStartupRoute(args); route.resolved {
+	if route := resolveStartupRoute(args); route.resolved && !route.flagsInvalid {
 		if route.flagSet("dry-run") {
 			return route.flagTrue("dry-run"), true
 		}
@@ -412,6 +412,9 @@ type startupRoute struct {
 	// path holds the command names below the root, such as [mcp serve].
 	path  []string
 	flags *pflag.FlagSet
+	// flagsInvalid is set when the command resolves but its flags do not
+	// parse; flags is then empty and execution fails with Cobra's flag error.
+	flagsInvalid bool
 	// completion is set for Cobra's hidden shell-completion commands, which
 	// Cobra adds only while executing.
 	completion bool
@@ -452,10 +455,13 @@ func computeStartupRoute(args []string) startupRoute {
 	cmd.InitDefaultVersionFlag()
 	// Parse what Find leaves after the command path, as Cobra does at
 	// execution, so the remaining positional arguments can be validated.
-	if err := cmd.ParseFlags(rest); err != nil {
-		return startupRoute{}
-	}
 	path := strings.Fields(cmd.CommandPath())
+	if err := cmd.ParseFlags(rest); err != nil {
+		// Keep the command path so read-only routes still skip runtime
+		// startup before Cobra reports the flag error. Partially parsed flags
+		// are dropped: Cobra fails before acting on any of them.
+		return startupRoute{resolved: true, flagsInvalid: true, path: path[1:], flags: pflag.NewFlagSet(path[0], pflag.ContinueOnError)}
+	}
 	route := startupRoute{resolved: true, path: path[1:], flags: cmd.Flags()}
 	// Unknown commands fail the root's argument check, which Cobra runs after
 	// flag parsing and after printing help or the version; other commands keep

@@ -21,6 +21,29 @@ var _ = Describe("Startup migration preview policy", func() {
 		GinkgoT().Setenv("DEVEX_DRY_RUN", "")
 		Expect(explicit([]string{"paths", "--dry-run"})).To(BeTrue())
 		Expect(explicit([]string{"--", "--dry-run"})).To(BeFalse())
+		// A typo'd flag still leaves an explicit --dry-run in force.
+		Expect(explicit([]string{"install", "--dry-run", "--bogus"})).To(BeTrue())
+	})
+})
+
+var _ = Describe("Startup routes with an unknown flag", func() {
+	// Cobra rejects the flag at execution; the early path must still be taken
+	// so the error is reported without creating the datastore or a log.
+	DescribeTable("keep read-only agent commands off the full startup path",
+		func(classify func([]string) bool, args []string) {
+			Expect(classify(args)).To(BeTrue())
+		},
+		Entry("agent install-skill", agentSkillInstallCommand, []string{"agent", "install-skill", "--agent", "claude", "--scope", "user", "--bogus"}),
+		Entry("agent sandbox", agentSandboxCommand, []string{"agent", "sandbox", "--bogus"}),
+		Entry("agent doctor", agentDoctorCommand, []string{"agent", "doctor", "--bogus"}),
+		Entry("agent login", agentLoginCommand, []string{"agent", "login", "claude", "--bogus"}),
+		Entry("agent init", agentInitCommand, []string{"agent", "init", "--bogus"}),
+		Entry("agent skills list", agentSkillsCommand, []string{"agent", "skills", "list", "--bogus"}),
+	)
+
+	It("does not act on flags parsed before the unknown one", func() {
+		Expect(agentInitRequestsMCP([]string{"agent", "init", "--mcp", "--bogus"})).To(BeFalse())
+		Expect(presentationCommand([]string{"install", "--help", "--bogus"})).To(BeFalse())
 	})
 })
 
