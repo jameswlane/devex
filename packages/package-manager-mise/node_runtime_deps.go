@@ -48,16 +48,16 @@ func libatomicInstalled() bool {
 }
 
 // needsNode reports whether any spec installs a mise node runtime that can be
-// Node 26 or later. Explicit pins below 26 (node@24) do not link libatomic.
+// Node 25 or later. Explicit pins below 25 (node@24) do not link libatomic.
 func needsNode(specs []string) bool {
 	for _, spec := range specs {
 		if toolName(spec) != "node" {
 			continue
 		}
 		version := strings.TrimPrefix(spec, "node")
-		version = strings.TrimPrefix(version, "@")
+		version = strings.TrimPrefix(strings.TrimPrefix(version, "@"), "v")
 		major, _, _ := strings.Cut(version, ".")
-		if n, err := strconv.Atoi(major); err == nil && n < 26 {
+		if n, err := strconv.Atoi(major); err == nil && n < 25 {
 			continue
 		}
 		return true

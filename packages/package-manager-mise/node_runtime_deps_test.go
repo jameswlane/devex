@@ -81,7 +81,7 @@ var _ = Describe("Node runtime dependencies on Linux (#703)", func() {
 	It("uses dnf's libatomic package on Fedora", func() {
 		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "dnf")
 
-		Expect(plugin.HandleInstall(context.Background(), []string{"node@26"})).To(Succeed())
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@25"})).To(Succeed())
 
 		Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{
 			{Args: []string{"install", "-y", "libatomic"}, ElevationRequested: true},
@@ -98,11 +98,12 @@ var _ = Describe("Node runtime dependencies on Linux (#703)", func() {
 		Expect(recorder.Calls("mise")).To(HaveLen(1))
 	})
 
-	It("leaves node pins below 26, which do not need libatomic, alone", func() {
+	It("leaves node pins below 25, which do not need libatomic, alone", func() {
 		recorder := sdktest.NewRecorder(GinkgoT(), "mise", "apt-get")
 
 		Expect(plugin.HandleInstall(context.Background(), []string{"node@24", "npm:cline@latest"})).To(Succeed())
 		Expect(plugin.HandleInstall(context.Background(), []string{"node@22.19.0"})).To(Succeed())
+		Expect(plugin.HandleInstall(context.Background(), []string{"node@v24.13.0"})).To(Succeed())
 
 		Expect(recorder.Calls("apt-get")).To(BeEmpty())
 	})
