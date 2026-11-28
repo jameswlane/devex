@@ -68,6 +68,10 @@ func UserLockPath() (string, error) {
 	return filepath.Join(dirs.State, LockFileName), nil
 }
 
+// ProjectDirName is the project-scoped DevEx directory, PROJECT/.devex. It is
+// not the legacy ~/.devex home directory.
+const ProjectDirName = ".devex"
+
 // ProjectLockPath returns PROJECT/.devex/agent-skills.lock.json for projectDir
 // (or the current working directory when projectDir is empty).
 func ProjectLockPath(projectDir string) (string, error) {
@@ -84,7 +88,7 @@ func ProjectLockPath(projectDir string) (string, error) {
 			return "", fmt.Errorf("resolve project directory: %w", err)
 		}
 	}
-	return filepath.Join(filepath.Clean(root), ".devex", LockFileName), nil
+	return filepath.Join(filepath.Clean(root), ProjectDirName, LockFileName), nil
 }
 
 // LockPath returns the lock file path for the given scope and optional projectDir.
