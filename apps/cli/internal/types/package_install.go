@@ -37,14 +37,18 @@ func ResolvePackageInstall(method, command string, packages, options []string) (
 		if start < len(tokens)-1 && isPackageManager(tokens[start]) && tokens[start] != method && (method != "deb" || (tokens[start] != "apt" && tokens[start] != "apt-get")) {
 			return request, fmt.Errorf("unexpected manager executable %q for %s", tokens[start], method)
 		}
-		// A consumed executable must introduce a recognized operation.
+		// A consumed executable must introduce a recognized operation. Setup's
+		// database containers spell Docker's as `docker run`.
+		isVerb := func(token string) bool {
+			return token == "install" || token == "remove" || token == "uninstall" || (method == "docker" && token == "run")
+		}
 		if start > 0 {
-			if start >= len(tokens) || (tokens[start] != "install" && tokens[start] != "remove" && tokens[start] != "uninstall") {
+			if start >= len(tokens) || !isVerb(tokens[start]) {
 				return request, fmt.Errorf("manager executable requires install, remove or uninstall")
 			}
 		}
 		verb := ""
-		if start < len(tokens) && (start > 0 || len(tokens) > 1) && (tokens[start] == "install" || tokens[start] == "remove" || tokens[start] == "uninstall") {
+		if start < len(tokens) && (start > 0 || len(tokens) > 1) && isVerb(tokens[start]) {
 			verb = tokens[start]
 			start++
 		}
@@ -147,6 +151,14 @@ func packageOption(method, name string) (takesValue, supported bool) {
 		// --scope selects a user or machine installer; machine needs elevation.
 		if name == "--scope" {
 			return true, true
+		}
+	case "docker":
+		// The docker plugin's run flags; it validates each value itself.
+		switch name {
+		case "--name", "--restart", "-p", "--port", "-e", "--env", "-v", "--volume":
+			return true, true
+		case "-d", "--detach":
+			return false, true
 		}
 	}
 	return false, false
