@@ -111,7 +111,8 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 	// warnings because dpkg -i below is the authoritative check. If a
 	// dependency is still unmet, dpkg -i fails and that error is returned.
 	d.logger.Println("Verifying packages...")
-	missingDeps := make(map[string]bool)
+	var depList []missingDependency
+	seen := make(map[missingDependency]bool)
 	for _, debFile := range debFiles {
 		deps, err := d.getMissingDependencies(debFile)
 		if err != nil {
@@ -119,14 +120,16 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 			continue
 		}
 		for _, dep := range deps {
-			missingDeps[dep] = true
+			if !seen[dep] {
+				seen[dep] = true
+				depList = append(depList, dep)
+			}
 		}
 	}
 
 	// Install missing dependencies if any
-	if len(missingDeps) > 0 {
-		d.logger.Printf("Installing missing dependencies: %v\n", mapKeys(missingDeps))
-		depList := mapKeys(missingDeps)
+	if len(depList) > 0 {
+		d.logger.Printf("Installing missing dependencies: %v\n", dependencyNames(depList))
 		if err := d.installDependencies(ctx, depList); err != nil {
 			d.logger.Warning("Failed to install some dependencies (continuing; dpkg -i reports any that remain unmet): %v", err)
 		}
@@ -274,7 +277,7 @@ func (d *DebInstaller) handleVerify(ctx context.Context, args []string) error {
 			return fmt.Errorf("failed to check dependencies for %s: %w", debFile, err)
 		}
 		if len(deps) > 0 {
-			d.logger.Warning("Missing dependencies: %s", strings.Join(deps, ", "))
+			d.logger.Warning("Missing dependencies: %s", strings.Join(dependencyNames(deps), ", "))
 		} else {
 			d.logger.Success("All dependencies are satisfied")
 		}
@@ -375,13 +378,4 @@ func installedQueryError(pkg string, err error) error {
 		return fmt.Errorf("package %s not found (neither as file nor installed package): %w", pkg, err)
 	}
 	return fmt.Errorf("failed to query installed package %s: %w", pkg, err)
-}
-
-// mapKeys returns the keys of a map as a slice
-func mapKeys(m map[string]bool) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }
