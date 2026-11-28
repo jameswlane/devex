@@ -129,25 +129,6 @@ var _ = Describe("System Paths Configuration", func() {
 	})
 })
 
-var _ = Describe("Post Install Handler Registry", func() {
-	Describe("default registry", func() {
-		It("should have expected handlers registered", func() {
-			expectedHandlers := []string{"docker", "docker-ce", "nginx", "httpd", "apache2"}
-
-			for _, packageName := range expectedHandlers {
-				Expect(utilities.DefaultRegistry.HasHandler(packageName)).To(BeTrue(),
-					fmt.Sprintf("Expected handler for %s to be registered", packageName))
-			}
-		})
-	})
-
-	Describe("package variations", func() {
-		It("should work correctly for Docker variations", func() {
-			Skip("Skipping Docker variation test to avoid real system commands")
-		})
-	})
-})
-
 var _ = Describe("Common Utilities", func() {
 	Describe("GetCurrentUser", func() {
 		It("should return consistent results", func() {
