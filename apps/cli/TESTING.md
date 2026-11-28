@@ -214,7 +214,8 @@ DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=opensuse-leap-16.0 -- --ginkgo.la
 ```
 
 Both fixtures start without jq. Source runs build `package-manager-zypper`
-from this checkout. Specs install jq with Zypper, verify `rpm -q jq` and
+from this checkout. Like APT and DNF, a repeat install asks Zypper whether a
+tracked application is still installed before skipping it. Specs install jq with Zypper, verify `rpm -q jq` and
 `jq --version`, check `devex status`, repeat the installation and assert the
 `skipped jq (already installed)` result without new plugin downloads, then
 uninstall and verify `rpm -q jq` reports the package as not installed. CI runs

@@ -44,7 +44,7 @@ var prepareAptSources = tui.PrepareAptSources
 // Query the native manager rather than trusting a potentially stale tracking row.
 var nativeApplicationInstalled = func(ctx context.Context, app types.CrossPlatformApp) (bool, error) {
 	cfg := app.GetOSConfig()
-	if cfg.InstallMethod != "apt" && cfg.InstallMethod != "dnf" {
+	if cfg.InstallMethod != "apt" && cfg.InstallMethod != "dnf" && cfg.InstallMethod != "zypper" {
 		return false, nil
 	}
 	installer := installers.GetInstaller(ctx, cfg.InstallMethod)
