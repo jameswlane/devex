@@ -41,6 +41,11 @@ var _ = Describe("Shipped catalog official Linux install methods", func() {
 		Entry("Ghostty on Arch", "ghostty", "arch", "", "pacman"),
 		Entry("Ghostty on Void", "ghostty", "void", "", "xbps"),
 		Entry("Ghostty on Ubuntu 26.04", "ghostty", "ubuntu", "26.04", "apt", "debian"),
+		Entry("curl on Ubuntu", "curl", "ubuntu", "24.04", "apt", "debian"),
+		Entry("curl on Fedora", "curl", "fedora", "44", "dnf"),
+		Entry("curl on Arch", "curl", "arch", "", "pacman"),
+		Entry("curl on openSUSE Tumbleweed", "curl", "opensuse-tumbleweed", "", "zypper", "suse", "opensuse"),
+		Entry("curl on Linux Mint", "curl", "linuxmint", "22", "apt", "ubuntu", "debian"),
 	)
 
 	It("adds the openSUSE Go repository for LazyGit at the path each release publishes", func() {
