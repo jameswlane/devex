@@ -119,15 +119,17 @@ User-scoped installer scripts (`install_scope: user`) run without `sudo` so bina
 
 ## AI Code Editors
 
-The `AI Code Editors` category (`applications/ai-agents/{cursor,windsurf,zed}.yaml`) ships opt-in (`default: false`) definitions for GUI AI code editors, kept separate from `AI Coding Agents` so `--categories "AI Coding Agents"` does not pull in desktop editors. Install an editor with `devex install cursor` or install the category with `devex install --categories "AI Code Editors"`. Interactive `devex setup` lists them under **AI editors** in the AI coding agents step.
+The `AI Code Editors` category (`applications/ai-agents/{antigravity,cursor,kiro,windsurf,zed}.yaml`) ships opt-in (`default: false`) definitions for GUI AI code editors, kept separate from `AI Coding Agents` so `--categories "AI Coding Agents"` does not pull in desktop editors. Install an editor with `devex install cursor` or install the category with `devex install --categories "AI Code Editors"`. Interactive `devex setup` lists them under **AI editors** in the AI coding agents step.
 
-All three editors declare `desktop_environments: [graphical]`. On headless Linux hosts (no `DISPLAY`, `WAYLAND_DISPLAY`, or `XDG_CURRENT_DESKTOP` session and no installed `.desktop` entries in `/usr/share/xsessions` or `/usr/share/wayland-sessions`), DevEx skips them with a notice instead of installing unused GUI binaries. Workstations accessed over SSH with an installed X11 or Wayland session still match.
+All five editors declare `desktop_environments: [graphical]`. On headless Linux hosts (no `DISPLAY`, `WAYLAND_DISPLAY`, or `XDG_CURRENT_DESKTOP` session and no installed `.desktop` entries in `/usr/share/xsessions` or `/usr/share/wayland-sessions`), DevEx skips them with a notice instead of installing unused GUI binaries. Workstations accessed over SSH with an installed X11 or Wayland session still match.
 
 Uninstalling an APT-backed editor removes the package, the DevEx-managed APT source file under `/etc/apt/sources.list.d/` (only when its contents are unchanged), and its keyring under `/etc/apt/keyrings/` (unless another tracked application references it).
 
 | Editor | Linux | Notes | Uninstall removes |
 | --- | --- | --- | --- |
+| Antigravity | Pinned Antigravity IDE `2.8.0` tarball (`amd64`/`arm64`, SHA-256 verified) unpacked into `/opt/antigravity-ide` by a system `post_install` hook | Google's apt repository only carries v1.x and there is no `.deb` or AppImage for 2.x; refuses to replace paths DevEx did not create; not self-updating on Linux | `/opt/antigravity-ide`, `/usr/local/bin/antigravity-ide` and `/usr/share/applications/antigravity-ide.desktop` when DevEx created them |
 | Cursor | `apt cursor` (signed `downloads.cursor.com` repo, `amd64`/`arm64`) | Official signed APT repository with pinned GPG fingerprint; preseeds `cursor/add-cursor-repo=false` | `cursor` package, `/etc/apt/sources.list.d/cursor.list`, `/etc/apt/keyrings/cursor.gpg` (when created by DevEx) |
+| Kiro | `deb kiro` (pinned `1.4.154` `.deb`, `amd64`/`arm64`, SHA-256 verified; Ubuntu 24.04+, Debian 13+ or Linux Mint 22+) | No vendor apt repository; the package adds no apt source; refuses older Ubuntu and Debian releases before installing; self-updating | `kiro` package |
 | Windsurf | `apt devin-desktop` (signed `windsurf-stable.codeiumdata.com` repo, `amd64` only) | Renamed by the vendor to Devin Desktop; unsupported on `linux/arm64` | `devin-desktop` package, `/etc/apt/sources.list.d/windsurf.list`, `/etc/apt/keyrings/windsurf-stable.gpg` (when created by DevEx) |
 | Zed | `curlpipe --user` (`https://zed.dev/install.sh`) | Self-updating (`devex` skips); installs `~/.local/zed.app`, `~/.local/bin/zed`, and `dev.zed.Zed.desktop` | `~/.local/zed.app`, `~/.local/bin/zed`, `~/.local/share/applications/dev.zed.Zed.desktop` |
 

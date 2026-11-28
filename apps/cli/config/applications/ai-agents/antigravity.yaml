@@ -1,0 +1,128 @@
+# Upstream: https://antigravity.google (downloads: https://antigravity.google/download?os=linux)
+name: Antigravity
+description: Google's agent-first IDE (Antigravity IDE standalone, VS Code based)
+category: AI Code Editors
+default: false
+desktop_environments:
+  - graphical
+linux:
+  # Google ships the standalone Antigravity IDE for Linux only as a tarball:
+  # its signed apt repository is historical (v1.x) and there is no .deb or
+  # AppImage for 2.x. post_install downloads the pinned 2.8.0 tarball for
+  # this machine's architecture, checks the SHA-256 DevEx computed from the
+  # vendor download, and unpacks it into /opt/antigravity-ide (marked
+  # DevEx-owned) with the Electron sandbox helper made setuid root. It links
+  # /usr/local/bin/antigravity-ide and adds a desktop entry, refusing to
+  # replace a directory, link or desktop entry DevEx did not create. On
+  # Linux the IDE only shows an "Update Available" button that asks you to
+  # download the new tarball, so it is not marked self-updating. Uninstall
+  # removes only what DevEx created and keeps ~/.antigravity and
+  # ~/.config/Antigravity.
+  install_method: curlpipe
+  installed_binary: antigravity-ide
+  self_updating: false
+  official_support: true
+  platform_requirements:
+    - os: debian
+      version: 10+
+    - os: ubuntu
+      version: 20.04+
+  dependencies:
+    - curl
+  post_install:
+    - scope: system
+      shell: |
+        set -eu
+        dir=/opt/antigravity-ide
+        link=/usr/local/bin/antigravity-ide
+        desktop=/usr/share/applications/antigravity-ide.desktop
+        # One install or uninstall at a time: the checks below and the swap
+        # must not interleave. The lock lives in a root-only directory.
+        umask 077
+        mkdir -p /var/lib/devex
+        exec 9>>/var/lib/devex/antigravity-ide.lock
+        flock -w 600 9 || { echo "Another Antigravity install or uninstall is still running; try again when it finishes." >&2; exit 1; }
+        umask 022
+        if { [ -e "$dir" ] || [ -L "$dir" ]; } && { [ -L "$dir" ] || [ ! -f "$dir/.devex-managed" ]; }; then
+          echo "$dir exists and was not installed by DevEx; move it aside, then install Antigravity again." >&2
+          exit 1
+        fi
+        if { [ -e "$link" ] || [ -L "$link" ]; } && { [ ! -L "$link" ] || [ "$(readlink "$link")" != "$dir/bin/antigravity-ide" ]; }; then
+          echo "$link belongs to another install; remove it, then install Antigravity again." >&2
+          exit 1
+        fi
+        if [ -L "$desktop" ] || { [ -e "$desktop" ] && ! grep -q '^X-DevEx-Managed=true$' "$desktop"; }; then
+          echo "$desktop was not created by DevEx; remove it, then install Antigravity again." >&2
+          exit 1
+        fi
+        case "$(uname -m)" in
+          x86_64) arch=linux-x64; sum=7baa36baab285cb46101af958b8f7be6305458db9a44d8b3d0938d61f38597d7 ;;
+          aarch64|arm64) arch=linux-arm; sum=d8f85ce40306587a80a7478af4de85cb10b83cf26dd9179b902afa9933fcf9f2 ;;
+          *) echo "Antigravity has no Linux build for $(uname -m)." >&2; exit 1 ;;
+        esac
+        url="https://edgedl.me.gvt1.com/edgedl/release2/j0qc3/antigravity/stable/2.8.0-6733682917113856/$arch/Antigravity%20IDE.tar.gz"
+        tmp=""; stage=""; entry=""
+        trap 'rm -rf "$tmp" "$stage" "$entry"' EXIT
+        tmp="$(mktemp -d)"
+        # Stage next to $dir so the final rename stays on one filesystem.
+        stage="$(mktemp -d /opt/.antigravity-ide.XXXXXX)"
+        # Prepare the desktop entry before touching the installed tree, so a
+        # failure here leaves the previous install as it was.
+        entry="$(mktemp /usr/share/applications/.antigravity-ide.XXXXXX)"
+        cat > "$entry" <<'DESKTOP'
+        [Desktop Entry]
+        Name=Antigravity IDE
+        Comment=Google's agent-first IDE
+        Exec=/opt/antigravity-ide/antigravity-ide %F
+        Icon=/opt/antigravity-ide/resources/app/out/media/code-icon.svg
+        Terminal=false
+        Type=Application
+        Categories=Development;IDE;
+        StartupWMClass=Antigravity IDE
+        X-DevEx-Managed=true
+        DESKTOP
+        chmod 644 "$entry"
+        curl -fsSL --proto '=https' -o "$tmp/ide.tar.gz" "$url"
+        echo "$sum  $tmp/ide.tar.gz" | sha256sum -c - >/dev/null
+        tar -xzf "$tmp/ide.tar.gz" -C "$stage" --strip-components=1 --no-same-owner
+        [ -x "$stage/bin/antigravity-ide" ] || { echo "The Antigravity tarball has no bin/antigravity-ide." >&2; exit 1; }
+        # The tarball records nobody:nogroup; only root may change what users run.
+        chown -R root:root "$stage"
+        chmod -R go-w "$stage"
+        chmod 755 "$stage"
+        chmod 4755 "$stage/chrome-sandbox"
+        touch "$stage/.devex-managed"
+        rm -rf "$dir"
+        mv "$stage" "$dir"
+        ln -sfn "$dir/bin/antigravity-ide" "$link"
+        mv -fT "$entry" "$desktop"
+  # Runs as root in one step under the install lock, so it cannot interleave
+  # with an install.
+  uninstall_command: |
+    set -eu
+    SUDO=""
+    if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+    $SUDO sh -c '
+    set -eu
+    umask 077
+    mkdir -p /var/lib/devex
+    exec 9>>/var/lib/devex/antigravity-ide.lock
+    flock -w 600 9 || { echo "Another Antigravity install or uninstall is still running; try again when it finishes." >&2; exit 1; }
+    dir=/opt/antigravity-ide
+    link=/usr/local/bin/antigravity-ide
+    desktop=/usr/share/applications/antigravity-ide.desktop
+    # Remove the link only alongside a DevEx-owned install: a hand-made
+    # /opt/antigravity-ide keeps its launcher.
+    if [ ! -L "$dir" ] && [ -f "$dir/.devex-managed" ]; then
+      if [ -L "$link" ] && [ "$(readlink "$link")" = "$dir/bin/antigravity-ide" ]; then
+        rm -f "$link"
+      fi
+      rm -rf "$dir"
+    elif [ ! -e "$dir" ] && [ ! -L "$dir" ] && [ -L "$link" ] && [ "$(readlink "$link")" = "$dir/bin/antigravity-ide" ]; then
+      # The install directory is already gone; drop the dangling link.
+      rm -f "$link"
+    fi
+    if [ ! -L "$desktop" ] && [ -f "$desktop" ] && grep -q "^X-DevEx-Managed=true\$" "$desktop"; then
+      rm -f "$desktop"
+    fi
+    '

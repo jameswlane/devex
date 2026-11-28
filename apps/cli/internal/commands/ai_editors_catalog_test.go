@@ -79,7 +79,9 @@ var _ = Describe("AI Code Editors catalog", func() {
 
 	It("ships and strictly validates every AI code editor definition", func() {
 		Expect(files).To(Equal([]string{
+			"antigravity.yaml",
 			"cursor.yaml",
+			"kiro.yaml",
 			"windsurf.yaml",
 			"zed.yaml",
 		}))
@@ -113,10 +115,22 @@ var _ = Describe("AI Code Editors catalog", func() {
 					Expect(src.KeyName).To(HavePrefix("/etc/apt/keyrings/"), name)
 				}
 			case "curlpipe":
-				Expect(app.Linux.InstallScope).To(Equal("user"), name)
-				Expect(app.Linux.DownloadURL).To(HavePrefix("https://"), name)
 				Expect(app.Linux.InstalledBinary).NotTo(BeEmpty(), name)
 				Expect(app.Linux.UninstallCommand).NotTo(BeEmpty(), name)
+				if app.Linux.IsHookDrivenCurlpipe() {
+					// A hook-driven install must pin and verify what it downloads.
+					Expect(app.Linux.PostInstall).NotTo(BeEmpty(), name)
+					Expect(app.Linux.PostInstall[0].Shell).To(ContainSubstring("sha256sum -c"), name)
+				} else {
+					Expect(app.Linux.InstallScope).To(Equal("user"), name)
+					Expect(app.Linux.DownloadURL).To(HavePrefix("https://"), name)
+				}
+			case "deb":
+				Expect(app.Linux.DownloadURL).To(HavePrefix("https://"), name)
+				Expect(app.Linux.Verification.SHA256).To(MatchRegexp(`^[0-9a-f]{64}$`), name)
+				for _, alt := range app.Linux.Alternatives {
+					Expect(alt.Verification.SHA256).To(MatchRegexp(`^[0-9a-f]{64}$`), name)
+				}
 			}
 		}
 
@@ -145,12 +159,16 @@ var _ = Describe("AI Code Editors catalog", func() {
 			Expect(resolved.InstalledBinary).To(Equal(wantBinary))
 			Expect(resolved.InstallScope).To(Equal(wantScope))
 			Expect(resolved.SelfUpdating).To(Equal(wantSelfUpdating))
-			Expect(resolved.UninstallCommand).To(Equal(wantUninstall))
+			if wantUninstall == "" {
+				Expect(resolved.UninstallCommand).NotTo(BeEmpty())
+			} else {
+				Expect(resolved.UninstallCommand).To(Equal(wantUninstall))
+			}
 
 			switch wantMethod {
 			case "apt":
 				Expect(resolved.InstallCommand).To(Equal(wantTarget))
-			case "curlpipe":
+			case "curlpipe", "deb":
 				Expect(resolved.DownloadURL).To(Equal(wantTarget))
 			}
 
@@ -199,6 +217,9 @@ var _ = Describe("AI Code Editors catalog", func() {
 		Entry("Cursor", "Cursor", "apt", "cursor", "cursor", "", false, "cursor"),
 		Entry("Windsurf", "Windsurf", "apt", "devin-desktop", "devin-desktop", "", false, "devin-desktop"),
 		Entry("Zed", "Zed", "curlpipe", "https://zed.dev/install.sh", "zed", "user", true, `rm -rf "$HOME/.local/zed.app" && rm -f "$HOME/.local/bin/zed" "$HOME/.local/share/applications/dev.zed.Zed.desktop"`),
+		Entry("Kiro", "Kiro", "deb", "https://prod.download.desktop.kiro.dev/releases/stable/linux-x64/signed/1.4.154/deb/kiro-ide-1.4.154-stable-linux-x64.deb", "/usr/bin/kiro", "", true, "kiro"),
+		// Antigravity's uninstall behaviour is covered in ai_editors_hooks_test.go.
+		Entry("Antigravity", "Antigravity", "curlpipe", "", "antigravity-ide", "", false, ""),
 	)
 
 	It("preseeds cursor/add-cursor-repo=false in Cursor's resolved Ubuntu pre_install hook", func() {
