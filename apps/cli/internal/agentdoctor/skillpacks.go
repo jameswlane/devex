@@ -162,7 +162,7 @@ func candidateSkillPackLockPaths(probe Probe) []string {
 		paths = append(paths, p)
 	} else if probe.Getwd != nil {
 		if cwd, err := probe.Getwd(); err == nil && strings.TrimSpace(cwd) != "" {
-			paths = append(paths, filepath.Join(cwd, ".devex", skillpacks.LockFileName))
+			paths = append(paths, filepath.Join(cwd, skillpacks.ProjectDirName, skillpacks.LockFileName))
 		}
 	}
 	return paths

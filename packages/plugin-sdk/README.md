@@ -493,3 +493,71 @@ contracts without native package managers or the real home directory.
 
 See [Download verification](DOWNLOAD_VERIFICATION.md) for direct artifact metadata,
 trust configuration, verification policy, and installed plugin validation.
+
+## Describing changes before they run
+
+`<plugin> --describe <command> [args...]` asks a plugin what a command would
+change without changing anything. The plugin prints one JSON `Description` on
+stdout and exits 0. DevEx's setup Confirmation screen shows it with the same
+detail as a catalog entry.
+
+```json
+{
+  "schema_version": 1,
+  "plugin": "package-manager-mise",
+  "command": "ensure-installed",
+  "already_satisfied": false,
+  "actions": [
+    {"kind": "shell", "target": "sh <verified mise installer>", "scope": "user", "detail": "installs mise to ~/.local/bin/mise"},
+    {"kind": "file", "target": "/home/dev/.bashrc", "scope": "user", "detail": "append mise activation"}
+  ],
+  "downloads": [
+    {"url": "https://mise.run", "verification": {"policy": "required", "signature_url": "…", "fingerprint": "…"}}
+  ],
+  "notes": []
+}
+```
+
+- `kind` is `package`, `repository`, `service`, `group`, `file`, `download` or `shell`.
+- `scope` is `user`, or `system` when the change needs sudo.
+- `already_satisfied` is true when the command would change nothing, and `actions` is then empty.
+- `downloads` carry the same `ArtifactVerification` the command checks before it uses the file.
+- `notes` are things the user should know, such as logging out for a new group.
+
+To support it, implement `sdk.Describer`. Write the command once against
+`*sdk.Changes`, so the description comes from the same code path that runs:
+
+```go
+func (p *Plugin) ensureInstalled(ctx context.Context, changes *sdk.Changes) error {
+    if installed() {
+        return nil // nothing recorded: already_satisfied
+    }
+    changes.Download(sdk.PlannedDownload{URL: url, Verification: verification})
+    return changes.Do(sdk.PlannedAction{Kind: sdk.ActionShell, Target: "sh install.sh", Scope: sdk.ScopeUser},
+        func() error { return runInstaller(ctx) }) // skipped when describing
+}
+
+func (p *Plugin) Describe(ctx context.Context, command string, args []string) (sdk.Description, error) {
+    if command != "ensure-installed" {
+        return sdk.Description{}, sdk.ErrDescribeUnsupported
+    }
+    changes := sdk.NewChanges(true)
+    if err := p.ensureInstalled(ctx, changes); err != nil {
+        return sdk.Description{}, err
+    }
+    return changes.Description(p.Info().Name, command, args), nil
+}
+```
+
+`sdk.HandleArgs` routes `--describe`, sends anything the plugin prints while
+describing to stderr, runs it unattended, and sets `supports_describe` in
+`--plugin-info`. Hosts only call `--describe` on plugins that advertise it, so
+plugins built with an older SDK are never asked. A command the plugin can't
+describe exits with status 3 (`sdk.DescribeUnsupportedExitCode`). The host then
+shows the step as "not previewed". Read-only probes such as `which mise` are
+fine while describing; downloads, package changes and file writes belong inside
+`Changes.Do`. Test it with `sdktest`: a describe call must record no mutating
+native calls.
+
+Hosts call `ExecutableManager.DescribePlugin`, which never elevates or reads
+stdin, and returns `sdk.ErrDescribeUnsupported` for plugins without support.
