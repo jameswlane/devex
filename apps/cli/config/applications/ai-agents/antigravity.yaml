@@ -1,23 +1,25 @@
-# Upstream: https://antigravity.google (downloads: https://antigravity.google/download)
+# Upstream: https://antigravity.google (downloads: https://antigravity.google/download?os=linux)
 name: Antigravity
-description: Google's agent-first development environment (Antigravity 2)
+description: Google's agent-first IDE (Antigravity IDE standalone, VS Code based)
 category: AI Code Editors
 default: false
 desktop_environments:
   - graphical
 linux:
-  # Google ships Antigravity for Linux only as a tarball (no apt repository,
-  # .deb or AppImage). post_install downloads the pinned 2.36.0 tarball for
+  # Google ships the standalone Antigravity IDE for Linux only as a tarball:
+  # its signed apt repository is historical (v1.x) and there is no .deb or
+  # AppImage for 2.x. post_install downloads the pinned 2.8.0 tarball for
   # this machine's architecture, checks the SHA-256 DevEx computed from the
-  # vendor download, and unpacks it into /opt/antigravity with the Electron
-  # sandbox helper made setuid root. It links /usr/local/bin/antigravity and
-  # adds a desktop entry. On Linux the app only shows an "Update Available"
-  # button that asks you to download the new tarball, so it is not marked
-  # self-updating; DevEx upgrades it by moving the pin. Uninstall removes
-  # /opt/antigravity, the link and the desktop entry, and keeps ~/.antigravity
-  # and ~/.config/Antigravity.
+  # vendor download, and unpacks it into /opt/antigravity-ide (marked
+  # DevEx-owned) with the Electron sandbox helper made setuid root. It links
+  # /usr/local/bin/antigravity-ide and adds a desktop entry, refusing to
+  # replace a directory, link or desktop entry DevEx did not create. On
+  # Linux the IDE only shows an "Update Available" button that asks you to
+  # download the new tarball, so it is not marked self-updating. Uninstall
+  # removes only what DevEx created and keeps ~/.antigravity and
+  # ~/.config/Antigravity.
   install_method: curlpipe
-  installed_binary: antigravity
+  installed_binary: antigravity-ide
   self_updating: false
   official_support: true
   platform_requirements:
@@ -31,42 +33,64 @@ linux:
     - scope: system
       shell: |
         set -eu
+        dir=/opt/antigravity-ide
+        link=/usr/local/bin/antigravity-ide
+        desktop=/usr/share/applications/antigravity-ide.desktop
+        if [ -e "$dir" ] && [ ! -f "$dir/.devex-managed" ]; then
+          echo "$dir exists and was not installed by DevEx; move it aside, then install Antigravity again." >&2
+          exit 1
+        fi
+        if { [ -e "$link" ] || [ -L "$link" ]; } && [ "$(readlink "$link" 2>/dev/null || true)" != "$dir/bin/antigravity-ide" ]; then
+          echo "$link belongs to another install; remove it, then install Antigravity again." >&2
+          exit 1
+        fi
+        if [ -e "$desktop" ] && ! grep -q '^X-DevEx-Managed=true$' "$desktop"; then
+          echo "$desktop was not created by DevEx; remove it, then install Antigravity again." >&2
+          exit 1
+        fi
         case "$(uname -m)" in
-          x86_64) arch=linux-x64; sum=6fe418f08e760c0b7f2975df9daef6eb6cbc47c65161251349e0ce255c608fb6 ;;
-          aarch64|arm64) arch=linux-arm; sum=2c322f0a77dbd0591cdaaa28b1be4ca49e56b137bb3410f43e9c510e5600d83f ;;
+          x86_64) arch=linux-x64; sum=7baa36baab285cb46101af958b8f7be6305458db9a44d8b3d0938d61f38597d7 ;;
+          aarch64|arm64) arch=linux-arm; sum=d8f85ce40306587a80a7478af4de85cb10b83cf26dd9179b902afa9933fcf9f2 ;;
           *) echo "Antigravity has no Linux build for $(uname -m)." >&2; exit 1 ;;
         esac
-        url="https://storage.googleapis.com/antigravity-public/antigravity-hub/2.36.0-5596661662220288/$arch/Antigravity.tar.gz"
+        url="https://edgedl.me.gvt1.com/edgedl/release2/j0qc3/antigravity/stable/2.8.0-6733682917113856/$arch/Antigravity%20IDE.tar.gz"
         tmp="$(mktemp -d)"
         trap 'rm -rf "$tmp"' EXIT
-        curl -fsSL --proto '=https' -o "$tmp/Antigravity.tar.gz" "$url"
-        echo "$sum  $tmp/Antigravity.tar.gz" | sha256sum -c - >/dev/null
+        curl -fsSL --proto '=https' -o "$tmp/ide.tar.gz" "$url"
+        echo "$sum  $tmp/ide.tar.gz" | sha256sum -c - >/dev/null
         mkdir -p "$tmp/unpacked"
-        tar -xzf "$tmp/Antigravity.tar.gz" -C "$tmp/unpacked" --strip-components=1
-        [ -x "$tmp/unpacked/antigravity" ] || { echo "The Antigravity tarball has no antigravity binary." >&2; exit 1; }
+        tar -xzf "$tmp/ide.tar.gz" -C "$tmp/unpacked" --strip-components=1
+        [ -x "$tmp/unpacked/bin/antigravity-ide" ] || { echo "The Antigravity tarball has no bin/antigravity-ide." >&2; exit 1; }
         chown root:root "$tmp/unpacked/chrome-sandbox"
         chmod 4755 "$tmp/unpacked/chrome-sandbox"
-        rm -rf /opt/antigravity.new
-        mv "$tmp/unpacked" /opt/antigravity.new
-        rm -rf /opt/antigravity
-        mv /opt/antigravity.new /opt/antigravity
-        ln -sfn /opt/antigravity/antigravity /usr/local/bin/antigravity
-        cat > /usr/share/applications/antigravity.desktop <<'DESKTOP'
+        touch "$tmp/unpacked/.devex-managed"
+        rm -rf "$dir.new"
+        mv "$tmp/unpacked" "$dir.new"
+        rm -rf "$dir"
+        mv "$dir.new" "$dir"
+        ln -sfn "$dir/bin/antigravity-ide" "$link"
+        cat > "$desktop" <<'DESKTOP'
         [Desktop Entry]
-        Name=Antigravity
-        Comment=Google's agent-first development environment
-        Exec=/opt/antigravity/antigravity %U
+        Name=Antigravity IDE
+        Comment=Google's agent-first IDE
+        Exec=/opt/antigravity-ide/antigravity-ide %F
+        Icon=/opt/antigravity-ide/resources/app/out/media/code-icon.svg
         Terminal=false
         Type=Application
         Categories=Development;IDE;
-        StartupWMClass=Antigravity
+        StartupWMClass=Antigravity IDE
+        X-DevEx-Managed=true
         DESKTOP
   uninstall_command: |
     set -eu
     SUDO=""
     if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
-    if [ "$(readlink /usr/local/bin/antigravity 2>/dev/null || true)" = "/opt/antigravity/antigravity" ]; then
-      $SUDO rm -f /usr/local/bin/antigravity
+    if [ "$(readlink /usr/local/bin/antigravity-ide 2>/dev/null || true)" = "/opt/antigravity-ide/bin/antigravity-ide" ]; then
+      $SUDO rm -f /usr/local/bin/antigravity-ide
     fi
-    $SUDO rm -rf /opt/antigravity
-    $SUDO rm -f /usr/share/applications/antigravity.desktop
+    if [ -f /opt/antigravity-ide/.devex-managed ]; then
+      $SUDO rm -rf /opt/antigravity-ide
+    fi
+    if [ -f /usr/share/applications/antigravity-ide.desktop ] && grep -q '^X-DevEx-Managed=true$' /usr/share/applications/antigravity-ide.desktop; then
+      $SUDO rm -f /usr/share/applications/antigravity-ide.desktop
+    fi

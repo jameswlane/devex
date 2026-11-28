@@ -22,6 +22,18 @@ linux:
     sha256: 72c8aaa43e9fe70866486f5914c4a9db0574071ac0be75cc1217e3d3fa2493f6
   self_updating: true
   official_support: true
+  # The catalog resolver falls back to the primary entry on older releases,
+  # so refuse them here: Kiro needs Ubuntu 24.04+ or Debian 13+.
+  pre_install:
+    - scope: user
+      shell: |
+        set -eu
+        . /etc/os-release
+        major="${VERSION_ID%%.*}"
+        case "$ID" in
+          ubuntu) [ "${major:-0}" -ge 24 ] || { echo "Kiro needs Ubuntu 24.04 or newer (this is $VERSION_ID)." >&2; exit 1; } ;;
+          debian) [ "${major:-99}" -ge 13 ] || { echo "Kiro needs Debian 13 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
+        esac
   platform_requirements:
     - os: debian
       version: 13+
@@ -39,6 +51,16 @@ linux:
         sha256: 75d39ed5b0988a41513d9462ecad60399a96552eff417c64e1c2f2649390e7a3
       self_updating: true
       official_support: true
+      pre_install:
+        - scope: user
+          shell: |
+            set -eu
+            . /etc/os-release
+            major="${VERSION_ID%%.*}"
+            case "$ID" in
+              ubuntu) [ "${major:-0}" -ge 24 ] || { echo "Kiro needs Ubuntu 24.04 or newer (this is $VERSION_ID)." >&2; exit 1; } ;;
+              debian) [ "${major:-99}" -ge 13 ] || { echo "Kiro needs Debian 13 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
+            esac
       platform_requirements:
         - os: debian
           version: 13+

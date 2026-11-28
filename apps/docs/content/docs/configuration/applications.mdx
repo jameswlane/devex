@@ -127,9 +127,9 @@ Uninstalling an APT-backed editor removes the package, the DevEx-managed APT sou
 
 | Editor | Linux | Notes | Uninstall removes |
 | --- | --- | --- | --- |
-| Antigravity | Pinned `2.36.0` tarball (`amd64`/`arm64`, SHA-256 verified) unpacked into `/opt/antigravity` by a system `post_install` hook | Google ships no apt repository, `.deb` or AppImage for Linux; not self-updating on Linux, so DevEx moves the pin | `/opt/antigravity`, `/usr/local/bin/antigravity` (when it points there), `/usr/share/applications/antigravity.desktop` |
+| Antigravity | Pinned Antigravity IDE `2.8.0` tarball (`amd64`/`arm64`, SHA-256 verified) unpacked into `/opt/antigravity-ide` by a system `post_install` hook | Google's apt repository only carries v1.x and there is no `.deb` or AppImage for 2.x; refuses to replace paths DevEx did not create; not self-updating on Linux | `/opt/antigravity-ide`, `/usr/local/bin/antigravity-ide` and `/usr/share/applications/antigravity-ide.desktop` when DevEx created them |
 | Cursor | `apt cursor` (signed `downloads.cursor.com` repo, `amd64`/`arm64`) | Official signed APT repository with pinned GPG fingerprint; preseeds `cursor/add-cursor-repo=false` | `cursor` package, `/etc/apt/sources.list.d/cursor.list`, `/etc/apt/keyrings/cursor.gpg` (when created by DevEx) |
-| Kiro | `deb kiro` (pinned `1.4.154` `.deb`, `amd64`/`arm64`, SHA-256 verified; Ubuntu 24.04+ or Debian 13+) | No vendor apt repository; the package adds no apt source; self-updating | `kiro` package |
+| Kiro | `deb kiro` (pinned `1.4.154` `.deb`, `amd64`/`arm64`, SHA-256 verified; Ubuntu 24.04+ or Debian 13+) | No vendor apt repository; the package adds no apt source; refuses older Ubuntu and Debian releases before installing; self-updating | `kiro` package |
 | Windsurf | `apt devin-desktop` (signed `windsurf-stable.codeiumdata.com` repo, `amd64` only) | Renamed by the vendor to Devin Desktop; unsupported on `linux/arm64` | `devin-desktop` package, `/etc/apt/sources.list.d/windsurf.list`, `/etc/apt/keyrings/windsurf-stable.gpg` (when created by DevEx) |
 | Zed | `curlpipe --user` (`https://zed.dev/install.sh`) | Self-updating (`devex` skips); installs `~/.local/zed.app`, `~/.local/bin/zed`, and `dev.zed.Zed.desktop` | `~/.local/zed.app`, `~/.local/bin/zed`, `~/.local/share/applications/dev.zed.Zed.desktop` |
 
