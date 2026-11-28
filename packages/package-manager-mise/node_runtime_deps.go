@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"debug/elf"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -27,6 +32,25 @@ var libatomicPatterns = []string{
 	"/usr/lib/libatomic.so.1",
 }
 
+// ldconfigPaths are where the loader-cache tool lives. It is called by absolute
+// path because /sbin is not on a Debian user's PATH.
+var ldconfigPaths = []string{"/sbin/ldconfig", "/usr/sbin/ldconfig"}
+
+// nativeELFMachine is the ELF machine Node runs as on this host. A library
+// built for another architecture (libatomic1:i386 on amd64, the 32-bit copy
+// in Fedora's /usr/lib) does not satisfy Node. Tests override it.
+var nativeELFMachine = map[string]elf.Machine{
+	"amd64":   elf.EM_X86_64,
+	"386":     elf.EM_386,
+	"arm64":   elf.EM_AARCH64,
+	"arm":     elf.EM_ARM,
+	"ppc64le": elf.EM_PPC64,
+	"ppc64":   elf.EM_PPC64,
+	"s390x":   elf.EM_S390,
+	"riscv64": elf.EM_RISCV,
+	"loong64": elf.EM_LOONGARCH,
+}[runtime.GOARCH]
+
 // libatomicPackages maps each system package manager to the package that ships
 // libatomic.so.1. Arch's gcc-libs, which every Arch install has, already ships it.
 var libatomicPackages = []struct {
@@ -38,24 +62,76 @@ var libatomicPackages = []struct {
 	{"zypper", []string{"--non-interactive", "install", "libatomic1"}},
 }
 
-func libatomicInstalled() bool {
+func libatomicInstalled(ctx context.Context) bool {
 	for _, pattern := range libatomicPatterns {
-		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
+		matches, _ := filepath.Glob(pattern)
+		for _, path := range matches {
+			if nativeLibrary(path) {
+				return true
+			}
+		}
+	}
+	for _, path := range loaderCacheLibatomic(ctx) {
+		if nativeLibrary(path) {
 			return true
 		}
 	}
 	return false
 }
 
-// needsNode reports whether any spec installs a mise node runtime that can be
-// Node 25 or later. Explicit pins below 25 (node@24) do not link libatomic.
-func needsNode(specs []string) bool {
-	for _, spec := range specs {
-		if toolName(spec) != "node" {
+// nativeLibrary reports whether path resolves to an ELF file for this host's
+// architecture. A dangling symlink or a foreign-architecture copy does not count.
+func nativeLibrary(path string) bool {
+	f, err := elf.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	return nativeELFMachine == elf.EM_NONE || f.Machine == nativeELFMachine
+}
+
+// loaderCacheLibatomic lists the libatomic.so.1 paths in the dynamic loader
+// cache, which also covers directories outside libatomicPatterns (such as
+// /opt prefixes registered in /etc/ld.so.conf.d).
+func loaderCacheLibatomic(ctx context.Context) []string {
+	for _, ldconfig := range ldconfigPaths {
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		out, err := exec.CommandContext(cctx, ldconfig, "-p").Output()
+		cancel()
+		if err != nil {
 			continue
 		}
-		version := strings.TrimPrefix(spec, "node")
-		version = strings.TrimPrefix(strings.TrimPrefix(version, "@"), "v")
+		var paths []string
+		scanner := bufio.NewScanner(bytes.NewReader(out))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if !strings.HasPrefix(line, "libatomic.so.1 ") {
+				continue
+			}
+			if _, path, ok := strings.Cut(line, "=> "); ok {
+				paths = append(paths, strings.TrimSpace(path))
+			}
+		}
+		return paths
+	}
+	return nil
+}
+
+// needsNode reports whether any spec installs a mise node runtime that can be
+// Node 25 or later. Explicit pins below 25 (node@24) do not link libatomic, and
+// node@system uses the Node already on the machine. mise accepts nodejs as an
+// alias for node.
+func needsNode(specs []string) bool {
+	for _, spec := range specs {
+		name := toolName(spec)
+		if name != "node" && name != "nodejs" {
+			continue
+		}
+		version := strings.TrimPrefix(spec[len(name):], "@")
+		if version == "system" {
+			continue
+		}
+		version = strings.TrimPrefix(version, "v")
 		major, _, _ := strings.Cut(version, ".")
 		if n, err := strconv.Atoi(major); err == nil && n < 25 {
 			continue
@@ -70,7 +146,7 @@ func needsNode(specs []string) bool {
 // Debian 12 and Ubuntu 24.04 cloud images do not ship it, so node fails to
 // start and every npm: tool installed with it fails too (#703).
 func (m *MisePlugin) ensureNodeRuntimeDeps(ctx context.Context, specs []string) error {
-	if targetOS != "linux" || !needsNode(specs) || libatomicInstalled() {
+	if targetOS != "linux" || !needsNode(specs) || libatomicInstalled(ctx) {
 		return nil
 	}
 	for _, pkg := range libatomicPackages {
