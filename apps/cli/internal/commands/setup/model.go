@@ -71,6 +71,8 @@ type UISelections struct {
 	desktopPlugin    string
 	// alreadyInstalled holds planned apps found installed on the Confirmation screen.
 	alreadyInstalled map[string]bool
+	// pluginPreviews holds plugin steps' descriptions, keyed by pluginStep.key.
+	pluginPreviews map[string]pluginPreview
 }
 
 // GitConfiguration holds Git-specific configuration state

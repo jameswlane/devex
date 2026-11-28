@@ -23,6 +23,9 @@ type planItem struct {
 	group      planGroup
 	reason     string // for dependencies: what needs it
 	channelErr error  // invalid channel selection or refused channel switch
+	// pluginStep, when set, installs the app by running a plugin command; the
+	// Confirmation screen shows the plugin's own description of it.
+	pluginStep *pluginStep
 }
 
 // installPlan returns every app setup will install, in install order. Both
@@ -129,4 +132,5 @@ func (m *SetupModel) refreshInstalledApps() {
 		}
 	}
 	m.selections.alreadyInstalled = tui.SkippableInstalledApps(m.repo, installedAppsCheck(ctx, checkable))
+	m.refreshPluginPreviews(ctx, plan)
 }

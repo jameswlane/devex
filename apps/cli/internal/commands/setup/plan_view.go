@@ -81,51 +81,7 @@ func (m *SetupModel) renderInstallPlan() string {
 			}
 			lines = append(lines, line)
 			if !m.selections.alreadyInstalled[item.app.Name] {
-				config := item.app.GetOSConfig()
-				switch {
-				case len(config.Packages) > 0:
-					data, _ := json.Marshal(struct {
-						Packages []string `json:"packages"`
-						Options  []string `json:"options,omitempty"`
-					}{config.Packages, config.Options})
-					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, data))
-				case config.InstallCommand != "":
-					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, config.InstallCommand))
-				case config.DownloadURL != "":
-					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, config.DownloadURL))
-				}
-				for _, hooks := range [][]types.InstallCommand{config.PreInstall, config.PostInstall} {
-					for _, hook := range hooks {
-						// Show only the selected shell, matching ApplyActions.
-						if hook.ShellInit != nil {
-							init := map[string]string{}
-							if line := hook.ShellInit[m.getSelectedShell()]; line != "" {
-								init[m.getSelectedShell()] = line
-							}
-							hook.ShellInit = init
-						}
-						data, _ := json.Marshal(hook)
-						lines = append(lines, "      Hook: "+string(data))
-					}
-				}
-				configFileLine := func(kind string, file types.ConfigFile) string {
-					line := fmt.Sprintf("      %s: %s → %s", kind, file.Source, file.Destination)
-					if len(file.RequiresAny) > 0 {
-						line += fmt.Sprintf(" (requires any existing file: %s)", strings.Join(file.RequiresAny, ", "))
-					}
-					return line
-				}
-				for _, file := range config.ConfigFiles {
-					lines = append(lines, configFileLine("Config file", file))
-				}
-				for _, theme := range config.Themes {
-					if theme.Name != m.getSelectedTheme() {
-						continue
-					}
-					for _, file := range theme.Files {
-						lines = append(lines, configFileLine("Theme file", file))
-					}
-				}
+				lines = append(lines, m.planItemDetails(item)...)
 			}
 		}
 		if len(lines) == 0 {
@@ -182,4 +138,60 @@ func (m *SetupModel) renderInstallPlan() string {
 	}
 	fmt.Fprintf(&b, "Use ↑/↓ to navigate, Space to skip/include the highlighted default, 'c' to switch channel, Enter to start installation, 'd' to %s all default tools, 'p' to go back, or 'q' to quit.", toggle)
 	return b.String()
+}
+
+// planItemDetails lists what installing a plan item changes: the plugin's own
+// description for plugin steps, or the catalog entry's packages, commands,
+// hooks and files.
+func (m *SetupModel) planItemDetails(item planItem) []string {
+	if item.pluginStep != nil {
+		return renderPluginPreview(*item.pluginStep, m.selections.pluginPreviews[item.pluginStep.key()])
+	}
+	var lines []string
+	config := item.app.GetOSConfig()
+	switch {
+	case len(config.Packages) > 0:
+		data, _ := json.Marshal(struct {
+			Packages []string `json:"packages"`
+			Options  []string `json:"options,omitempty"`
+		}{config.Packages, config.Options})
+		lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, data))
+	case config.InstallCommand != "":
+		lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, config.InstallCommand))
+	case config.DownloadURL != "":
+		lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, config.DownloadURL))
+	}
+	for _, hooks := range [][]types.InstallCommand{config.PreInstall, config.PostInstall} {
+		for _, hook := range hooks {
+			// Show only the selected shell, matching ApplyActions.
+			if hook.ShellInit != nil {
+				init := map[string]string{}
+				if line := hook.ShellInit[m.getSelectedShell()]; line != "" {
+					init[m.getSelectedShell()] = line
+				}
+				hook.ShellInit = init
+			}
+			data, _ := json.Marshal(hook)
+			lines = append(lines, "      Hook: "+string(data))
+		}
+	}
+	configFileLine := func(kind string, file types.ConfigFile) string {
+		line := fmt.Sprintf("      %s: %s → %s", kind, file.Source, file.Destination)
+		if len(file.RequiresAny) > 0 {
+			line += fmt.Sprintf(" (requires any existing file: %s)", strings.Join(file.RequiresAny, ", "))
+		}
+		return line
+	}
+	for _, file := range config.ConfigFiles {
+		lines = append(lines, configFileLine("Config file", file))
+	}
+	for _, theme := range config.Themes {
+		if theme.Name != m.getSelectedTheme() {
+			continue
+		}
+		for _, file := range theme.Files {
+			lines = append(lines, configFileLine("Theme file", file))
+		}
+	}
+	return lines
 }

@@ -475,6 +475,19 @@ func (b *PluginBootstrap) checkOrgPolicy(pluginName string) error {
 	return security.PluginFilter(b.homeDir)(pluginName)
 }
 
+// DescribePlugin asks an installed plugin what command would change, without
+// running it. Unlike ExecutePlugin it never downloads the plugin: a plugin that
+// is not installed yet cannot be previewed.
+func (b *PluginBootstrap) DescribePlugin(ctx context.Context, pluginName, command string, args []string) (sdk.Description, error) {
+	if err := validatePluginName(pluginName); err != nil {
+		return sdk.Description{}, fmt.Errorf("invalid plugin name: %w", err)
+	}
+	if err := b.checkOrgPolicy(pluginName); err != nil {
+		return sdk.Description{}, err
+	}
+	return b.manager.DescribePlugin(ctx, pluginName, command, args)
+}
+
 // ExecutePluginWithIO executes a plugin like ExecutePluginWithContext, with
 // caller-owned streams.
 func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams sdk.OperationIO) error {

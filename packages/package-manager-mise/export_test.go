@@ -14,17 +14,17 @@ func InstallMiseFrom(m *MisePlugin, ctx context.Context, scriptURL string, verif
 
 // ConfigureBashIntegration exposes the .bashrc setup to tests.
 func ConfigureBashIntegration(m *MisePlugin, homeDir string) error {
-	return m.configureBashIntegration(homeDir)
+	return m.configureBashIntegration(sdk.NewChanges(false), homeDir)
 }
 
 // ConfigureZshIntegration exposes the .zshrc setup to tests.
 func ConfigureZshIntegration(m *MisePlugin, homeDir string) error {
-	return m.configureZshIntegration(homeDir)
+	return m.configureZshIntegration(sdk.NewChanges(false), homeDir)
 }
 
 // ConfigureFishIntegration exposes the config.fish setup to tests.
 func ConfigureFishIntegration(m *MisePlugin, homeDir string) error {
-	return m.configureFishIntegration(homeDir)
+	return m.configureFishIntegration(sdk.NewChanges(false), homeDir)
 }
 
 // SetTargetOS overrides the platform for Linux-only behavior and returns a restore func.

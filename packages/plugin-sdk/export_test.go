@@ -9,3 +9,9 @@ func (d *Downloader) ExportVerifyPluginSignature(pluginPath, downloadURL string)
 func (d *Downloader) ExportVerifyWithSystemGPG(pluginPath, signatureURL string) error {
 	return d.verifyWithSystemGPG(pluginPath, signatureURL)
 }
+
+// RunDescribe exports runDescribe for testing.
+var RunDescribe = runDescribe
+
+// PluginInfoOutput exports pluginInfoOutput for testing.
+var PluginInfoOutput = pluginInfoOutput

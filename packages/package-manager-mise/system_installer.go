@@ -15,33 +15,70 @@ import (
 
 // HandleEnsureInstalled ensures Mise is installed on the system
 func (m *MisePlugin) HandleEnsureInstalled(ctx context.Context, args []string) error {
+	return m.ensureInstalled(ctx, sdk.NewChanges(false))
+}
+
+// Describe reports what ensure-installed would change, from the same code path
+// it runs.
+func (m *MisePlugin) Describe(ctx context.Context, command string, args []string) (sdk.Description, error) {
+	if command != "ensure-installed" {
+		return sdk.Description{}, sdk.ErrDescribeUnsupported
+	}
+	addUserBinToPath()
+	changes := sdk.NewChanges(true)
+	if err := m.ensureInstalled(ctx, changes); err != nil {
+		return sdk.Description{}, err
+	}
+	return changes.Description(m.Info().Name, command, args), nil
+}
+
+// ensureInstalled installs Mise when it is missing and configures shell
+// integration, running or only recording each change through changes.
+func (m *MisePlugin) ensureInstalled(ctx context.Context, changes *sdk.Changes) error {
 	m.logger.Println("Checking if Mise is installed...")
 
 	// Check if mise is already in PATH
 	if err := sdk.ExecCommandWithContext(ctx, false, "which", "mise"); err == nil {
 		m.logger.Success("Mise is already installed")
-		if err := m.configureShellIntegration(); err != nil {
-			m.logger.Warning("Failed to configure shell integration: %v", err)
-			m.logger.Println("You may need to manually add Mise to your shell configuration")
-		}
+		m.configureShell(changes)
 		return nil
 	}
 
-	m.logger.Println("Mise not found, installing...")
+	if !changes.Describing() {
+		m.logger.Println("Mise not found, installing...")
+	}
 
 	// Install Mise using the official installation script
-	if err := m.installMise(ctx); err != nil {
+	changes.Download(sdk.PlannedDownload{URL: sdk.MiseInstallScriptURL, Verification: sdk.MiseInstallVerification()})
+	// The installer honors MISE_INSTALL_PATH, which the plugin inherits.
+	destination := os.Getenv("MISE_INSTALL_PATH")
+	if destination == "" {
+		destination = "~/.local/bin/mise"
+	}
+	if err := changes.Do(sdk.PlannedAction{
+		Kind:   sdk.ActionShell,
+		Target: "sh <verified mise installer>",
+		Scope:  sdk.ScopeUser,
+		Detail: "installs mise to " + destination,
+	}, func() error { return m.installMise(ctx) }); err != nil {
 		return fmt.Errorf("failed to install Mise: %w", err)
 	}
 
-	// Configure shell integration
-	if err := m.configureShellIntegration(); err != nil {
+	m.configureShell(changes)
+
+	if !changes.Describing() {
+		m.logger.Success("Mise installed successfully")
+	}
+	return nil
+}
+
+// configureShell adds shell integration, warning instead of failing.
+func (m *MisePlugin) configureShell(changes *sdk.Changes) {
+	if err := m.configureShellIntegration(changes); err != nil {
 		m.logger.Warning("Failed to configure shell integration: %v", err)
 		m.logger.Println("You may need to manually add Mise to your shell configuration")
+		changes.Note(fmt.Sprintf("Shell integration was not configured (%v); add `mise activate` to your shell config yourself", err))
 	}
-
-	m.logger.Success("Mise installed successfully")
-	return nil
 }
 
 // maxMiseInstallerSize bounds the downloaded installer script.
@@ -107,7 +144,7 @@ func (m *MisePlugin) installMiseFrom(ctx context.Context, scriptURL string, veri
 }
 
 // configureShellIntegration configures shell integration for Mise
-func (m *MisePlugin) configureShellIntegration() error {
+func (m *MisePlugin) configureShellIntegration(changes *sdk.Changes) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
@@ -124,18 +161,18 @@ func (m *MisePlugin) configureShellIntegration() error {
 
 	switch shellName {
 	case "bash":
-		return m.configureBashIntegration(homeDir)
+		return m.configureBashIntegration(changes, homeDir)
 	case "zsh":
-		return m.configureZshIntegration(homeDir)
+		return m.configureZshIntegration(changes, homeDir)
 	case "fish":
-		return m.configureFishIntegration(homeDir)
+		return m.configureFishIntegration(changes, homeDir)
 	default:
 		return fmt.Errorf("unsupported shell: %s", shellName)
 	}
 }
 
 // configureBashIntegration configures Mise integration for Bash
-func (m *MisePlugin) configureBashIntegration(homeDir string) error {
+func (m *MisePlugin) configureBashIntegration(changes *sdk.Changes, homeDir string) error {
 	bashrcPath := filepath.Join(homeDir, ".bashrc")
 	bashProfilePath := filepath.Join(homeDir, ".bash_profile")
 
@@ -155,11 +192,11 @@ elif [ -x "$HOME/.local/bin/mise" ]; then
 fi
 `
 
-	return m.appendToFile(bashrcPath, config)
+	return m.appendActivation(changes, bashrcPath, config)
 }
 
 // configureZshIntegration configures Mise integration for Zsh
-func (m *MisePlugin) configureZshIntegration(homeDir string) error {
+func (m *MisePlugin) configureZshIntegration(changes *sdk.Changes, homeDir string) error {
 	zshrcPath := filepath.Join(homeDir, ".zshrc")
 
 	// Check if already configured
@@ -178,18 +215,13 @@ elif [ -x "$HOME/.local/bin/mise" ]; then
 fi
 `
 
-	return m.appendToFile(zshrcPath, config)
+	return m.appendActivation(changes, zshrcPath, config)
 }
 
 // configureFishIntegration configures Mise integration for Fish
-func (m *MisePlugin) configureFishIntegration(homeDir string) error {
+func (m *MisePlugin) configureFishIntegration(changes *sdk.Changes, homeDir string) error {
 	fishConfigDir := filepath.Join(homeDir, ".config", "fish")
 	configPath := filepath.Join(fishConfigDir, "config.fish")
-
-	// Create fish config directory if it doesn't exist
-	if err := os.MkdirAll(fishConfigDir, 0755); err != nil {
-		return fmt.Errorf("failed to create fish config directory: %w", err)
-	}
 
 	// Check if already configured
 	if m.isAlreadyConfigured(configPath) {
@@ -207,7 +239,31 @@ else if test -x "$HOME/.local/bin/mise"
 end
 `
 
-	return m.appendToFile(configPath, config)
+	return m.appendActivation(changes, configPath, config, func() error {
+		// Create fish config directory if it doesn't exist
+		if err := os.MkdirAll(fishConfigDir, 0755); err != nil {
+			return fmt.Errorf("failed to create fish config directory: %w", err)
+		}
+		return nil
+	})
+}
+
+// appendActivation appends mise activation to an rc file through changes,
+// running prepare first.
+func (m *MisePlugin) appendActivation(changes *sdk.Changes, filePath, content string, prepare ...func() error) error {
+	return changes.Do(sdk.PlannedAction{
+		Kind:   sdk.ActionFile,
+		Target: filePath,
+		Scope:  sdk.ScopeUser,
+		Detail: "append mise activation",
+	}, func() error {
+		for _, step := range prepare {
+			if err := step(); err != nil {
+				return err
+			}
+		}
+		return m.appendToFile(filePath, content)
+	})
 }
 
 // isAlreadyConfigured checks if Mise is already configured in a shell file

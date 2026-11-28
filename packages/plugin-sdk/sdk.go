@@ -259,6 +259,9 @@ type PluginInfo struct {
 	Tags        []string        `json:"tags,omitempty"`
 	// Timeout configuration for plugin operations
 	Timeouts TimeoutConfig `json:"timeouts,omitempty"`
+	// SupportsDescribe is set by HandleArgs when the plugin implements
+	// Describer, so callers know `describe` is safe to call.
+	SupportsDescribe bool `json:"supports_describe,omitempty"`
 }
 
 // PluginCommand represents a command provided by a plugin
@@ -536,13 +539,19 @@ func HandleArgs(plugin Plugin, args []string) {
 	switch command {
 	case "--plugin-info":
 		// Get plugin info directly from the interface
-		info := plugin.Info()
-		output, err := json.MarshalIndent(info, "", "  ")
+		output, err := json.MarshalIndent(pluginInfoOutput(plugin), "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to marshal plugin info: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Print(string(output))
+	case DescribeCommand:
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		status := runDescribe(ctx, plugin, args[1:], os.Stdout, os.Stderr)
+		stop()
+		if status != 0 {
+			os.Exit(status)
+		}
 	default:
 		var err error
 		if contextual, ok := plugin.(interface {
@@ -565,6 +574,13 @@ func HandleArgs(plugin Plugin, args []string) {
 			os.Exit(status)
 		}
 	}
+}
+
+// pluginInfoOutput is what --plugin-info prints.
+func pluginInfoOutput(plugin Plugin) PluginInfo {
+	info := plugin.Info()
+	_, info.SupportsDescribe = plugin.(Describer)
+	return info
 }
 
 // FileExists checks if a file exists
@@ -1459,8 +1475,12 @@ func (em *ExecutableManager) listPlugins(ctx context.Context, force bool) (map[s
 		}
 	}
 
-	em.cachedPlugins = plugins
-	em.cacheTime = time.Now()
+	// A cancelled discovery holds fallback metadata for plugins it could not
+	// probe; don't cache it, so the next caller probes them again.
+	if ctx.Err() == nil {
+		em.cachedPlugins = plugins
+		em.cacheTime = time.Now()
+	}
 	return clonePluginMetadata(plugins), nil
 }
 
