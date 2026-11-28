@@ -509,6 +509,9 @@ func StatusDefinition(repo RecordReader, catalog types.CrossPlatformApp, inCatal
 	if saved.Name != "" {
 		label := InstalledChannelForApp(repo, saved)
 		if label == "" || strings.EqualFold(label, saved.SelectedChannel()) {
+			if inCatalog {
+				saved = saved.WithDetectionHintsFrom(catalog)
+			}
 			return saved, true, nil
 		}
 	}

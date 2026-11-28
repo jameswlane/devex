@@ -364,3 +364,25 @@ func FormatAvailableChannels(infos []ChannelInfo) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// WithDetectionHintsFrom returns app with a missing destination on its active
+// channel filled from the same channel in catalog, when both install the same
+// binary the same way. A definition saved before the catalog declared where a
+// script puts its binary can then still be found by status.
+func (app CrossPlatformApp) WithDetectionHintsFrom(catalog CrossPlatformApp) CrossPlatformApp {
+	active, ok := app.activePlatformBlock()
+	if !ok || active.Destination != "" || active.InstalledBinary == "" {
+		return app
+	}
+	current, err := catalog.WithChannel(app.SelectedChannel())
+	if err != nil {
+		return app
+	}
+	hint, ok := current.activePlatformBlock()
+	if !ok || hint.InstallMethod != active.InstallMethod || hint.InstalledBinary != active.InstalledBinary {
+		return app
+	}
+	active.Destination = hint.Destination
+	app.setActivePlatformBlock(active)
+	return app
+}
