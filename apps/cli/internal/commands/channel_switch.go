@@ -73,12 +73,15 @@ func detectChannelSwitch(repo types.Repository, app types.CrossPlatformApp) (cha
 		oldCfg = *tracked
 		foundOld = true
 	}
+	// Without a receipt, the tracked record is what the old channel was read
+	// from, so it names the installed packages better than today's catalog.
+	if !foundOld && !hasReceipt && tracked != nil && tracked.InstallMethod != "" {
+		oldCfg = *tracked
+		foundOld = true
+	}
 	if !foundOld {
 		if oldCross, err := app.WithChannel(oldChannel); err == nil {
 			oldCfg = oldCross.ToLegacyAppConfig()
-			foundOld = true
-		} else if tracked != nil && tracked.InstallMethod != "" && !hasReceipt {
-			oldCfg = *tracked
 			foundOld = true
 		}
 	}

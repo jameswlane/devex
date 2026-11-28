@@ -253,6 +253,36 @@ var _ = Describe("Channel resolution", func() {
 			Expect(installed.GetOSConfig().InstallCommand).To(Equal("old-git"))
 		})
 
+		It("matches receipt packages as a multiset, so a repeated identifier is not a match (CR r10)", func() {
+			app := types.CrossPlatformApp{
+				Name: "Tool",
+				Linux: types.OSConfig{
+					Channel: "apt-a", InstallMethod: "apt", InstallCommand: "tool tool", OfficialSupport: true,
+					Alternatives: []types.OSConfig{
+						{Channel: "apt-b", InstallMethod: "apt", InstallCommand: "tool gcc"},
+					},
+				},
+			}
+			Expect(channels.InferRecordedChannel(inventory.Receipt{Manager: "apt", Packages: []string{"tool", "gcc"}}, app)).To(Equal("apt-b"))
+		})
+
+		It("keeps a legacy saved definition that installs the legacy receipt's packages after a channel rename (CR r10)", func() {
+			catalog := types.CrossPlatformApp{
+				Name:  "Tool",
+				Linux: types.OSConfig{Channel: "apt-vendor", InstallMethod: "apt", InstallCommand: "new-tool", OfficialSupport: true},
+			}
+			saved := types.CrossPlatformApp{Name: "Tool", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "old-tool"}}
+			repo := mocks.NewMockRepository()
+			data, err := json.Marshal(saved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.Set("installed-app-definition:tool", string(data))).To(Succeed())
+			Expect(repo.Set(inventory.ReceiptKey("Tool"), `{"manager":"apt","packages":["old-tool"]}`)).To(Succeed())
+
+			installed, err := channels.InstalledDefinition(repo, catalog)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed.GetOSConfig().InstallCommand).To(Equal("old-tool"))
+		})
+
 		It("ignores a saved definition that does not decode (Q1)", func() {
 			repo := mocks.NewMockRepository()
 			Expect(repo.Set("installed-app-definition:tool", `{"Name":"Tool","Linux":{"InstallMethod":"dnf","InstallCommand":7}}`)).To(Succeed())

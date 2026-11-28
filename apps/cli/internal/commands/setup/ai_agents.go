@@ -279,6 +279,10 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 				resolvedPrereq, prereqErr := m.resolvePlanApp(prereqApp, true)
 				prereqApps[key] = resolvedPrereq
 				prereqErrs[key] = prereqErr
+				// A prerequisite on a mise channel needs mise planned first too.
+				if prereqErr == nil && osConfigForPlatform(resolvedPrereq, m.system.detectedPlatform.OS).InstallMethod == "mise" {
+					miseRequesters = append(miseRequesters, resolvedPrereq.Name)
+				}
 			}
 			prereqRequesters[key] = append(prereqRequesters[key], resolved.Name)
 		}

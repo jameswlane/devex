@@ -369,14 +369,17 @@ func samePackages(cfg types.OSConfig, packages []string) bool {
 	if err != nil || len(request.Packages) != len(packages) {
 		return false
 	}
-	want := make(map[string]bool, len(packages))
+	// Compare as multisets: order may differ, but every identifier must
+	// appear as many times on both sides.
+	want := make(map[string]int, len(packages))
 	for _, pkg := range packages {
-		want[pkg] = true
+		want[pkg]++
 	}
 	for _, pkg := range request.Packages {
-		if !want[pkg] {
+		if want[pkg] == 0 {
 			return false
 		}
+		want[pkg]--
 	}
 	return true
 }
@@ -462,6 +465,15 @@ func InstalledDefinition(repo RecordReader, app types.CrossPlatformApp) (types.C
 	// catalog has since renamed the package inside the same channel.
 	if saved.Name != "" && strings.EqualFold(saved.SelectedChannel(), label) {
 		return saved, nil
+	}
+	// A legacy receipt names only the manager and packages; a legacy saved
+	// definition (no explicit channel) that installs those packages is the
+	// installation, even when the catalog has since renamed its channels.
+	if saved.Name != "" && strings.TrimSpace(saved.GetOSConfig().Channel) == "" {
+		if receipt, ok := inventory.ReadReceipt(repo, app.Name); ok && strings.TrimSpace(receipt.Channel) == "" &&
+			strings.EqualFold(saved.GetOSConfig().InstallMethod, receipt.Manager) && samePackages(saved.GetOSConfig(), receipt.Packages) {
+			return saved, nil
+		}
 	}
 	if strings.EqualFold(app.SelectedChannel(), label) {
 		return app, nil

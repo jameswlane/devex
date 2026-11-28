@@ -153,6 +153,68 @@ var _ = Describe("Install Channels CLI", func() {
 		errOut.Reset()
 	})
 
+	Describe("dependencies on a per-app channel preference (CR r10)", func() {
+		BeforeEach(func() {
+			settings.ApplicationOverrides = append(settings.ApplicationOverrides, types.CrossPlatformApp{
+				Name:     "Ghostty Theme",
+				Category: "Terminal Emulators",
+				Linux:    types.OSConfig{InstallMethod: "apt", InstallCommand: "ghostty-theme", Dependencies: []string{"ghostty"}, OfficialSupport: true},
+			})
+			viper.Set("channels", map[string]string{"Ghostty": "snap"})
+		})
+
+		It("still resolves a dependency named by the catalog command after its channel changes", func() {
+			settings.ApplicationOverrides = append(settings.ApplicationOverrides,
+				types.CrossPlatformApp{
+					Name:     "Tool",
+					Category: "Development Tools",
+					Linux: types.OSConfig{
+						InstallMethod: "apt", InstallCommand: "tool-pkg", OfficialSupport: true,
+						Alternatives: []types.OSConfig{{InstallMethod: "snap", InstallCommand: "tool-snap"}},
+					},
+				},
+				types.CrossPlatformApp{
+					Name:     "Tool Plugin",
+					Category: "Development Tools",
+					Linux:    types.OSConfig{InstallMethod: "apt", InstallCommand: "tool-plugin", Dependencies: []string{"tool-pkg"}, OfficialSupport: true},
+				},
+			)
+			viper.Set("channels", map[string]string{"Ghostty": "snap", "Tool": "snap"})
+			plan, err := agentapi.PlanInstall(context.Background(), settings, agentapi.PlanRequest{Names: []string{"Tool Plugin"}, Repo: repo})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(plan.DependencyOrder).To(Equal([]string{"Tool", "Tool Plugin"}))
+		})
+
+		It("refuses a dependency whose preference would switch its recorded channel", func() {
+			aptGhostty, err := settings.ApplicationOverrides[1].WithChannel("apt")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(repo.AddApp(aptGhostty.Name)).To(Succeed())
+			Expect(inventory.Record(context.Background(), repo, aptGhostty, inventory.RecordOptions{
+				Query: func(context.Context, string, string) (bool, string, error) { return true, "1.0.0", nil },
+			})).To(Succeed())
+
+			_, err = agentapi.PlanInstall(context.Background(), settings, agentapi.PlanRequest{Names: []string{"Ghostty Theme"}, Repo: repo, RefuseChannelSwitch: true})
+			Expect(err).To(MatchError(ContainSubstring(`Ghostty is installed through channel "apt"; run 'devex uninstall --app "Ghostty"' first, then install it with --channel snap`)))
+		})
+	})
+
+	It("removes the tracked package, not today's catalog package, when switching without a receipt (CR r10)", func() {
+		Expect(repo.SaveApp(types.AppConfig{
+			BaseConfig:       types.BaseConfig{Name: "Ghostty"},
+			Channel:          "apt",
+			InstallMethod:    "apt",
+			InstallCommand:   "old-ghostty",
+			UninstallCommand: "old-ghostty",
+		})).To(Succeed())
+		snapGhostty, err := settings.ApplicationOverrides[1].WithChannel("snap")
+		Expect(err).NotTo(HaveOccurred())
+
+		plan, switching := detectChannelSwitch(repo, snapGhostty)
+		Expect(switching).To(BeTrue())
+		Expect(plan.OldChannel).To(Equal("apt"))
+		Expect(plan.OldConfig.InstallCommand).To(Equal("old-ghostty"))
+	})
+
 	Describe("channel preference resolution through root command", func() {
 		It("selects an alternative channel via --channel on install dry-run JSON", func() {
 			Expect(runRoot("install", "Kimi Code", "--channel", "mise", "--dry-run", "--format", "json", "--offline")).To(Succeed())

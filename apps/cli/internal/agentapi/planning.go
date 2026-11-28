@@ -342,17 +342,29 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 	// Resolution errors only matter for the dependencies the plan reaches.
 	resolveErrs := map[string]error{}
 	for _, app := range s.GetAllApps() {
+		key := normalizeInstallLookup(app.Name)
+		aliases[key] = key
+		// A dependency may name the catalog's default command or the
+		// selected channel's command; both resolve to the app.
+		if command := app.GetOSConfig().InstallCommand; command != "" {
+			aliases[normalizeInstallLookup(command)] = key
+		}
 		recorded := channels.InstalledChannelForApp(r.Repo, app)
 		if selected, _, resolveErr := channels.ResolveForInstall(app, depPrefs, recorded); resolveErr == nil {
 			app = selected
+			if r.RefuseChannelSwitch {
+				if switchErr := channels.CheckRefusedChannelSwitch(r.Repo, selected); switchErr != nil {
+					resolveErrs[key] = switchErr
+				}
+			}
 		} else {
-			resolveErrs[normalizeInstallLookup(app.Name)] = resolveErr
+			resolveErrs[key] = resolveErr
 		}
-		byName[normalizeInstallLookup(app.Name)] = app
-		aliases[normalizeInstallLookup(app.Name)] = normalizeInstallLookup(app.Name)
-		c := app.GetOSConfig()
-		if c.InstallCommand != "" {
-			aliases[normalizeInstallLookup(c.InstallCommand)] = normalizeInstallLookup(app.Name)
+		byName[key] = app
+		if command := app.GetOSConfig().InstallCommand; command != "" {
+			if _, taken := aliases[normalizeInstallLookup(command)]; !taken {
+				aliases[normalizeInstallLookup(command)] = key
+			}
 		}
 	}
 	for _, app := range apps {

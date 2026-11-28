@@ -166,6 +166,39 @@ var _ = Describe("Setup TUI Install Channels", func() {
 		Expect(confirmView).To(ContainSubstring("mise (official)"))
 	})
 
+	It("plans mise before a sandbox prerequisite that resolves to a mise channel (CR r10)", func() {
+		settings.ApplicationOverrides = append(settings.ApplicationOverrides, types.CrossPlatformApp{
+			Name:     "Sandboxed Agent",
+			Category: CategoryAICodingAgents,
+			Linux: types.OSConfig{
+				InstallMethod:        "curlpipe",
+				DownloadURL:          "https://example.invalid/install.sh",
+				InstallScope:         "user",
+				OfficialSupport:      true,
+				SandboxPrerequisites: []string{"Kimi Code"},
+			},
+		})
+		model := NewSetupModel(repo, settings, plat)
+		model.selections.selectedAIAgents["Sandboxed Agent"] = true
+		model.selections.selectedChannels = map[string]string{"Kimi Code": "mise"}
+
+		plan := model.installPlan()
+		names := make([]string, 0, len(plan))
+		for _, item := range plan {
+			names = append(names, item.app.Name)
+		}
+		Expect(names).To(ContainElements("mise", "Kimi Code", "Sandboxed Agent"))
+		indexOf := func(name string) int {
+			for i, n := range names {
+				if n == name {
+					return i
+				}
+			}
+			return -1
+		}
+		Expect(indexOf("mise")).To(BeNumerically("<", indexOf("Kimi Code")))
+	})
+
 	It("shows channel and official marker on desktop apps and cycles channels with 'c'", func() {
 		model := NewSetupModel(repo, settings, plat)
 		model.step = StepDesktopApps
