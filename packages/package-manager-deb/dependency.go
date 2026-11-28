@@ -18,7 +18,7 @@ type missingDependency struct {
 }
 
 var (
-	dependencyAlternative = regexp.MustCompile(`^([a-z0-9][a-z0-9+.-]*)(?::([a-z0-9-]+))?\s*(?:\(\s*(<<|<=|=|>=|>>)\s*([A-Za-z0-9.+~:-]+)\s*\))?$`)
+	dependencyAlternative = regexp.MustCompile(`^([a-z0-9][a-z0-9+.-]*)(?::([a-z0-9-]+))?\s*(?:\(\s*(<<|<=|=|>=|>>|<|>)\s*([A-Za-z0-9.+~:-]+)\s*\))?$`)
 )
 
 // getMissingDependencies checks for missing dependencies of a .deb package
@@ -94,7 +94,12 @@ func normalizeAlternative(raw string) (string, bool) {
 		spec += ":" + m[2]
 	}
 	if m[3] != "" {
-		spec += " (" + m[3] + " " + m[4] + ")"
+		// Debian Policy: the obsolete < and > mean <= and >=.
+		op := map[string]string{"<": "<=", ">": ">="}[m[3]]
+		if op == "" {
+			op = m[3]
+		}
+		spec += " (" + op + " " + m[4] + ")"
 	}
 	return spec, true
 }
@@ -138,26 +143,37 @@ func (d *DebInstaller) installDependencies(ctx context.Context, deps []missingDe
 		d.logger.Warning("Failed to update package lists: %v", err)
 	}
 
-	specs := make([]string, 0, len(deps))
+	// --no-remove: a dependency preflight must never uninstall packages to
+	// make room; dpkg -i reports whatever stays unmet.
+	var specs []missingDependency
+	var byName []missingDependency
 	for _, dep := range deps {
 		if dep.Spec == "" {
-			specs = nil
-			break
+			byName = append(byName, dep)
+		} else {
+			specs = append(specs, dep)
 		}
-		specs = append(specs, dep.Spec)
 	}
 	if len(specs) > 0 {
-		satisfyArgs := append([]string{"satisfy", "-y"}, specs...)
+		satisfyArgs := []string{"satisfy", "-y", "--no-remove"}
+		for _, dep := range specs {
+			satisfyArgs = append(satisfyArgs, dep.Spec)
+		}
 		err := sdk.ExecCommandWithContext(ctx, true, "apt-get", satisfyArgs...)
 		if err == nil {
-			d.logger.Success("Successfully installed dependencies: %s", strings.Join(specs, ", "))
-			return nil
+			if len(byName) == 0 {
+				d.logger.Success("Successfully installed dependencies: %s", strings.Join(satisfyArgs[3:], ", "))
+				return nil
+			}
+			// Only the groups apt could not be handed whole remain.
+			names = dependencyNames(byName)
+		} else {
+			d.logger.Warning("apt-get satisfy could not resolve the dependencies (%v); installing them by name", err)
 		}
-		d.logger.Warning("apt-get satisfy could not resolve the dependencies (%v); installing them by name", err)
 	}
 
 	// Install dependencies
-	cmdArgs := append([]string{"install", "-y"}, names...)
+	cmdArgs := append([]string{"install", "-y", "--no-remove"}, names...)
 	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", cmdArgs...); err != nil {
 		return fmt.Errorf("failed to install dependencies: %w", err)
 	}
