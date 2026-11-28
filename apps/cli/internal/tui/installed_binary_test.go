@@ -9,6 +9,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -60,6 +63,20 @@ var _ = Describe("Installed binary detection", func() {
 		tarball := scriptApp(types.OSConfig{InstalledBinary: "nvim", PostInstall: []types.InstallCommand{{Path: []string{filepath.Join(home, "opt", "tool", "bin")}}}})
 		tarball.Name = "tarball"
 		Expect(InstalledApps(context.Background(), []types.CrossPlatformApp{appimage, tarball})).To(SatisfyAll(HaveKey("tool"), HaveKey("tarball")))
+	})
+
+	It("treats curl-minimal's curl as satisfying the shipped curl dependency on RHEL", func() {
+		defer types.PinCatalogOSForTesting("linux")()
+		defer types.PinCatalogPlatformForTesting(platform.DetectionResult{Distribution: "rhel", Version: "9.6", Architecture: "amd64"})()
+		data, err := os.ReadFile(filepath.Join("..", "..", "config", "applications", "development", "curl.yaml"))
+		Expect(err).NotTo(HaveOccurred())
+		var curl types.CrossPlatformApp
+		Expect(yaml.Unmarshal(data, &curl)).To(Succeed())
+		Expect(curl.GetOSConfig().InstallMethod).To(Equal("dnf"))
+		Expect(InstalledApps(context.Background(), []types.CrossPlatformApp{curl})).NotTo(HaveKey("curl"))
+
+		writeExecutable(pathDir, "curl", 0o755)
+		Expect(InstalledApps(context.Background(), []types.CrossPlatformApp{curl})).To(HaveKey("curl"))
 	})
 
 	It("installs when the executable is missing or not executable", func() {

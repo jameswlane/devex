@@ -24,7 +24,9 @@ func InstalledApps(ctx context.Context, apps []types.CrossPlatformApp) map[strin
 		cfg := app.GetOSConfig()
 		if cfg.InstalledBinary != "" {
 			if binaryInstalled(cfg) {
+				mu.Lock()
 				result[app.Name] = true
+				mu.Unlock()
 			}
 			continue
 		}
