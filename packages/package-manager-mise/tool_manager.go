@@ -41,6 +41,10 @@ func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 		}
 	}
 
+	if err := m.ensureNodeRuntimeDeps(ctx, args); err != nil {
+		return err
+	}
+
 	// `mise install` only downloads a version and has no --global flag; `mise
 	// use` installs the tool and records it in the global config (or, with
 	// MISE_LOCAL, the local one) so it is active on PATH.

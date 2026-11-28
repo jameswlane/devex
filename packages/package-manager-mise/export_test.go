@@ -25,3 +25,17 @@ func ConfigureZshIntegration(m *MisePlugin, homeDir string) error {
 func ConfigureFishIntegration(m *MisePlugin, homeDir string) error {
 	return m.configureFishIntegration(homeDir)
 }
+
+// SetTargetOS overrides the platform for Linux-only behavior and returns a restore func.
+func SetTargetOS(goos string) func() {
+	previous := targetOS
+	targetOS = goos
+	return func() { targetOS = previous }
+}
+
+// SetLibatomicPatterns overrides where libatomic.so.1 is searched for.
+func SetLibatomicPatterns(patterns []string) func() {
+	previous := libatomicPatterns
+	libatomicPatterns = patterns
+	return func() { libatomicPatterns = previous }
+}
