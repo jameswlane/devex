@@ -51,7 +51,8 @@ var nativeApplicationInstalled = func(ctx context.Context, app types.CrossPlatfo
 	if installer == nil {
 		return false, fmt.Errorf("no installer for %s", cfg.InstallMethod)
 	}
-	return installer.IsInstalled(cfg.InstallCommand)
+	// Query what status queries: structured packages and the selected kind.
+	return installer.IsInstalled(app.ToLegacyAppConfig().PackageQueryCommand())
 }
 
 func initializeApplicationInstallers(ctx context.Context, provider pluginBootstrapProvider) error {
