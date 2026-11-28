@@ -442,40 +442,30 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(plan.Steps[0].Request.Args).To(BeEmpty())
 	})
 
-	It("never runs a plugin-method app's install step for removal (#757)", func() {
-		removal := func(uninstall string) (*templates.ExecutionPlan, error) {
-			spec.Lifecycle[templates.LifecycleRemove] = []templates.TemplateStepSpec{
-				{ID: "mise", Order: 10, App: &templates.TemplateAppAction{Ref: "mise", Command: "remove"}},
-			}
-			planner := templates.TemplatePlanner{
-				Manager: manager,
-				AppResolver: testAppResolver{apps: map[string]*types.AppConfig{
-					"mise": {
-						BaseConfig:       types.BaseConfig{Name: "mise", Category: "development"},
-						InstallMethod:    types.InstallMethodPlugin,
-						InstallCommand:   "package-manager-mise ensure-installed",
-						UninstallCommand: uninstall,
-					},
-				}},
-			}
-			return planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
-				Action: templates.LifecycleRemove,
-				InputOptions: templates.InputResolverOptions{
-					Answers:        []string{"databases=postgres"},
-					NonInteractive: true,
-				},
-			})
+	It("refuses to remove a plugin-method app through its app reference (#757)", func() {
+		spec.Lifecycle[templates.LifecycleRemove] = []templates.TemplateStepSpec{
+			{ID: "mise", Order: 10, App: &templates.TemplateAppAction{Ref: "mise", Command: "remove"}},
 		}
-
-		_, err := removal("")
+		planner := templates.TemplatePlanner{
+			Manager: manager,
+			AppResolver: testAppResolver{apps: map[string]*types.AppConfig{
+				"mise": {
+					BaseConfig:       types.BaseConfig{Name: "mise", Category: "development"},
+					InstallMethod:    types.InstallMethodPlugin,
+					InstallCommand:   "package-manager-mise ensure-installed",
+					UninstallCommand: "tool-example teardown",
+				},
+			}},
+		}
+		_, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleRemove,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres"},
+				NonInteractive: true,
+			},
+		})
 		var manual *sdk.ManualRemovalRequiredError
 		Expect(errors.As(err, &manual)).To(BeTrue(), "%v", err)
-
-		plan, err := removal("tool-example remove --keep-config")
-		Expect(err).ToNot(HaveOccurred())
-		Expect(plan.Steps[0].Request.Plugin).To(Equal("tool-example"))
-		Expect(plan.Steps[0].Request.Command).To(Equal("remove"))
-		Expect(plan.Steps[0].Request.Args).To(Equal([]string{"--keep-config"}))
 	})
 
 	It("rejects dangerous shell input after interpolation", func() {
