@@ -19,6 +19,14 @@ var _ = Describe("Recorded removal hints (#757)", func() {
 		Expect(resourceMetadataWithRemovalHints(step, declaration)).NotTo(HaveKey("removal"))
 	})
 
+	It("records no guessed removal when a sensitive input redacted the install method", func() {
+		step := templates.PlannedStep{
+			App:     &types.AppConfig{InstallMethod: "[REDACTED]", InstallCommand: "[REDACTED]"},
+			Request: templates.ExecutionRequest{Plugin: "package-manager-mise", Command: "ensure-installed"},
+		}
+		Expect(resourceMetadataWithRemovalHints(step, declaration)).NotTo(HaveKey("removal"))
+	})
+
 	It("keeps a removal hint the template declares", func() {
 		step := templates.PlannedStep{
 			App:     &types.AppConfig{InstallMethod: types.InstallMethodPlugin, InstallCommand: "package-manager-mise ensure-installed"},
