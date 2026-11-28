@@ -26,7 +26,10 @@ var _ = Describe("Completion change inventory", func() {
 			system: SystemInfo{shells: []string{"bash"}, languages: []string{"Go"},
 				detectedPlatform: platform.DetectionResult{OS: "linux", Distribution: "ubuntu"}},
 			selections: UISelections{selectedLangs: map[int]bool{0: true}},
-			settings:   config.CrossPlatformSettings{ApplicationOverrides: []types.CrossPlatformApp{aptDefault("bat"), aptDefault("gh"), aptDefault("plocate")}},
+			settings: config.CrossPlatformSettings{
+				ApplicationOverrides: []types.CrossPlatformApp{aptDefault("bat"), aptDefault("gh"), aptDefault("plocate"), miseCatalogEntry()},
+				ProgrammingLanguages: []types.CrossPlatformApp{miseLanguage("Go", "go@latest", "mise")},
+			},
 		}
 	})
 

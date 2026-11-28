@@ -433,7 +433,15 @@ func (p *TemplatePlanner) planAppStep(ctx context.Context, result PlannedStep, s
 		Args:     interpolateStringSlice(action.Args, evalCtx),
 		Metadata: interpolateAnyMap(action.Metadata, evalCtx),
 	}
-	if len(result.Request.Args) == 0 && app.InstallCommand != "" {
+	if app.InstallMethod == types.InstallMethodPlugin {
+		// The app's install_command is the whole plugin step.
+		name, args, err := types.ParsePluginCommand(app.InstallCommand)
+		if err != nil {
+			return result, err
+		}
+		plugin = name
+		result.Request.Plugin, result.Request.Command, result.Request.Args = name, args[0], args[1:]
+	} else if len(result.Request.Args) == 0 && app.InstallCommand != "" {
 		result.Request.Args = splitInstallCommand(app.InstallCommand)
 	}
 	if err := validatePlannedAppRequest(result.Request); err != nil {

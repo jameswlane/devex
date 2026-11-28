@@ -86,6 +86,11 @@ func IsInstallerSupported(ctx context.Context, method string) bool {
 		return false
 	}
 
+	// The plugin method names its plugin in each app's command.
+	if method == types.InstallMethodPlugin {
+		return true
+	}
+
 	// Check if package manager plugin exists
 	pluginName := "package-manager-" + method
 	return pluginBootstrap.IsPluginAvailable(ctx, pluginName)
@@ -134,6 +139,9 @@ func (p *PluginBasedInstaller) Install(command string, repo types.Repository) er
 		return fmt.Errorf("plugin bootstrap not initialized")
 	}
 
+	if p.method == types.InstallMethodPlugin {
+		return runPluginCommand(p.context(), p.pluginBootstrap, command)
+	}
 	if p.method != "script" && p.method != "curlpipe" {
 		return p.InstallPackages(p.context(), command, nil, nil)
 	}
@@ -148,6 +156,10 @@ func (p *PluginBasedInstaller) Install(command string, repo types.Repository) er
 func (p *PluginBasedInstaller) Uninstall(command string, repo types.Repository) error {
 	if p.pluginBootstrap == nil {
 		return fmt.Errorf("plugin bootstrap not initialized")
+	}
+
+	if p.method == types.InstallMethodPlugin {
+		return runPluginCommand(p.context(), p.pluginBootstrap, command)
 	}
 
 	pluginName := "package-manager-" + p.method
@@ -291,6 +303,28 @@ func catalogPackageArguments(method, command string) ([]string, error) {
 		return append(request.Options, request.Packages...), nil
 	}
 	return request.Packages, nil
+}
+
+// runPluginCommand runs a plugin install method command, such as
+// "package-manager-mise ensure-installed", with the caller's terminal.
+func runPluginCommand(ctx context.Context, executor pluginExecutor, command string) error {
+	plugin, args, err := types.ParsePluginCommand(command)
+	if err != nil {
+		return err
+	}
+	if io, ok := executor.(pluginIOExecutor); ok {
+		return io.ExecutePluginWithIO(ctx, plugin, args, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stderr, Stderr: os.Stderr})
+	}
+	return executor.ExecutePluginWithContext(ctx, plugin, args)
+}
+
+// RunPluginCommand runs a plugin install method command through the
+// initialized plugin bootstrap.
+func RunPluginCommand(ctx context.Context, command string) error {
+	if pluginBootstrap == nil {
+		return fmt.Errorf("plugin bootstrap not initialized")
+	}
+	return runPluginCommand(ctx, pluginBootstrap, command)
 }
 
 // InstallPackages sends a validated request using the released argv contract.

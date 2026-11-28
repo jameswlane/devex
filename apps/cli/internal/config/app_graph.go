@@ -11,7 +11,9 @@ import (
 
 // pluginInstallMethods have a package-manager plugin today. Whether that plugin
 // is downloaded doesn't matter: offline configurations stay valid.
-// Platform capabilities mirror packages/package-manager-*/metadata.yaml.
+// Platform capabilities mirror packages/package-manager-*/metadata.yaml;
+// "plugin" runs a named plugin's own command, and that plugin decides where
+// it works.
 var pluginInstallMethods = map[string][]string{
 	"apk":      {"linux"},
 	"appimage": {"linux"},
@@ -29,6 +31,7 @@ var pluginInstallMethods = map[string][]string{
 	"nixpkgs":  {"linux", "macos"},
 	"pacman":   {"linux"},
 	"pip":      {"linux", "macos", "windows"},
+	"plugin":   {"linux", "macos", "windows"},
 	"rpm":      {"linux"},
 	"snap":     {"linux"},
 	"winget":   {"windows"},

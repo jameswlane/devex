@@ -13,7 +13,7 @@ type planGroup int
 
 const (
 	planDefault    planGroup = iota // installed by default (default: true)
-	planDependency                  // pulled in by a selection (mise, docker)
+	planDependency                  // a prerequisite a selection declares in its YAML dependencies
 	planSelected                    // chosen by the user
 )
 
@@ -44,11 +44,17 @@ func (m *SetupModel) installPlan() []planItem {
 		}
 	}
 
+	existing := make(map[string]bool, len(plan))
+	for _, item := range plan {
+		existing[dependencyKey(item.app.Name)] = true
+	}
+
 	if languages := m.getSelectedLanguages(); len(languages) > 0 {
-		if miseApp := m.getMiseApp(); miseApp != nil {
-			resolved, chErr := m.resolvePlanApp(*miseApp, true)
-			plan = append(plan, planItem{app: resolved, group: planDependency, reason: "languages: " + strings.Join(languages, ", "), channelErr: chErr})
+		dependencies := m.newPlanDependencies()
+		for _, language := range languages {
+			dependencies.add(language, m.languageDependencies(language))
 		}
+		plan = append(plan, dependencies.items("languages: ", existing)...)
 		for _, app := range m.getLanguageApps() {
 			resolved, chErr := m.resolvePlanApp(app, false)
 			plan = append(plan, planItem{app: resolved, group: planSelected, channelErr: chErr})
@@ -75,14 +81,16 @@ func (m *SetupModel) installPlan() []planItem {
 		}
 	}
 
-	existing := make(map[string]bool, len(plan))
 	for _, item := range plan {
-		existing[strings.ToLower(strings.TrimSpace(item.app.Name))] = true
+		existing[dependencyKey(item.app.Name)] = true
 	}
 	agentDeps, agentItems := m.expandAIAgentPlanItems(existing)
 	plan = append(plan, agentDeps...)
 	plan = append(plan, agentItems...)
 
+	for i := range plan {
+		plan[i] = m.withPluginStep(plan[i])
+	}
 	return plan
 }
 

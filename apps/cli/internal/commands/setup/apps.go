@@ -8,7 +8,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
-	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/viper"
 )
 
@@ -73,37 +72,6 @@ func configuredDefaultExclusions(settings config.CrossPlatformSettings, detected
 func ValidateDefaultExclusions(settings config.CrossPlatformSettings, detectedPlatform platform.DetectionResult) error {
 	_, err := configuredDefaultExclusions(settings, detectedPlatform)
 	return err
-}
-
-// getMiseApp returns a CrossPlatformApp for mise installation. mise.run installs
-// into ~/.local/bin, so it runs as the user, never under sudo.
-func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
-	return &types.CrossPlatformApp{
-		Name:        "mise",
-		Description: "Development environment manager for programming languages",
-		Linux: types.OSConfig{
-			InstallMethod:   "curlpipe",
-			DownloadURL:     sdk.MiseInstallScriptURL,
-			InstallCommand:  "curl https://mise.run | sh",
-			InstallScope:    "user",
-			InstalledBinary: "mise",
-			Verification:    sdk.MiseInstallVerification(),
-		},
-		MacOS: types.OSConfig{
-			InstallMethod:   "curlpipe",
-			DownloadURL:     sdk.MiseInstallScriptURL,
-			InstallCommand:  "curl https://mise.run | sh",
-			InstallScope:    "user",
-			InstalledBinary: "mise",
-			Verification:    sdk.MiseInstallVerification(),
-		},
-		Windows: types.OSConfig{
-			InstallMethod:   "curlpipe",
-			DownloadURL:     "https://mise.run",
-			InstallCommand:  "curl https://mise.run | sh",
-			InstalledBinary: "mise",
-		},
-	}
 }
 
 // getLanguageApps creates pseudo-apps for language installations via mise

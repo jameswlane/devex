@@ -211,6 +211,7 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", model.getSelectedLanguages(), "databases", model.getSelectedDatabases())
 	// Apps whose DevEx lifecycle is unfinished run it again, so failed hooks are retried.
 	model.selections.alreadyInstalled = tui.SkippableInstalledApps(repo, installedAppsCheck(ctx, apps))
+	model.refreshPluginPreviews(ctx, plan)
 
 	// Display the planned installation to the user
 	printAutomatedSetupPlan(model)

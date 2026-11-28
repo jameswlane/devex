@@ -22,18 +22,7 @@ func channelSetupSettings(homeDir string) config.CrossPlatformSettings {
 	return config.CrossPlatformSettings{
 		HomeDir: homeDir,
 		ApplicationOverrides: []types.CrossPlatformApp{
-			{
-				Name:        "mise",
-				Description: "Polyglot runtime manager",
-				Category:    "Dependency",
-				Default:     false,
-				Linux: types.OSConfig{
-					InstallMethod:   "curlpipe",
-					DownloadURL:     "https://mise.run",
-					InstallScope:    "user",
-					OfficialSupport: true,
-				},
-			},
+			miseCatalogEntry(),
 			{
 				Name:        "Kimi Code",
 				Description: "Moonshot AI coding agent CLI",

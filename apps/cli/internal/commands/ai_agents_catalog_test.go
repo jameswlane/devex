@@ -426,7 +426,8 @@ var _ = Describe("AI Coding Agents catalog", func() {
 			}
 			for _, dep := range wantDeps {
 				if strings.EqualFold(dep, "Node.js") {
-					Expect(plan.DependencyOrder).To(Equal([]string{dep, name}))
+					// Node.js lists mise, whose catalog entry runs the mise plugin (#757).
+					Expect(plan.DependencyOrder).To(Equal([]string{"mise", dep, name}))
 				}
 			}
 

@@ -28,6 +28,16 @@ var _ = Describe("Inline curlpipe removal", func() {
 		Expect(manual.Applications).To(Equal([]string{app.Name}))
 	})
 
+	It("never re-runs a plugin step's install command as its removal (#757)", func() {
+		app := types.AppConfig{BaseConfig: types.BaseConfig{Name: "mise"}, InstallMethod: types.InstallMethodPlugin, InstallCommand: "package-manager-mise ensure-installed"}
+		installer := &recordingUninstaller{}
+		err := uninstallConfiguredApplication(context.Background(), app, installer, nil, false)
+		var manual *sdk.ManualRemovalRequiredError
+		Expect(errors.As(err, &manual)).To(BeTrue())
+		Expect(manual.Applications).To(Equal([]string{"mise"}))
+		Expect(installer.commands).To(BeEmpty())
+	})
+
 	It("runs an explicit uninstall command without requiring the curlpipe plugin", func() {
 		if runtime.GOOS == "windows" {
 			Skip("curlpipe inline uninstall uses POSIX sh")
@@ -82,3 +92,14 @@ var _ = Describe("Inline curlpipe removal", func() {
 		}
 	})
 })
+
+// recordingUninstaller records the commands it is asked to uninstall.
+type recordingUninstaller struct {
+	types.BaseInstaller
+	commands []string
+}
+
+func (r *recordingUninstaller) Uninstall(command string, _ types.Repository) error {
+	r.commands = append(r.commands, command)
+	return nil
+}

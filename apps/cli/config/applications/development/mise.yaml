@@ -1,0 +1,25 @@
+# Upstream: https://mise.jdx.dev/ (https://github.com/jdx/mise)
+name: mise
+description: Development environment manager for programming languages and tools
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+# The mise plugin owns installing mise: `ensure-installed` runs mise's signed
+# mise.run installer (https://mise.jdx.dev/installing-mise.html) into
+# ~/.local/bin as the user and sets up bash, zsh and fish activation. Languages
+# and tools installed through mise list `dependencies: [mise]`, which is what
+# puts this entry in `devex setup`'s plan. Windows is omitted: mise.run is a
+# POSIX shell script.
+linux:
+  install_method: plugin
+  install_command: package-manager-mise ensure-installed
+  installed_binary: mise
+  self_updating: true
+  official_support: true
+macos:
+  install_method: plugin
+  install_command: package-manager-mise ensure-installed
+  installed_binary: mise
+  self_updating: true
+  official_support: true

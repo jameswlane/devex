@@ -31,6 +31,7 @@ func aiAgentCatalogSettings(homeDir string) config.CrossPlatformSettings {
 	return config.CrossPlatformSettings{
 		HomeDir: homeDir,
 		ApplicationOverrides: []types.CrossPlatformApp{
+			miseCatalogEntry(),
 			{
 				Name:        "Bubblewrap",
 				Description: "Unprivileged sandboxing tool",
@@ -68,6 +69,7 @@ func aiAgentCatalogSettings(homeDir string) config.CrossPlatformSettings {
 				Linux: types.OSConfig{
 					InstallMethod:        "mise",
 					InstallCommand:       "codex@latest",
+					Dependencies:         []string{"mise"},
 					SandboxPrerequisites: []string{"Bubblewrap"},
 				},
 				MacOS:   types.OSConfig{InstallMethod: "brew", InstallCommand: "codex", BrewCask: true},

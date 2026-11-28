@@ -232,8 +232,8 @@ func (m *SetupModel) userConfigDir() string {
 	return s.GetUserConfigDir()
 }
 
-// expandAIAgentPlanItems returns prerequisite planItems (mise if needed and
-// sandbox prerequisites) followed by the selected AI agent planItems.
+// expandAIAgentPlanItems returns prerequisite planItems (the plugin-step
+// prerequisites their YAML dependencies declare, and sandbox prerequisites) followed by the selected AI agent planItems.
 func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]planItem, []planItem) {
 	selected := m.getSelectedAIAgentApps()
 	if len(selected) == 0 {
@@ -246,7 +246,7 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 	}
 
 	var deps []planItem
-	var miseRequesters []string
+	dependencies := m.newPlanDependencies()
 	prereqOrder := make([]string, 0)
 	prereqApps := make(map[string]types.CrossPlatformApp)
 	prereqErrs := make(map[string]error)
@@ -261,9 +261,7 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 		resolved, chErr := m.resolvePlanApp(app, false)
 		resolvedSelected = append(resolvedSelected, resolvedAgent{app: resolved, err: chErr})
 		cfg := osConfigForPlatform(resolved, m.system.detectedPlatform.OS)
-		if cfg.InstallMethod == "mise" {
-			miseRequesters = append(miseRequesters, resolved.Name)
-		}
+		dependencies.add(resolved.Name, cfg.Dependencies)
 		appKey := strings.ToLower(strings.TrimSpace(resolved.Name))
 		for _, prereqName := range cfg.SandboxPrerequisites {
 			key := strings.ToLower(strings.TrimSpace(prereqName))
@@ -279,27 +277,16 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 				resolvedPrereq, prereqErr := m.resolvePlanApp(prereqApp, true)
 				prereqApps[key] = resolvedPrereq
 				prereqErrs[key] = prereqErr
-				// A prerequisite on a mise channel needs mise planned first too.
-				if prereqErr == nil && osConfigForPlatform(resolvedPrereq, m.system.detectedPlatform.OS).InstallMethod == "mise" {
-					miseRequesters = append(miseRequesters, resolvedPrereq.Name)
+				// A prerequisite's own declared prerequisites are planned first too.
+				if prereqErr == nil {
+					dependencies.add(resolvedPrereq.Name, osConfigForPlatform(resolvedPrereq, m.system.detectedPlatform.OS).Dependencies)
 				}
 			}
 			prereqRequesters[key] = append(prereqRequesters[key], resolved.Name)
 		}
 	}
 
-	if len(miseRequesters) > 0 && !existingNames["mise"] {
-		if miseApp := m.getMiseApp(); miseApp != nil {
-			resolvedMise, miseErr := m.resolvePlanApp(*miseApp, true)
-			deps = append(deps, planItem{
-				app:        resolvedMise,
-				group:      planDependency,
-				reason:     "AI agents: " + strings.Join(miseRequesters, ", "),
-				channelErr: miseErr,
-			})
-			existingNames["mise"] = true
-		}
-	}
+	deps = append(deps, dependencies.items("AI agents: ", existingNames)...)
 
 	// A selected agent that is also another agent's prerequisite keeps the
 	// channel chosen for it, in the prerequisite's earlier slot.
@@ -308,6 +295,9 @@ func (m *SetupModel) expandAIAgentPlanItems(existingNames map[string]bool) ([]pl
 		selectedByKey[strings.ToLower(strings.TrimSpace(entry.app.Name))] = entry
 	}
 	for _, key := range prereqOrder {
+		if existingNames[key] {
+			continue
+		}
 		app, prereqErr := prereqApps[key], prereqErrs[key]
 		if entry, ok := selectedByKey[key]; ok {
 			app, prereqErr = entry.app, entry.err
