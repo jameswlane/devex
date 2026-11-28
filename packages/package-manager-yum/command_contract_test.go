@@ -143,8 +143,8 @@ var _ = Describe("YUM command contracts", func() {
 
 	DescribeTable("removes packages matched by a glob, as YUM does",
 		func(spec string) {
-			recorder.Script("rpm", []string{"-qa", "--queryformat", "%{NAME} %{VERSION} %{RELEASE} %{ARCH}\\n"},
-				sdktest.Response{Stdout: "gitx 2.43.0 1.el9 x86_64\n"})
+			recorder.Script("rpm", []string{"-qa", "--queryformat", "%{EPOCH} %{NAME} %{VERSION} %{RELEASE} %{ARCH}\\n"},
+				sdktest.Response{Stdout: "(none) tig 2.5.8 1.el9 x86_64\n2 gitx 2.43.0 1.el9 x86_64\n"})
 			Expect(plugin.Execute("remove", []string{spec})).To(Succeed())
 			Expect(recorder.Calls("yum")).To(Equal([]sdktest.Call{{Args: []string{"remove", "--assumeyes", spec}, ElevationRequested: true}}))
 		},
@@ -153,6 +153,11 @@ var _ = Describe("YUM command contracts", func() {
 		Entry("bracket", "git[xy]"),
 		Entry("name and arch", "gitx.x86_*"),
 		Entry("full NEVRA", "gitx-2.43.0-1.el9.*"),
+		Entry("negated class", "git[!a]*"),
+		Entry("name and version", "gitx-2.43.?"),
+		Entry("epoch before the name", "2:gitx-2.43.0-*"),
+		Entry("epoch after the name", "gitx-2:2.43.0-1.el9.x86_*"),
+		Entry("zero epoch when none is set", "0:tig-2.5.*"),
 	)
 
 	It("refuses a name glob that matches nothing installed", func() {

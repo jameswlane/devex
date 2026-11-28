@@ -71,21 +71,35 @@ func requireInstalledMatch(ctx context.Context, spec string) error {
 	if strings.ContainsAny(spec, "*?[") {
 		// Match globs here: RPM 4.11's "rpm -qa <pattern>" treats "?" as a
 		// regular-expression operator, unlike YUM.
-		output, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", "-qa", "--queryformat", "%{NAME} %{VERSION} %{RELEASE} %{ARCH}\\n")
+		output, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", "-qa", "--queryformat", "%{EPOCH} %{NAME} %{VERSION} %{RELEASE} %{ARCH}\\n")
 		if err != nil {
 			return queryFailure(failure, err)
 		}
-		if _, err := path.Match(spec, ""); err != nil {
+		pattern := fnmatchToPath(spec)
+		if _, err := path.Match(pattern, ""); err != nil {
 			return fmt.Errorf("cannot remove package %q: invalid glob: %w", spec, err)
 		}
 		for _, line := range strings.Split(output, "\n") {
 			fields := strings.Fields(line)
-			if len(fields) != 4 {
+			if len(fields) != 5 {
 				continue
 			}
-			name, evr, arch := fields[0], fields[1]+"-"+fields[2], fields[3]
-			for _, candidate := range []string{name, name + "." + arch, name + "-" + evr, name + "-" + evr + "." + arch} {
-				if matched, _ := path.Match(spec, candidate); matched {
+			epoch, name, version, release, arch := fields[0], fields[1], fields[2], fields[3], fields[4]
+			if epoch == "(none)" {
+				epoch = "0"
+			}
+			nvr := name + "-" + version + "-" + release
+			// The forms YUM's parsePackages matches a pattern against.
+			for _, candidate := range []string{
+				name,
+				name + "." + arch,
+				name + "-" + version,
+				nvr,
+				nvr + "." + arch,
+				epoch + ":" + nvr + "." + arch,
+				name + "-" + epoch + ":" + version + "-" + release + "." + arch,
+			} {
+				if matched, _ := path.Match(pattern, candidate); matched {
 					return nil
 				}
 			}
@@ -102,4 +116,32 @@ func requireInstalledMatch(ctx context.Context, spec string) error {
 		}
 	}
 	return fmt.Errorf("cannot remove package %q: no installed package matches", spec)
+}
+
+// fnmatchToPath rewrites the fnmatch negated class "[!...]" that YUM and DNF
+// accept into the "[^...]" form path.Match understands.
+func fnmatchToPath(spec string) string {
+	var b strings.Builder
+	inClass := false
+	for i := 0; i < len(spec); i++ {
+		c := spec[i]
+		switch {
+		case !inClass && c == '\\' && i+1 < len(spec):
+			b.WriteByte(c)
+			i++
+			c = spec[i]
+		case !inClass && c == '[':
+			inClass = true
+			b.WriteByte(c)
+			if i+1 < len(spec) && spec[i+1] == '!' {
+				b.WriteByte('^')
+				i++
+			}
+			continue
+		case inClass && c == ']':
+			inClass = false
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
