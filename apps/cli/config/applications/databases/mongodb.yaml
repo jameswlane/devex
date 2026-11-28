@@ -1,0 +1,7 @@
+name: MongoDB
+description: MongoDB document database
+category: Databases
+default: false
+all_platforms:
+  install_method: docker
+  install_command: mongo:7
