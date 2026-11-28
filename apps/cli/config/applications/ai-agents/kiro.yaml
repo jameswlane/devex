@@ -23,16 +23,19 @@ linux:
   self_updating: true
   official_support: true
   # The catalog resolver falls back to the primary entry on older releases,
-  # so refuse them here: Kiro needs Ubuntu 24.04+ or Debian 13+.
+  # so refuse them here: Kiro needs Ubuntu 24.04+, Debian 13+ or Linux Mint 22+.
   pre_install:
     - scope: user
       shell: |
         set -eu
+        ID=""; VERSION_ID=""
         . /etc/os-release
         major="${VERSION_ID%%.*}"
+        # Debian testing and sid have no VERSION_ID; they are newer than 13.
         case "$ID" in
-          ubuntu) [ "${major:-0}" -ge 24 ] || { echo "Kiro needs Ubuntu 24.04 or newer (this is $VERSION_ID)." >&2; exit 1; } ;;
-          debian) [ "${major:-99}" -ge 13 ] || { echo "Kiro needs Debian 13 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
+          ubuntu) [ "${major:-0}" -ge 24 ] || { echo "Kiro needs Ubuntu 24.04 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
+          debian) [ "${major:-99}" -ge 13 ] || { echo "Kiro needs Debian 13 or newer (this is $VERSION_ID)." >&2; exit 1; } ;;
+          linuxmint) [ "${major:-0}" -ge 22 ] || { echo "Kiro needs Linux Mint 22 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
         esac
   platform_requirements:
     - os: debian
@@ -55,11 +58,14 @@ linux:
         - scope: user
           shell: |
             set -eu
+            ID=""; VERSION_ID=""
             . /etc/os-release
             major="${VERSION_ID%%.*}"
+            # Debian testing and sid have no VERSION_ID; they are newer than 13.
             case "$ID" in
-              ubuntu) [ "${major:-0}" -ge 24 ] || { echo "Kiro needs Ubuntu 24.04 or newer (this is $VERSION_ID)." >&2; exit 1; } ;;
-              debian) [ "${major:-99}" -ge 13 ] || { echo "Kiro needs Debian 13 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
+              ubuntu) [ "${major:-0}" -ge 24 ] || { echo "Kiro needs Ubuntu 24.04 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
+              debian) [ "${major:-99}" -ge 13 ] || { echo "Kiro needs Debian 13 or newer (this is $VERSION_ID)." >&2; exit 1; } ;;
+              linuxmint) [ "${major:-0}" -ge 22 ] || { echo "Kiro needs Linux Mint 22 or newer (this is ${VERSION_ID:-unknown})." >&2; exit 1; } ;;
             esac
       platform_requirements:
         - os: debian

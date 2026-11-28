@@ -36,15 +36,18 @@ linux:
         dir=/opt/antigravity-ide
         link=/usr/local/bin/antigravity-ide
         desktop=/usr/share/applications/antigravity-ide.desktop
-        if [ -e "$dir" ] && [ ! -f "$dir/.devex-managed" ]; then
+        # One install at a time: the checks below and the swap must not interleave.
+        exec 9>/run/lock/devex-antigravity-ide.lock
+        flock -w 600 9 || { echo "Another Antigravity install is still running; try again when it finishes." >&2; exit 1; }
+        if { [ -e "$dir" ] || [ -L "$dir" ]; } && { [ -L "$dir" ] || [ ! -f "$dir/.devex-managed" ]; }; then
           echo "$dir exists and was not installed by DevEx; move it aside, then install Antigravity again." >&2
           exit 1
         fi
-        if { [ -e "$link" ] || [ -L "$link" ]; } && [ "$(readlink "$link" 2>/dev/null || true)" != "$dir/bin/antigravity-ide" ]; then
+        if { [ -e "$link" ] || [ -L "$link" ]; } && { [ ! -L "$link" ] || [ "$(readlink "$link")" != "$dir/bin/antigravity-ide" ]; }; then
           echo "$link belongs to another install; remove it, then install Antigravity again." >&2
           exit 1
         fi
-        if [ -e "$desktop" ] && ! grep -q '^X-DevEx-Managed=true$' "$desktop"; then
+        if [ -L "$desktop" ] || { [ -e "$desktop" ] && ! grep -q '^X-DevEx-Managed=true$' "$desktop"; }; then
           echo "$desktop was not created by DevEx; remove it, then install Antigravity again." >&2
           exit 1
         fi
@@ -55,21 +58,24 @@ linux:
         esac
         url="https://edgedl.me.gvt1.com/edgedl/release2/j0qc3/antigravity/stable/2.8.0-6733682917113856/$arch/Antigravity%20IDE.tar.gz"
         tmp="$(mktemp -d)"
-        trap 'rm -rf "$tmp"' EXIT
+        # Stage next to $dir so the final rename stays on one filesystem.
+        stage="$(mktemp -d /opt/.antigravity-ide.XXXXXX)"
+        trap 'rm -rf "$tmp" "$stage"' EXIT
         curl -fsSL --proto '=https' -o "$tmp/ide.tar.gz" "$url"
         echo "$sum  $tmp/ide.tar.gz" | sha256sum -c - >/dev/null
-        mkdir -p "$tmp/unpacked"
-        tar -xzf "$tmp/ide.tar.gz" -C "$tmp/unpacked" --strip-components=1
-        [ -x "$tmp/unpacked/bin/antigravity-ide" ] || { echo "The Antigravity tarball has no bin/antigravity-ide." >&2; exit 1; }
-        chown root:root "$tmp/unpacked/chrome-sandbox"
-        chmod 4755 "$tmp/unpacked/chrome-sandbox"
-        touch "$tmp/unpacked/.devex-managed"
-        rm -rf "$dir.new"
-        mv "$tmp/unpacked" "$dir.new"
+        tar -xzf "$tmp/ide.tar.gz" -C "$stage" --strip-components=1 --no-same-owner
+        [ -x "$stage/bin/antigravity-ide" ] || { echo "The Antigravity tarball has no bin/antigravity-ide." >&2; exit 1; }
+        # The tarball records nobody:nogroup; only root may change what users run.
+        chown -R root:root "$stage"
+        chmod -R go-w "$stage"
+        chmod 755 "$stage"
+        chmod 4755 "$stage/chrome-sandbox"
+        touch "$stage/.devex-managed"
         rm -rf "$dir"
-        mv "$dir.new" "$dir"
+        mv "$stage" "$dir"
         ln -sfn "$dir/bin/antigravity-ide" "$link"
-        cat > "$desktop" <<'DESKTOP'
+        entry="$(mktemp /usr/share/applications/.antigravity-ide.XXXXXX)"
+        cat > "$entry" <<'DESKTOP'
         [Desktop Entry]
         Name=Antigravity IDE
         Comment=Google's agent-first IDE
@@ -81,16 +87,23 @@ linux:
         StartupWMClass=Antigravity IDE
         X-DevEx-Managed=true
         DESKTOP
+        chmod 644 "$entry"
+        mv -fT "$entry" "$desktop"
   uninstall_command: |
     set -eu
     SUDO=""
     if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
-    if [ "$(readlink /usr/local/bin/antigravity-ide 2>/dev/null || true)" = "/opt/antigravity-ide/bin/antigravity-ide" ]; then
+    # Remove the link only alongside a DevEx-owned install: a hand-made
+    # /opt/antigravity-ide keeps its launcher.
+    if [ ! -L /opt/antigravity-ide ] && [ -f /opt/antigravity-ide/.devex-managed ]; then
+      if [ -L /usr/local/bin/antigravity-ide ] && [ "$(readlink /usr/local/bin/antigravity-ide)" = "/opt/antigravity-ide/bin/antigravity-ide" ]; then
+        $SUDO rm -f /usr/local/bin/antigravity-ide
+      fi
+      $SUDO rm -rf /opt/antigravity-ide
+    elif [ ! -e /opt/antigravity-ide ] && [ ! -L /opt/antigravity-ide ] && [ -L /usr/local/bin/antigravity-ide ] && [ "$(readlink /usr/local/bin/antigravity-ide)" = "/opt/antigravity-ide/bin/antigravity-ide" ]; then
+      # The install directory is already gone; drop the dangling link.
       $SUDO rm -f /usr/local/bin/antigravity-ide
     fi
-    if [ -f /opt/antigravity-ide/.devex-managed ]; then
-      $SUDO rm -rf /opt/antigravity-ide
-    fi
-    if [ -f /usr/share/applications/antigravity-ide.desktop ] && grep -q '^X-DevEx-Managed=true$' /usr/share/applications/antigravity-ide.desktop; then
+    if [ ! -L /usr/share/applications/antigravity-ide.desktop ] && [ -f /usr/share/applications/antigravity-ide.desktop ] && grep -q '^X-DevEx-Managed=true$' /usr/share/applications/antigravity-ide.desktop; then
       $SUDO rm -f /usr/share/applications/antigravity-ide.desktop
     fi

@@ -121,7 +121,7 @@ User-scoped installer scripts (`install_scope: user`) run without `sudo` so bina
 
 The `AI Code Editors` category (`applications/ai-agents/{antigravity,cursor,kiro,windsurf,zed}.yaml`) ships opt-in (`default: false`) definitions for GUI AI code editors, kept separate from `AI Coding Agents` so `--categories "AI Coding Agents"` does not pull in desktop editors. Install an editor with `devex install cursor` or install the category with `devex install --categories "AI Code Editors"`. Interactive `devex setup` lists them under **AI editors** in the AI coding agents step.
 
-All three editors declare `desktop_environments: [graphical]`. On headless Linux hosts (no `DISPLAY`, `WAYLAND_DISPLAY`, or `XDG_CURRENT_DESKTOP` session and no installed `.desktop` entries in `/usr/share/xsessions` or `/usr/share/wayland-sessions`), DevEx skips them with a notice instead of installing unused GUI binaries. Workstations accessed over SSH with an installed X11 or Wayland session still match.
+All five editors declare `desktop_environments: [graphical]`. On headless Linux hosts (no `DISPLAY`, `WAYLAND_DISPLAY`, or `XDG_CURRENT_DESKTOP` session and no installed `.desktop` entries in `/usr/share/xsessions` or `/usr/share/wayland-sessions`), DevEx skips them with a notice instead of installing unused GUI binaries. Workstations accessed over SSH with an installed X11 or Wayland session still match.
 
 Uninstalling an APT-backed editor removes the package, the DevEx-managed APT source file under `/etc/apt/sources.list.d/` (only when its contents are unchanged), and its keyring under `/etc/apt/keyrings/` (unless another tracked application references it).
 

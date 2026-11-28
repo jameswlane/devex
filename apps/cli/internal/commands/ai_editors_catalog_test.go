@@ -159,7 +159,11 @@ var _ = Describe("AI Code Editors catalog", func() {
 			Expect(resolved.InstalledBinary).To(Equal(wantBinary))
 			Expect(resolved.InstallScope).To(Equal(wantScope))
 			Expect(resolved.SelfUpdating).To(Equal(wantSelfUpdating))
-			Expect(resolved.UninstallCommand).To(Equal(wantUninstall))
+			if wantUninstall == "" {
+				Expect(resolved.UninstallCommand).NotTo(BeEmpty())
+			} else {
+				Expect(resolved.UninstallCommand).To(Equal(wantUninstall))
+			}
 
 			switch wantMethod {
 			case "apt":
@@ -214,7 +218,8 @@ var _ = Describe("AI Code Editors catalog", func() {
 		Entry("Windsurf", "Windsurf", "apt", "devin-desktop", "devin-desktop", "", false, "devin-desktop"),
 		Entry("Zed", "Zed", "curlpipe", "https://zed.dev/install.sh", "zed", "user", true, `rm -rf "$HOME/.local/zed.app" && rm -f "$HOME/.local/bin/zed" "$HOME/.local/share/applications/dev.zed.Zed.desktop"`),
 		Entry("Kiro", "Kiro", "deb", "https://prod.download.desktop.kiro.dev/releases/stable/linux-x64/signed/1.4.154/deb/kiro-ide-1.4.154-stable-linux-x64.deb", "/usr/bin/kiro", "", true, "kiro"),
-		Entry("Antigravity", "Antigravity", "curlpipe", "", "antigravity-ide", "", false, "set -eu\nSUDO=\"\"\nif [ \"$(id -u)\" -ne 0 ]; then SUDO=\"sudo\"; fi\nif [ \"$(readlink /usr/local/bin/antigravity-ide 2>/dev/null || true)\" = \"/opt/antigravity-ide/bin/antigravity-ide\" ]; then\n  $SUDO rm -f /usr/local/bin/antigravity-ide\nfi\nif [ -f /opt/antigravity-ide/.devex-managed ]; then\n  $SUDO rm -rf /opt/antigravity-ide\nfi\nif [ -f /usr/share/applications/antigravity-ide.desktop ] && grep -q '^X-DevEx-Managed=true$' /usr/share/applications/antigravity-ide.desktop; then\n  $SUDO rm -f /usr/share/applications/antigravity-ide.desktop\nfi\n"),
+		// Antigravity's uninstall behaviour is covered in ai_editors_hooks_test.go.
+		Entry("Antigravity", "Antigravity", "curlpipe", "", "antigravity-ide", "", false, ""),
 	)
 
 	It("preseeds cursor/add-cursor-repo=false in Cursor's resolved Ubuntu pre_install hook", func() {
