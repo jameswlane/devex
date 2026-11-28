@@ -253,6 +253,11 @@ func isPackageManager(name string) bool {
 // PackageQueryCommand adapts structured identifiers for the existing read/remove
 // interface. Installation options are never applied to a read operation.
 func (a AppConfig) PackageQueryCommand() string {
+	if a.InstallMethod == "rpm" && strings.TrimSpace(a.UninstallCommand) != "" {
+		// rpm installs a file but queries a package name; uninstall_command
+		// names the package even after the installed file is gone.
+		return a.UninstallCommand
+	}
 	if len(a.Packages) == 0 {
 		return a.WithKindSelector(a.InstallCommand)
 	}

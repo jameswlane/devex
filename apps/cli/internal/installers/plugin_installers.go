@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -154,6 +155,11 @@ func (p *PluginBasedInstaller) Uninstall(command string, repo types.Repository) 
 	if err != nil {
 		return err
 	}
+	if p.method == "rpm" {
+		if packages, err = rpmPackageNames(p.context(), packages); err != nil {
+			return err
+		}
+	}
 	args := append([]string{"remove"}, packages...)
 
 	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
@@ -171,6 +177,11 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 		packages, err := catalogPackageArguments(p.method, command)
 		if err != nil {
 			return false, err
+		}
+		if p.method == "rpm" {
+			if packages, err = rpmPackageNames(p.context(), packages); err != nil {
+				return false, err
+			}
 		}
 		args := append([]string{"is-installed"}, packages...)
 
@@ -194,6 +205,57 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 		// reports these methods by installed_binary or as unknown.
 		return true, nil
 	}
+}
+
+// readRPMPackageName returns the NAME tag of a local .rpm file. --nomanifest
+// and --noglob stop rpm reading a text file as a list of other packages or
+// expanding the path, which could name a different package. It is a variable
+// so specs can stand in for rpm. Like the plugin's install, it takes only a
+// local regular file: rpm would fetch a URL, and a FIFO would block the query.
+var readRPMPackageName = func(ctx context.Context, file string) (string, error) {
+	if strings.Contains(file, "://") {
+		return "", errors.New("it is a URL, not a local file")
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("it is not a regular file")
+	}
+	cmd := exec.CommandContext(ctx, "rpm", "--query", "--package", "--nomanifest", "--noglob", "--queryformat", "%{NAME}", file)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// rpmPackageNames maps .rpm file paths, which rpm install takes, to the
+// package names that rpm is-installed and remove need. Other arguments are
+// already package names.
+func rpmPackageNames(ctx context.Context, packages []string) ([]string, error) {
+	names := make([]string, 0, len(packages))
+	for _, pkg := range packages {
+		if !strings.HasSuffix(strings.ToLower(pkg), ".rpm") {
+			names = append(names, pkg)
+			continue
+		}
+		name, err := readRPMPackageName(ctx, pkg)
+		if err == nil && name == "" {
+			err = errors.New("the file has no NAME tag")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cannot read the RPM package name from %s: %w; set uninstall_command to the package name (for example, uninstall_command: mypackage); if DevEx saved the app before you did, remove it with rpm --erase and run devex uninstall --forget <app>", pkg, err)
+		}
+		names = append(names, name)
+	}
+	return names, nil
 }
 
 // executeQuietly runs a read-only plugin query with its output on stderr, so

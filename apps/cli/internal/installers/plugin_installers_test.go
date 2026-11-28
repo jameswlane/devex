@@ -3,6 +3,8 @@ package installers
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -65,6 +67,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("brew probe", "brew", "is-installed"),
 		Entry("mas probe", "mas", "is-installed"),
 		Entry("winget probe", "winget", "is-installed"),
+		Entry("rpm probe", "rpm", "is-installed"),
 	)
 
 	DescribeTable("reports a package the plugin found absent as not installed, without an error",
@@ -88,7 +91,88 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("brew", "brew"),
 		Entry("mas", "mas"),
 		Entry("winget", "winget"),
+		Entry("rpm", "rpm"),
 	)
+
+	Describe("rpm package names (#421)", func() {
+		var (
+			original func(context.Context, string) (string, error)
+			read     []string
+		)
+		BeforeEach(func() {
+			original = readRPMPackageName
+			read = nil
+			readRPMPackageName = func(_ context.Context, file string) (string, error) {
+				read = append(read, file)
+				return "tool", nil
+			}
+		})
+		AfterEach(func() { readRPMPackageName = original })
+
+		It("reports an installed package by the name inside its .rpm file", func() {
+			executor := &recordingPluginExecutor{}
+			installer := &PluginBasedInstaller{method: "rpm", pluginBootstrap: executor, ctx: context.Background()}
+
+			installed, err := installer.IsInstalled("/tmp/tool-1.0-1.x86_64.rpm")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed).To(BeTrue())
+			Expect(read).To(Equal([]string{"/tmp/tool-1.0-1.x86_64.rpm"}))
+			Expect(executor.name).To(Equal("package-manager-rpm"))
+			Expect(executor.args).To(Equal([]string{"is-installed", "tool"}))
+		})
+
+		It("reports a package the plugin found absent (exit 3) as not installed", func() {
+			executor := &recordingPluginExecutor{err: &sdk.NotInstalledError{Packages: []string{"tool"}}}
+			installer := &PluginBasedInstaller{method: "rpm", pluginBootstrap: executor, ctx: context.Background()}
+
+			installed, err := installer.IsInstalled("/tmp/tool-1.0-1.x86_64.rpm")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed).To(BeFalse())
+			Expect(executor.args).To(Equal([]string{"is-installed", "tool"}))
+		})
+
+		It("removes the package by the name inside its .rpm file", func() {
+			executor := &recordingPluginExecutor{}
+			installer := &PluginBasedInstaller{method: "rpm", pluginBootstrap: executor, ctx: context.Background()}
+
+			Expect(installer.Uninstall("/tmp/tool-1.0-1.x86_64.rpm", nil)).To(Succeed())
+			Expect(executor.args).To(Equal([]string{"remove", "tool"}))
+		})
+
+		It("passes package names through without reading a file", func() {
+			executor := &recordingPluginExecutor{}
+			installer := &PluginBasedInstaller{method: "rpm", pluginBootstrap: executor, ctx: context.Background()}
+
+			_, err := installer.IsInstalled("tool")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(read).To(BeEmpty())
+			Expect(executor.args).To(Equal([]string{"is-installed", "tool"}))
+		})
+
+		It("reads only a local regular file, never a URL or a FIFO-like special file", func() {
+			_, err := original(context.Background(), "https://example.com/tool.rpm")
+			Expect(err).To(MatchError(ContainSubstring("URL")))
+			dir := filepath.Join(GinkgoT().TempDir(), "not-a-file.rpm")
+			Expect(os.Mkdir(dir, 0o750)).To(Succeed())
+			_, err = original(context.Background(), dir)
+			Expect(err).To(MatchError(ContainSubstring("not a regular file")))
+		})
+
+		It("returns an error, not absence, when the .rpm file can't be read", func() {
+			readRPMPackageName = func(context.Context, string) (string, error) {
+				return "", errors.New("open failed")
+			}
+			executor := &recordingPluginExecutor{}
+			installer := &PluginBasedInstaller{method: "rpm", pluginBootstrap: executor, ctx: context.Background()}
+
+			installed, err := installer.IsInstalled("/tmp/gone.rpm")
+			Expect(installed).To(BeFalse())
+			Expect(err).To(MatchError(ContainSubstring("set uninstall_command to the package name")))
+			Expect(executor.args).To(BeNil())
+			Expect(installer.Uninstall("/tmp/gone.rpm", nil)).To(MatchError(ContainSubstring("cannot read the RPM package name")))
+			Expect(executor.args).To(BeNil())
+		})
+	})
 
 	DescribeTable("skips the installed probe for plugins without an is-installed operation",
 		func(method string) {
