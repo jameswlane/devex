@@ -178,7 +178,7 @@ func osRelease(field string) string {
 
 func expectedPlugins() []string {
 	distro := osRelease("ID")
-	Expect(distro).To(BeElementOf("ubuntu", "debian", "fedora", "centos", "opensuse-tumbleweed", "opensuse-leap"), "unsupported distro %q", distro)
+	Expect(distro).To(BeElementOf("ubuntu", "debian", "fedora", "centos", "opensuse-tumbleweed", "opensuse-leap", "arch"), "unsupported distro %q", distro)
 	plugins := []string{"package-manager-" + nativeMethod(), "tool-shell", "tool-git"}
 	// Bootstrap detects universal package managers from PATH, not distro ID.
 	for command, name := range map[string]string{"flatpak": "flatpak", "snap": "snap", "appimagetool": "appimage"} {
@@ -310,6 +310,8 @@ func nativeMethod() string {
 		return "dnf"
 	case "opensuse-tumbleweed", "opensuse-leap":
 		return "zypper"
+	case "arch":
+		return "pacman"
 	}
 	return "apt"
 }

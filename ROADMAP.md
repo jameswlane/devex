@@ -80,7 +80,7 @@ Based on implementation complexity and market share, platforms are prioritized a
 1. **Ubuntu** (20.04, 22.04, 24.04)
 2. **Debian** (11, 12)
 3. **Fedora** (39, 40) ([#121](https://github.com/jameswlane/devex/issues/121))
-4. **Arch Linux** ([#122](https://github.com/jameswlane/devex/issues/122))
+4. **Arch Linux** (rolling) ([#122](https://github.com/jameswlane/devex/issues/122))
 5. **CentOS Stream/RHEL** ([#121](https://github.com/jameswlane/devex/issues/121))
 6. **openSUSE Tumbleweed/Leap** ([#123](https://github.com/jameswlane/devex/issues/123))
 
@@ -267,7 +267,7 @@ A comprehensive configuration management system that empowers users to create, c
 - [ ] **Implement Pacman installer** - Core package management for Arch/Manjaro/EndeavourOS ([#106](https://github.com/jameswlane/devex/issues/106))
 - [ ] **Add YAY/AUR support** - Access to Arch User Repository ([#107](https://github.com/jameswlane/devex/issues/107))
 - [ ] **Handle Arch-specific configurations** - Rolling release considerations ([#185](https://github.com/jameswlane/devex/issues/185))
-- [ ] **Test on Arch Linux, Manjaro, EndeavourOS** ([#122](https://github.com/jameswlane/devex/issues/122))
+- [x] **Test on Arch Linux** (rolling `archlinux:base` lifecycle in CI; Manjaro and EndeavourOS are not tested) ([#122](https://github.com/jameswlane/devex/issues/122))
 
 **Milestone 1.3: Priority 4 - SUSE Linux Support (Blocks 🟡)**
 - [ ] **Implement Zypper installer** - Core package management for openSUSE/SLES ([#108](https://github.com/jameswlane/devex/issues/108))
@@ -331,7 +331,7 @@ These are high-impact, low-effort improvements that can be implemented quickly:
 1. **Pacman installer implementation** (8-16 hours) - Core blocker ([#106](https://github.com/jameswlane/devex/issues/106))
 2. **YAY/AUR support** (6-12 hours) - Community packages ([#107](https://github.com/jameswlane/devex/issues/107))
 3. **Arch-specific handling** (2-4 hours) - Rolling release ([#185](https://github.com/jameswlane/devex/issues/185))
-4. **Testing on Arch/Manjaro** (4-8 hours) ([#122](https://github.com/jameswlane/devex/issues/122))
+4. **Testing on Arch Linux** - Done: rolling-release lifecycle in CI ([#122](https://github.com/jameswlane/devex/issues/122))
 
 **🟡 Priority 4: Unlock SUSE Linux (Estimated: 1 week)**
 1. **Zypper installer implementation** (6-12 hours) - Core blocker ([#108](https://github.com/jameswlane/devex/issues/108))

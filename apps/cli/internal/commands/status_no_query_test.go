@@ -57,8 +57,8 @@ var _ = Describe("Status for apps without a package query", func() {
 		}
 		settings = config.CrossPlatformSettings{ApplicationOverrides: []types.CrossPlatformApp{
 			{Name: "probe-agent", Linux: curlpipe(binary), MacOS: curlpipe(binary), Windows: curlpipe(binary)},
-			// pacman's plugin has no package-specific installed query.
-			{Name: "no-query", AllPlatforms: types.OSConfig{InstallMethod: "pacman", InstallCommand: "no-query"}},
+			// snap has no package-specific installed query in the CLI.
+			{Name: "no-query", AllPlatforms: types.OSConfig{InstallMethod: "snap", InstallCommand: "no-query"}},
 		}}
 	})
 
@@ -89,7 +89,7 @@ var _ = Describe("Status for apps without a package query", func() {
 	})
 
 	It("reports an app with no installed query and no installed_binary as unknown, not installed", func() {
-		// Test mode provides an installer for pacman whose IsInstalled always
+		// Test mode provides an installer for snap whose IsInstalled always
 		// says yes, as the real plugin installer does for methods without a
 		// package query.
 		installers.EnableTestMode()

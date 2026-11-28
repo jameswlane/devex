@@ -41,13 +41,16 @@ var preparePackageBatch = tui.PreparePackageBatch
 // prepareAptSources writes the APT sources of an app the batch did not install; tests replace it.
 var prepareAptSources = tui.PrepareAptSources
 
+// nativeInstaller resolves the installer for native state queries; tests replace it.
+var nativeInstaller = installers.GetInstaller
+
 // Query the native manager rather than trusting a potentially stale tracking row.
 var nativeApplicationInstalled = func(ctx context.Context, app types.CrossPlatformApp) (bool, error) {
 	cfg := app.GetOSConfig()
-	if cfg.InstallMethod != "apt" && cfg.InstallMethod != "dnf" && cfg.InstallMethod != "zypper" {
+	if cfg.InstallMethod != "apt" && cfg.InstallMethod != "dnf" && cfg.InstallMethod != "pacman" && cfg.InstallMethod != "zypper" {
 		return false, nil
 	}
-	installer := installers.GetInstaller(ctx, cfg.InstallMethod)
+	installer := nativeInstaller(ctx, cfg.InstallMethod)
 	if installer == nil {
 		return false, fmt.Errorf("no installer for %s", cfg.InstallMethod)
 	}

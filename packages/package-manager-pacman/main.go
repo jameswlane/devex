@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -62,7 +64,7 @@ func NewPacmanPlugin() *PacmanPlugin {
 			{
 				Name:        "is-installed",
 				Description: "Check whether all requested packages are installed",
-				Usage:       "Returns exit code 0 if all packages are installed; preserves native query failures",
+				Usage:       "Returns exit code 0 if all packages are installed and 3 if any is absent; other failures mean the query failed",
 				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 			},
 		},
@@ -154,11 +156,42 @@ func (p *PacmanPlugin) handleList(ctx context.Context, args []string) error {
 	return p.run(ctx, "list", "-Q")
 }
 
+// handleIsInstalled reports absent packages with sdk.NotInstalledError (exit
+// code 3). `pacman -Q <name>` exits 1 both for a missing package and for a
+// local database failure, and its message is translated, so list the local
+// package names instead: any failure of that listing is a failed query.
 func (p *PacmanPlugin) handleIsInstalled(ctx context.Context, args []string) error {
 	if err := validatePackages(args); err != nil {
 		return err
 	}
-	return p.run(ctx, "is-installed", append([]string{"-Q"}, args...)...)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "pacman", "-Qq")
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) != 0 {
+			return fmt.Errorf("pacman is-installed: %w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return fmt.Errorf("pacman is-installed: %w", err)
+	}
+	installed := make(map[string]bool)
+	for _, name := range strings.Fields(output) {
+		installed[name] = true
+	}
+	var missing []string
+	for _, pkg := range args {
+		if !installed[pkg] {
+			missing = append(missing, pkg)
+		}
+	}
+	if len(missing) > 0 {
+		return &sdk.NotInstalledError{Packages: missing}
+	}
+	return nil
 }
 
 func validatePackages(args []string) error {

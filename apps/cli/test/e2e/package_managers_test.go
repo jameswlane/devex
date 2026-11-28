@@ -41,12 +41,26 @@ var packageManagerCases = []packageManagerCase{
 	},
 	{method: "dnf", distros: []string{"fedora-44", "centos-9"}, fixture: "dnf-jq.yaml", pkg: "jq", verifyInstalled: rpmInstalled("jq"), verifyRemoved: rpmRemoved("jq")},
 	{method: "zypper", distros: []string{"opensuse-tumbleweed", "opensuse-leap-16.0"}, fixture: "zypper-jq.yaml", pkg: "jq", verifyInstalled: rpmInstalled("jq"), verifyRemoved: rpmRemoved("jq")},
+	// Arch is rolling, so its distro key is the bare ID (see currentDistro).
+	{method: "pacman", distros: []string{"arch"}, fixture: "pacman-jq.yaml", pkg: "jq", verifyInstalled: pacmanInstalled("jq"), verifyRemoved: pacmanRemoved("jq")},
 }
 
 // The install timeout covers apt-get update plus the download on a slow mirror.
 const packageInstallTimeout = 10 * time.Minute
 
 var _ = Describe("Package manager install lifecycle", func() {
+	It("covers this sandbox's distro", Label("destructive"), func() {
+		if os.Getenv("DEVEX_E2E_DESTRUCTIVE") != "1" {
+			Skip("requires DEVEX_E2E_DESTRUCTIVE=1 in a disposable sandbox")
+		}
+		var distros []string
+		for _, entry := range packageManagerCases {
+			distros = append(distros, entry.distros...)
+		}
+		// A distro key mismatch would otherwise skip every lifecycle spec silently.
+		Expect(distros).To(ContainElement(currentDistro()), "no package-manager lifecycle matches distro %q", currentDistro())
+	})
+
 	for _, entry := range packageManagerCases {
 		Describe(entry.method+" installs "+entry.pkg, Ordered, Label("destructive", "pm:"+entry.method), func() {
 			var home, fixture string
@@ -120,6 +134,24 @@ var _ = Describe("Package manager install lifecycle", func() {
 				Expect(err).NotTo(HaveOccurred(), "uninstall failed:\n%s", output)
 				entry.verifyRemoved(home)
 				Expect(installedApps(home, fixture)).NotTo(ContainElement(entry.pkg), "uninstall must clear the tracking record")
+			})
+
+			It("reports the removed package as not installed rather than as a failed query", func() {
+				// Uninstall cleared tracking, so name the app; status exits 1 when it is not installed.
+				output, stderr, err := sandbox.runWithStderr(home, sandbox.binary, time.Minute, nil, "status", "--app", entry.pkg, "--no-tui", "--format", "json", "--config", fixture)
+				Expect(err).To(HaveOccurred(), "status must fail for a missing application:\n%s%s", output, stderr)
+				var apps []struct {
+					Name      string
+					Installed bool
+					Status    string
+				}
+				location := jsonStart.FindStringIndex(output)
+				Expect(location).NotTo(BeNil(), "status must print JSON: %s%s", output, stderr)
+				Expect(json.Unmarshal([]byte(output[location[0]:]), &apps)).To(Succeed())
+				Expect(apps).To(HaveLen(1))
+				Expect(apps[0].Name).To(Equal(entry.pkg))
+				Expect(apps[0].Installed).To(BeFalse())
+				Expect(apps[0].Status).To(Equal("not_installed"), "the plugin must report absence, not a query error:\n%s", stderr)
 			})
 		})
 	}
@@ -232,9 +264,9 @@ func installedApps(home, config string) []string {
 }
 
 // currentDistro names the sandbox like its Dockerfile. Rolling releases have
-// a snapshot VERSION_ID, so they are named by ID alone.
+// a snapshot VERSION_ID (Arch: 20261122.0.629543), so they are named by ID alone.
 func currentDistro() string {
-	if id := osRelease("ID"); id == "opensuse-tumbleweed" {
+	if id := osRelease("ID"); id == "opensuse-tumbleweed" || id == "arch" {
 		return id
 	}
 	return osRelease("ID") + "-" + osRelease("VERSION_ID")
@@ -296,6 +328,26 @@ func rpmRemoved(pkg string) func(string) {
 		output, err := sandbox.run(home, "rpm", 30*time.Second, nil, "-q", pkg)
 		Expect(err).To(HaveOccurred(), "rpm -q %s must fail after removal:\n%s", pkg, output)
 		Expect(output).To(ContainSubstring("is not installed"))
+		_, err = exec.LookPath(pkg)
+		Expect(err).To(HaveOccurred(), "%s must be absent from PATH", pkg)
+	}
+}
+
+// pacmanInstalled verifies the local package database and the installed binary.
+func pacmanInstalled(pkg string) func(string) {
+	return func(home string) {
+		output, err := sandbox.run(home, "pacman", 30*time.Second, nil, "-Q", pkg)
+		Expect(err).NotTo(HaveOccurred(), "pacman -Q %s failed:\n%s", pkg, output)
+		output, err = sandbox.run(home, pkg, 30*time.Second, nil, "--version")
+		Expect(err).NotTo(HaveOccurred(), "%s must execute:\n%s", pkg, output)
+	}
+}
+
+func pacmanRemoved(pkg string) func(string) {
+	return func(home string) {
+		output, err := sandbox.run(home, "pacman", 30*time.Second, map[string]string{"LC_ALL": "C"}, "-Q", pkg)
+		Expect(err).To(HaveOccurred(), "pacman -Q %s must fail after removal:\n%s", pkg, output)
+		Expect(output).To(ContainSubstring("package '%s' was not found", pkg))
 		_, err = exec.LookPath(pkg)
 		Expect(err).To(HaveOccurred(), "%s must be absent from PATH", pkg)
 	}

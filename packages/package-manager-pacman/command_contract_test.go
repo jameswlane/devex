@@ -20,6 +20,8 @@ type operationContract struct {
 	args       []string
 	nativeArgv []string
 	elevated   bool
+	// stdout scripts a successful native response when the command parses it.
+	stdout string
 }
 
 var pacmanContracts = []operationContract{
@@ -52,7 +54,8 @@ var pacmanContracts = []operationContract{
 	{
 		command:    "is-installed",
 		args:       []string{"git", "vim"},
-		nativeArgv: []string{"-Q", "git", "vim"},
+		nativeArgv: []string{"-Qq"},
+		stdout:     "git\nvim\n",
 	},
 }
 
@@ -81,6 +84,9 @@ var _ = Describe("Pacman command contracts", func() {
 
 	for _, contract := range pacmanContracts {
 		It(fmt.Sprintf("honors the exact native argv and elevation for %s", contract.command), func() {
+			if contract.stdout != "" {
+				recorder.Script("pacman", contract.nativeArgv, sdktest.Response{Stdout: contract.stdout})
+			}
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
 			Expect(recorder.Calls("pacman")).To(Equal([]sdktest.Call{{
 				Args:               contract.nativeArgv,
@@ -125,27 +131,26 @@ var _ = Describe("Pacman command contracts", func() {
 		})
 	}
 
-	It("reports a missing package from a mixed installed/missing query", func() {
-		recorder.Script("pacman", []string{"-Q", "git", "missing"}, sdktest.Response{
-			Stdout:   "git 2.50.0-1\n",
-			Stderr:   "error: package 'missing' was not found\n",
-			ExitCode: 1,
-		})
-		err := plugin.Execute("is-installed", []string{"git", "missing"})
-		Expect(err).To(HaveOccurred())
-		Expect(sdk.ExitStatus(err)).To(Equal(1))
-		Expect(err.Error()).To(ContainSubstring("package 'missing' was not found"))
-		Expect(recorder.Calls("pacman")).To(Equal([]sdktest.Call{{Args: []string{"-Q", "git", "missing"}}}))
+	It("reports only the missing packages from a mixed installed/missing query", func() {
+		recorder.Script("pacman", []string{"-Qq"}, sdktest.Response{Stdout: "git\nvim-runtime\n"})
+		err := plugin.Execute("is-installed", []string{"git", "vim"})
+		var missing *sdk.NotInstalledError
+		Expect(errors.As(err, &missing)).To(BeTrue(), "absence must be NotInstalledError, got %v", err)
+		Expect(missing.Packages).To(Equal([]string{"vim"}))
+		Expect(sdk.ExitStatus(err)).To(Equal(sdk.ExitCodeNotInstalled))
+		Expect(recorder.Calls("pacman")).To(Equal([]sdktest.Call{{Args: []string{"-Qq"}}}))
 		Expect(recorder.Calls("sudo")).To(BeEmpty())
 	})
 
-	It("retains diagnostics when a query failure also uses exit status one", func() {
-		recorder.Script("pacman", []string{"-Q", "git"}, sdktest.Response{
+	It("treats a local database failure with exit status one as a failed query, not absence", func() {
+		recorder.Script("pacman", []string{"-Qq"}, sdktest.Response{
 			Stderr:   "error: could not open local database\n",
 			ExitCode: 1,
 		})
 		err := plugin.Execute("is-installed", []string{"git"})
 		Expect(err).To(HaveOccurred())
+		var missing *sdk.NotInstalledError
+		Expect(errors.As(err, &missing)).To(BeFalse())
 		Expect(sdk.ExitStatus(err)).To(Equal(1))
 		Expect(err.Error()).To(ContainSubstring("could not open local database"))
 	})

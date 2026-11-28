@@ -11,7 +11,7 @@ DevEx's plugin dispatcher.
 | `update` | `pacman -Syu --noconfirm` | System |
 | `search <term...>` | `pacman -Ss '<joined term>'` | Invoking user |
 | `list` | `pacman -Q` | Invoking user |
-| `is-installed <pkgs...>` | `pacman -Q <pkgs...>` | Invoking user |
+| `is-installed <pkgs...>` | `pacman -Qq` | Invoking user |
 
 Install, remove, and update always use noninteractive confirmation. `--needed`
 avoids reinstalling an already current package. The SDK obtains scoped system
@@ -41,13 +41,15 @@ Search joins multiple CLI words with spaces into one Pacman search regex; e.g.
 `search web server` runs `pacman -Ss 'web server'`. It does not run separate
 searches. Search expressions cannot begin with `-`.
 
-List and is-installed forward Pacman's stdout unchanged (`name version` lines
-for `-Q`); the plugin adds no heading or JSON schema. `is-installed` succeeds only
-when every requested package is installed. Missing packages produce Pacman's
-nonzero status (normally 1) and diagnostics; other failures preserve their native
-status and stderr tail. There is no SDK missing-package status convention beyond
-APT's success/nonzero contract. Pacman can also report database errors with status
-1, so callers must retain diagnostics rather than interpret every 1 as absence.
+List forwards Pacman's stdout unchanged (`name version` lines for `-Q`); the
+plugin adds no heading or JSON schema. `is-installed` lists the local package
+names with `pacman -Qq` and succeeds only when every requested package is among
+them. Missing packages return `sdk.NotInstalledError` (exit status 3) naming
+them. Any failure of the listing itself, such as an unreadable local database,
+is a failed query that keeps Pacman's native status and stderr tail, so it is
+never mistaken for absence. Listing names avoids `pacman -Q <name>`, which exits
+1 both for a missing package and for some database errors and prints translated
+messages.
 
 Native errors remain wrapped errors with their original exit status, and include
 the last 4 KiB of stderr. Output also streams to the terminal. `ExecuteContext`
@@ -67,9 +69,9 @@ they never invoke system Pacman or sudo.
 
 ## Manual Arch sandbox round trip
 
-The repository's CLI Docker e2e harness currently has Ubuntu/Debian images and
-assumes their CLI setup. Adding Arch requires changes outside this plugin's scope.
-Use this manual procedure from the repository root on a Linux Docker host (the
+The CLI e2e harness covers the full DevEx lifecycle on Arch
+(`DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=arch` in `apps/cli`; see
+`apps/cli/TESTING.md`). To exercise only this plugin, use this manual procedure from the repository root on a Linux Docker host (the
 container and its package database are disposable; no host HOME is mounted):
 
 ```sh
@@ -95,7 +97,7 @@ plugin list
 plugin remove tree
 status=0
 plugin is-installed tree || status=$?
-test "$status" -eq 1
+test "$status" -eq 3
 # Confirm native failures propagate (database is deliberately locked).
 touch /var/lib/pacman/db.lck
 status=0
